@@ -1,0 +1,87 @@
+# ---- OS / IDE ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+*.swp
+
+# ---- Secrets ----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ---- Model weights (large binaries — never commit) ----
+models/
+*.safetensors
+*.ckpt
+*.bin
+*.pth
+*.pt
+*.onnx
+*.gguf
+*.msgpack
+
+# ---- Python (server/) ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.ipynb_checkpoints/
+
+# ---- Flutter / Dart (app/) ----
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/.pub-cache/
+app/.pub/
+app/pubspec.lock
+
+# ---- Flutter: iOS ----
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/App.framework
+app/ios/Flutter/flutter_assets/
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/Runner/GeneratedPluginRegistrant.*
+app/ios/.generated/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# ---- Flutter: Android ----
+app/android/.gradle/
+app/android/captures/
+app/android/gradlew
+app/android/gradlew.bat
+app/android/local.properties
+app/android/**/GeneratedPluginRegistrant.java
+app/android/key.properties
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+
+# ---- Generated / cached outputs ----
+outputs/
+cache/
+*.log
+tmp/
