@@ -26,6 +26,14 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
 ]
+ml = [
+    "torch",
+    "diffusers>=0.32",
+    "transformers>=4.45",
+    "accelerate>=0.30",
+    "sentencepiece>=0.2",
+    "protobuf>=5.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

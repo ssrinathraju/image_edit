@@ -9,15 +9,25 @@ from fastapi.staticfiles import StaticFiles
 
 from image_edit_server.api.generations import get_store, router as generations_router
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
-from image_edit_server.services.pipelines.stub import StubPipeline
 from image_edit_server.services.worker import run_worker
+
+
+def _make_pipeline(cfg: Settings) -> GenerationPipeline:
+    if cfg.MODEL_BACKEND == "stub":
+        from image_edit_server.services.pipelines.stub import StubPipeline
+        return StubPipeline()
+    if cfg.MODEL_BACKEND == "sana":
+        from image_edit_server.services.pipelines.sana import SanaPipeline
+        return SanaPipeline(cfg)
+    raise ValueError(f"Unknown MODEL_BACKEND: {cfg.MODEL_BACKEND!r}")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings or Settings()
     store = InMemoryJobStore()
-    pipeline = StubPipeline()
+    pipeline = _make_pipeline(cfg)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

@@ -52,6 +52,47 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_JOB_CONCURRENCY` | `1` | Number of parallel worker coroutines |
 | `IMAGE_EDIT_OUTPUT_RETENTION_HOURS` | `24` | How long outputs are kept (enforcement deferred) |
 | `IMAGE_EDIT_ACCEPTED_IMAGE_TYPES` | `image/jpeg,image/png,image/webp` | Accepted MIME types for face uploads |
+| `IMAGE_EDIT_MODEL_BACKEND` | `stub` | Pipeline backend: `stub` or `sana` |
+| `IMAGE_EDIT_SANA_MODEL_ID` | `Efficient-Large-Model/Sana_1600M_1024px_diffusers` | HuggingFace model id for Sana |
+| `IMAGE_EDIT_SANA_DEVICE` | `cpu` | Inference device: `cpu`, `cuda`, `mps` |
+| `IMAGE_EDIT_SANA_TORCH_DTYPE` | `float32` | Torch dtype: `float32`, `float16`, `bfloat16` |
+| `IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS` | `20` | Denoising steps |
+| `IMAGE_EDIT_SANA_OUTPUT_WIDTH` | `1024` | Output image width in pixels |
+| `IMAGE_EDIT_SANA_OUTPUT_HEIGHT` | `1024` | Output image height in pixels |
+
+## Running with Sana
+
+Install ML dependencies (skip for stub/test runs):
+
+```bash
+uv sync --group ml
+```
+
+For CUDA inference, replace the torch wheel with the appropriate CUDA build:
+
+```bash
+uv pip install torch --index-url https://download.pytorch.org/whl/cu124
+```
+
+Pre-download the model (one-time, ~6 GB):
+
+```bash
+uv run python -c "from diffusers import SanaPipeline; SanaPipeline.from_pretrained('Efficient-Large-Model/Sana_1600M_1024px_diffusers')"
+```
+
+Start the server with Sana on CPU (slow, useful for smoke testing):
+
+```bash
+IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cpu \
+  uv run uvicorn image_edit_server.main:app --reload --port 8000
+```
+
+For GPU (recommended):
+
+```bash
+IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cuda IMAGE_EDIT_SANA_TORCH_DTYPE=float16 \
+  uv run uvicorn image_edit_server.main:app --port 8000
+```
 
 ## Tests
 
