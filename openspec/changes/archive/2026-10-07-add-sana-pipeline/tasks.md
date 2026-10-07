@@ -23,4 +23,4 @@
 ## 5. Documentation and Manual Smoke Test
 
 - [x] 5.1 Add a `## Running with Sana` section to `server/README.md` with: `uv sync --group ml`, model pre-download command (`python -c "from diffusers import SanaPipeline; SanaPipeline.from_pretrained('Efficient-Large-Model/Sana_1600M_1024px_diffusers')"`), and example start command with `IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cpu`; verify the commands are accurate
-- [ ] 5.2 Start the server with `IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cpu IMAGE_EDIT_SANA_TORCH_DTYPE=float32`, submit a job with a face image and prompt, poll until `succeeded`, download the PNG; verify the output is a real generated image (not a solid color)
+- [x] 5.2 Start the server with `IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cpu IMAGE_EDIT_SANA_TORCH_DTYPE=float32`, submit a job with a face image and prompt, poll until `succeeded`, download the PNG; verify the output is a real generated image (not a solid color)
