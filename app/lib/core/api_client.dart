@@ -21,7 +21,7 @@ class DioApiClient implements GenerationApiClient {
       'prompt': prompt,
       'faces': [
         for (final f in faces)
-          await MultipartFile.fromFile(f.path, filename: f.name),
+          MultipartFile.fromBytes(await f.readAsBytes(), filename: f.name),
       ],
     });
     final response = await _dio.post<Map<String, dynamic>>(
@@ -36,7 +36,14 @@ class DioApiClient implements GenerationApiClient {
     final response = await _dio.get<Map<String, dynamic>>(
       '/generations/$jobId',
     );
-    return GenerationJob.fromJson(response.data!);
+    final data = response.data!;
+    final resultPath = data['result_url'] as String?;
+    return GenerationJob(
+      jobId: data['job_id'] as String,
+      status: JobStatus.values.byName(data['status'] as String),
+      resultUrl: resultPath != null ? getResultImageUrl(resultPath) : null,
+      error: data['error'] as String?,
+    );
   }
 
   @override

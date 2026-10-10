@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from image_edit_server.api.generations import get_store, router as generations_router
@@ -44,6 +45,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await asyncio.gather(*workers, return_exceptions=True)
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.CORS_ORIGINS,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.dependency_overrides[get_store] = lambda: store
     app.include_router(generations_router)
 

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     OUTPUT_RETENTION_HOURS: int = 24
     ACCEPTED_IMAGE_TYPES: str = "image/jpeg,image/png,image/webp"
 
+    CORS_ORIGINS: list[str] = ["http://localhost:8081"]
+
     MODEL_BACKEND: str = "stub"
     SANA_MODEL_ID: str = "Efficient-Large-Model/Sana_1600M_1024px_diffusers"
     SANA_DEVICE: str = "cpu"
