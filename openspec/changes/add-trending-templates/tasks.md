@@ -17,9 +17,9 @@ All work happens on branch `feat/add-trending-templates`. Do not push to `main`;
 
 ## 3. Server: templates API
 
-- [ ] 3.1 Add `server/src/image_edit_server/services/template_service.py` (`list_templates(catalog, q) -> list[TemplateSummary]`, building `preview_url` as `/template-previews/<preview>`) and `api/templates.py` with `GET /templates?q=` plus a `get_catalog` dependency; verify `server/tests/api/test_templates.py` covers ordering, `q` filtering, blank `q`, empty results, and that no response item has a `prompt` key
-- [ ] 3.2 In `main.py` `create_app`, load the catalog from `cfg.TEMPLATES_DIR` (fail fast on `CatalogError`), override `get_catalog`, include the templates router, and mount `StaticFiles` at `/template-previews`; let `create_app` accept the templates dir through `Settings` so tests can point it at a temp catalog. Verify a test fetches a `preview_url` and gets 200 with an image content type, and another test asserts `create_app` raises on a duplicate-id catalog
-- [ ] 3.3 Update `server/tests/conftest.py` so every existing test builds the app against a small temp catalog (placeholder previews); verify the full `uv run pytest` passes
+- [x] 3.1 Add `server/src/image_edit_server/services/template_service.py` (`list_templates(catalog, q) -> list[TemplateSummary]`, building `preview_url` as `/template-previews/<preview>`) and `api/templates.py` with `GET /templates?q=` plus a `get_catalog` dependency; verify `server/tests/api/test_templates.py` covers ordering, `q` filtering, blank `q`, empty results, and that no response item has a `prompt` key
+- [x] 3.2 In `main.py` `create_app`, load the catalog from `cfg.TEMPLATES_DIR` (fail fast on `CatalogError`), override `get_catalog`, include the templates router, and mount `StaticFiles` at `/template-previews`; let `create_app` accept the templates dir through `Settings` so tests can point it at a temp catalog. Verify a test fetches a `preview_url` and gets 200 with an image content type, and another test asserts `create_app` raises on a duplicate-id catalog
+- [x] 3.3 Update `server/tests/conftest.py` so every existing test builds the app against a small temp catalog (placeholder previews); verify the full `uv run pytest` passes
 
 ## 4. Server: template-based generation
 

@@ -1,0 +1,24 @@
+import json
+from pathlib import Path
+
+from PIL import Image
+
+TEST_TEMPLATES = [
+    {"id": "sunset-beach", "title": "Sunset Beach", "tags": ["beach", "summer"],
+     "popularity": 90, "prompt": "TEMPLATE PROMPT sunset beach"},
+    {"id": "mountain-peak", "title": "Mountain Peak", "tags": ["snow"],
+     "popularity": 50, "prompt": "TEMPLATE PROMPT mountain"},
+    {"id": "city-night", "title": "City Night", "tags": ["neon"],
+     "popularity": 70, "prompt": "TEMPLATE PROMPT city"},
+]
+
+
+def build_templates_dir(root: Path, entries: list[dict] = TEST_TEMPLATES) -> Path:
+    (root / "previews").mkdir(parents=True, exist_ok=True)
+    catalog = [{**e, "preview": f"{e['id']}.webp"} for e in entries]
+    (root / "catalog.json").write_text(json.dumps(catalog))
+    for entry in catalog:
+        Image.new("RGB", (8, 8), (10, 20, 30)).save(
+            root / "previews" / entry["preview"], format="WEBP"
+        )
+    return root
