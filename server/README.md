@@ -26,6 +26,25 @@ curl -X POST http://localhost:8000/generations \
 # → {"job_id": "01HE..."}
 ```
 
+## Submit from a template
+
+Browse the catalog (add `?q=` to search titles and tags), then submit with a `template_id`
+instead of a `prompt` (send exactly one of the two):
+
+```bash
+curl "http://localhost:8000/templates?q=beach"
+# → [{"id": "golden-hour-beach", "title": "Golden Hour Beach", "tags": [...],
+#     "preview_url": "/template-previews/golden-hour-beach.webp"}]
+
+curl -X POST http://localhost:8000/generations \
+  -F "template_id=golden-hour-beach" \
+  -F "faces=@/path/to/face.jpg"
+# → {"job_id": "01HE..."}
+```
+
+Template prompts stay on the server. Sending both `prompt` and `template_id`, or an unknown
+`template_id`, returns 400 with error code `invalid_template`.
+
 ## Poll for status
 
 ```bash
@@ -59,6 +78,7 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS` | `20` | Denoising steps |
 | `IMAGE_EDIT_SANA_OUTPUT_WIDTH` | `1024` | Output image width in pixels |
 | `IMAGE_EDIT_SANA_OUTPUT_HEIGHT` | `1024` | Output image height in pixels |
+| `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Folder holding `catalog.json` and `previews/` |
 
 ## Running with Sana
 
@@ -98,4 +118,19 @@ IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cuda IMAGE_EDIT_SANA_TORCH_
 
 ```bash
 uv run pytest
+```
+
+## Template previews
+
+Home-screen previews live in `seed/templates/previews/` (512x512 WebP). Regenerate them from `server/`:
+
+```bash
+# Pillow only: solid-color placeholders for any template missing a preview
+uv run python scripts/generate_template_previews.py --placeholder
+
+# Real previews through Sana (needs the ml group; ~3-5 min per image on CPU)
+IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS=4 \
+  uv run --group ml python scripts/generate_template_previews.py
+
+# Options: --force (overwrite existing), --only <template-id>, --templates-dir <path>
 ```

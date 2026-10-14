@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     OUTPUT_RETENTION_HOURS: int = 24
     ACCEPTED_IMAGE_TYPES: str = "image/jpeg,image/png,image/webp"
 
+    TEMPLATES_DIR: str = "./seed/templates"
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"

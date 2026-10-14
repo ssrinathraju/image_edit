@@ -19,4 +19,5 @@ class Job:
     result_url: Optional[str] = None
     error: Optional[str] = None
     prompt: str = ""
+    template_id: Optional[str] = None
     face_paths: list[str] = field(default_factory=list)

@@ -20,6 +20,12 @@ def test_env_override(monkeypatch):
     assert s.MAX_FACES == 2
 
 
+def test_templates_dir_default_and_override(monkeypatch):
+    assert Settings().TEMPLATES_DIR == "./seed/templates"
+    monkeypatch.setenv("IMAGE_EDIT_TEMPLATES_DIR", "/tmp/custom")
+    assert Settings().TEMPLATES_DIR == "/tmp/custom"
+
+
 def test_accepted_image_types_set():
     s = Settings()
     types = s.accepted_image_types_set()
