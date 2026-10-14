@@ -4,8 +4,8 @@ from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.schemas.job import Job, JobStatus
 
 
-def test_queued_job_status(client, store):
-    job = Job(id="", prompt="test")
+def test_queued_job_status(client, store, user_id):
+    job = Job(id="", prompt="test", user_id=user_id)
     job_id = store.create(job)
 
     resp = client.get(f"/generations/{job_id}")
@@ -13,8 +13,8 @@ def test_queued_job_status(client, store):
     assert resp.json()["status"] == "queued"
 
 
-def test_running_job_status(client, store):
-    job = Job(id="", prompt="test")
+def test_running_job_status(client, store, user_id):
+    job = Job(id="", prompt="test", user_id=user_id)
     job_id = store.create(job)
     store.update(job_id, status=JobStatus.running)
 
@@ -23,8 +23,8 @@ def test_running_job_status(client, store):
     assert resp.json()["status"] == "running"
 
 
-def test_succeeded_job_returns_result_url(client, store):
-    job = Job(id="", prompt="test")
+def test_succeeded_job_returns_result_url(client, store, user_id):
+    job = Job(id="", prompt="test", user_id=user_id)
     job_id = store.create(job)
     store.update(job_id, status=JobStatus.succeeded, result_url=f"/images/{job_id}.png")
 
@@ -35,8 +35,8 @@ def test_succeeded_job_returns_result_url(client, store):
     assert body["result_url"] == f"/images/{job_id}.png"
 
 
-def test_failed_job_returns_error(client, store):
-    job = Job(id="", prompt="test")
+def test_failed_job_returns_error(client, store, user_id):
+    job = Job(id="", prompt="test", user_id=user_id)
     job_id = store.create(job)
     store.update(job_id, status=JobStatus.failed, error="pipeline_failed")
 
@@ -50,3 +50,24 @@ def test_failed_job_returns_error(client, store):
 def test_unknown_job_returns_404(client):
     resp = client.get("/generations/does-not-exist")
     assert resp.status_code == 404
+
+
+def test_status_without_token_is_401(anon_client, store, user_id):
+    job_id = store.create(Job(id="", prompt="test", user_id=user_id))
+
+    resp = anon_client.get(f"/generations/{job_id}")
+
+    assert resp.status_code == 401
+
+
+def test_other_users_job_is_404_not_403(client, store, second_user_headers):
+    job_id = client.post(
+        "/generations",
+        data={"prompt": "a family at sunset"},
+        files=[("faces", ("f.png", b"x", "image/png"))],
+    ).json()["job_id"]
+
+    other = client.get(f"/generations/{job_id}", headers=second_user_headers)
+
+    assert other.status_code == 404
+    assert client.get(f"/generations/{job_id}").status_code == 200

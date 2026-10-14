@@ -44,14 +44,14 @@ The connection is opened with `check_same_thread=False` and guarded by one `thre
 - **Alternatives:** SQLAlchemy/Alembic (a migration tool for two tables is premature); JSON file (no uniqueness guarantee, races); Postgres (needs a service to run in dev).
 - Schema is created with `CREATE TABLE IF NOT EXISTS` at startup. When change 2 needs a column it adds a versioned step then; no migration framework now.
 
-### 2. Passwords: `hashlib.scrypt`, stored self-describing
+### 2. Passwords: PBKDF2-HMAC-SHA256, stored self-describing
 
-`core/passwords.py` provides `hash_password(plain) -> str` and `verify_password(plain, stored) -> bool`. It uses `hashlib.scrypt` with `n=2**14, r=8, p=1, dklen=32` and a 16-byte `secrets.token_bytes` salt. The stored string is `scrypt$<n>$<r>$<p>$<salt_b64>$<hash_b64>` so parameters can be raised later and old hashes still verify. Comparison uses `hmac.compare_digest`.
+`core/passwords.py` provides `hash_password(plain) -> str` and `verify_password(plain, stored) -> bool`. It uses `hashlib.pbkdf2_hmac("sha256", ...)` with 600,000 iterations, a 32-byte output and a 16-byte `secrets.token_bytes` salt. The stored string is `pbkdf2_sha256$<iterations>$<salt_b64>$<hash_b64>` so the iteration count can be raised later and old hashes still verify. Comparison uses `hmac.compare_digest`.
 
 For an unknown email, login verifies the password against a module-level dummy hash so that both failure paths cost the same time (spec: indistinguishable).
 
-- **Why scrypt from the stdlib:** memory-hard, no dependency, and available in the Python builds `uv` installs. **Alternative:** `argon2-cffi` is the current first choice for new systems but adds a compiled dependency; the self-describing format leaves room to migrate.
-- Hashing is CPU-bound (tens of ms), so the auth endpoints are plain `def` handlers and FastAPI runs them in its thread pool instead of blocking the event loop.
+- **Why PBKDF2 from the stdlib:** it is available on every CPython build. `hashlib.scrypt` was the first choice but is missing on builds linked against LibreSSL (the macOS system Python this project currently runs on), and `argon2-cffi` adds a compiled dependency. **Trade-off:** PBKDF2 is not memory-hard, so it resists GPU cracking less well than scrypt or argon2; the self-describing format leaves room to migrate to either.
+- Hashing is CPU-bound (about 0.1-0.3 s), so the auth endpoints are plain `def` handlers and FastAPI runs them in its thread pool instead of blocking the event loop.
 
 ### 3. Sessions are opaque random tokens, stored hashed
 

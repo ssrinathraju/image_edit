@@ -14,6 +14,21 @@ def test_defaults():
     assert "image/jpeg" in s.ACCEPTED_IMAGE_TYPES
 
 
+def test_auth_defaults():
+    s = Settings()
+    assert s.AUTH_DB_PATH == ""
+    assert s.SESSION_TTL_DAYS == 30
+    assert s.PASSWORD_MIN_CHARS == 8
+    assert s.PASSWORD_MAX_CHARS == 128
+    assert s.LOGIN_MAX_FAILURES == 5
+    assert s.LOGIN_LOCKOUT_MINUTES == 15
+
+
+def test_auth_env_override(monkeypatch):
+    monkeypatch.setenv("IMAGE_EDIT_LOGIN_MAX_FAILURES", "3")
+    assert Settings().LOGIN_MAX_FAILURES == 3
+
+
 def test_env_override(monkeypatch):
     monkeypatch.setenv("IMAGE_EDIT_MAX_FACES", "2")
     s = Settings()

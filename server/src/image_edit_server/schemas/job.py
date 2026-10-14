@@ -20,4 +20,5 @@ class Job:
     error: Optional[str] = None
     prompt: str = ""
     template_id: Optional[str] = None
+    user_id: str = ""
     face_paths: list[str] = field(default_factory=list)

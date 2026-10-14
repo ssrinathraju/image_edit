@@ -31,7 +31,7 @@ Out of scope: social sign-in (Google/Apple), password reset and email verificati
 
 ## Impact
 
-- **Server**: new `schemas/user.py`, `core/passwords.py`, `repos/user_store.py` (SQLite), `services/auth_service.py`, `api/auth.py`, `api/deps.py` (current-user dependency); changes to `api/generations.py`, `services/generation_service.py`, `schemas/job.py`, `core/job_store.py`, `repos/in_memory_job_store.py`, `main.py`, and `configs/settings.py`. No new Python dependencies (stdlib `sqlite3`, `hashlib.scrypt`, `secrets`).
+- **Server**: new `schemas/user.py`, `core/passwords.py`, `repos/user_store.py` (SQLite), `services/auth_service.py`, `api/auth.py`, `api/deps.py` (current-user dependency); changes to `api/generations.py`, `services/generation_service.py`, `schemas/job.py`, `core/job_store.py`, `repos/in_memory_job_store.py`, `main.py`, and `configs/settings.py`. No new Python dependencies (stdlib `sqlite3`, `hashlib.pbkdf2_hmac`, `secrets`).
 - **Data**: a SQLite file at `<STORAGE_ROOT>/app.db` (gitignored via `server/storage/`). Jobs remain in memory, so they are still lost on restart.
 - **App**: new `features/auth/` and `features/profile/`; new `services/auth_service.dart` and a token-injecting dio interceptor; router gains a login redirect; `.env` gains optional `PRIVACY_URL`, `TERMS_URL`, `SUPPORT_EMAIL`.
 - **App dependencies**: `flutter_secure_storage` (token storage), `url_launcher` (links), `package_info_plus` (version).

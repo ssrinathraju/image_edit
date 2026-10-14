@@ -63,3 +63,28 @@ async def test_failed_job_cleans_up_inputs(tmp_path):
     assert result.status == JobStatus.failed
     assert result.error == "pipeline_failed"
     assert not (tmp_path / "inputs" / job_id).exists()
+
+
+class _DeletingPipeline:
+    """Writes an output, and the job's owner deletes the account mid-run."""
+
+    def __init__(self, store, job_id_holder):
+        self._store = store
+        self._holder = job_id_holder
+
+    async def run(self, faces, prompt, output_path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        self._store.delete(self._holder["id"])
+
+
+async def test_job_deleted_mid_run_leaves_no_output(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    holder = {}
+    holder["id"] = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _DeletingPipeline(store, holder))
+
+    assert store.get(holder["id"]) is None
+    assert not (tmp_path / "outputs" / f"{holder['id']}.png").exists()

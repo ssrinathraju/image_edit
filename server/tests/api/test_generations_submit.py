@@ -116,3 +116,19 @@ def test_neither_prompt_nor_template_returns_invalid_prompt(client):
     resp = client.post("/generations", files=[_face()])
     assert resp.status_code == 400
     assert resp.json()["detail"]["error"] == "invalid_prompt"
+
+
+def test_submit_without_token_is_401_and_creates_no_job(anon_client, store):
+    resp = anon_client.post(
+        "/generations", data={"prompt": VALID_PROMPT}, files=[_face()]
+    )
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["error"] == "unauthorized"
+    assert list(store.list_queued()) == []
+
+
+def test_submitted_job_is_owned_by_the_caller(client, store, user_id):
+    resp = client.post("/generations", data={"prompt": VALID_PROMPT}, files=[_face()])
+
+    assert store.get(resp.json()["job_id"]).user_id == user_id

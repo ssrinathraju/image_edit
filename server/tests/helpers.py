@@ -22,3 +22,13 @@ def build_templates_dir(root: Path, entries: list[dict] = TEST_TEMPLATES) -> Pat
             root / "previews" / entry["preview"], format="WEBP"
         )
     return root
+
+
+DEFAULT_PASSWORD = "correct horse battery"
+
+
+def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> dict:
+    """Register an account and return headers carrying its bearer token."""
+    resp = client.post("/auth/register", json={"email": email, "password": password})
+    assert resp.status_code == 201, resp.text
+    return {"Authorization": f"Bearer {resp.json()['token']}"}

@@ -35,6 +35,11 @@ async def run_worker(
 
         try:
             await pipeline.run(face_paths, job.prompt, out_path)
+            if store.get(job_id) is None:
+                # Owner deleted the account mid-run; do not leave the output behind.
+                out_path.unlink(missing_ok=True)
+                logger.info("Job %s was deleted while running; output discarded", job_id)
+                continue
             result_url = f"/images/{job_id}.png"
             store.update(job_id, status=JobStatus.succeeded, result_url=result_url)
             logger.info("Job %s succeeded", job_id)
