@@ -59,6 +59,7 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS` | `20` | Denoising steps |
 | `IMAGE_EDIT_SANA_OUTPUT_WIDTH` | `1024` | Output image width in pixels |
 | `IMAGE_EDIT_SANA_OUTPUT_HEIGHT` | `1024` | Output image height in pixels |
+| `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Folder holding `catalog.json` and `previews/` |
 
 ## Running with Sana
 
@@ -98,4 +99,19 @@ IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cuda IMAGE_EDIT_SANA_TORCH_
 
 ```bash
 uv run pytest
+```
+
+## Template previews
+
+Home-screen previews live in `seed/templates/previews/` (512x512 WebP). Regenerate them from `server/`:
+
+```bash
+# Pillow only: solid-color placeholders for any template missing a preview
+uv run python scripts/generate_template_previews.py --placeholder
+
+# Real previews through Sana (needs the ml group; ~3-5 min per image on CPU)
+IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS=4 \
+  uv run --group ml python scripts/generate_template_previews.py
+
+# Options: --force (overwrite existing), --only <template-id>, --templates-dir <path>
 ```

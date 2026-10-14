@@ -1,0 +1,98 @@
+[
+  {
+    "id": "golden-hour-beach",
+    "title": "Golden Hour Beach",
+    "tags": ["beach", "sunset", "summer"],
+    "popularity": 95,
+    "preview": "golden-hour-beach.webp",
+    "prompt": "A person walking along a sandy beach at golden hour, warm sunlight on their face, gentle waves behind them, soft cinematic lighting, shallow depth of field."
+  },
+  {
+    "id": "neon-city-night",
+    "title": "Neon City Night",
+    "tags": ["city", "night", "neon", "cyberpunk"],
+    "popularity": 90,
+    "preview": "neon-city-night.webp",
+    "prompt": "A person standing on a rain-slicked city street at night, glowing pink and blue neon signs reflecting on wet pavement, cyberpunk atmosphere, cinematic portrait."
+  },
+  {
+    "id": "studio-headshot",
+    "title": "Studio Headshot",
+    "tags": ["professional", "portrait", "linkedin"],
+    "popularity": 88,
+    "preview": "studio-headshot.webp",
+    "prompt": "A professional studio headshot of a person in smart attire, soft diffused key light, neutral grey backdrop, confident friendly expression, sharp focus."
+  },
+  {
+    "id": "snowy-mountain-peak",
+    "title": "Snowy Mountain Peak",
+    "tags": ["mountain", "snow", "adventure"],
+    "popularity": 82,
+    "preview": "snowy-mountain-peak.webp",
+    "prompt": "A person in a bright winter jacket standing on a snowy mountain summit, vast alpine peaks and clear blue sky behind them, crisp morning light, adventure photography."
+  },
+  {
+    "id": "vintage-film-portrait",
+    "title": "Vintage Film Portrait",
+    "tags": ["retro", "film", "70s"],
+    "popularity": 80,
+    "preview": "vintage-film-portrait.webp",
+    "prompt": "A 1970s style film portrait of a person, warm faded colors, visible film grain, soft vignette, retro fashion, natural window light."
+  },
+  {
+    "id": "astronaut-on-mars",
+    "title": "Astronaut on Mars",
+    "tags": ["space", "mars", "sci-fi"],
+    "popularity": 78,
+    "preview": "astronaut-on-mars.webp",
+    "prompt": "A person in a white spacesuit with the helmet visor up, standing on the red dusty surface of Mars, distant rocky hills and a pale orange sky, cinematic sci-fi."
+  },
+  {
+    "id": "watercolor-painting",
+    "title": "Watercolor Painting",
+    "tags": ["art", "painting", "watercolor"],
+    "popularity": 75,
+    "preview": "watercolor-painting.webp",
+    "prompt": "A delicate watercolor painting portrait of a person, soft bleeding pastel colors, visible paper texture, loose brush strokes, white background."
+  },
+  {
+    "id": "royal-portrait",
+    "title": "Royal Portrait",
+    "tags": ["classic", "painting", "royalty"],
+    "popularity": 72,
+    "preview": "royal-portrait.webp",
+    "prompt": "A classical oil painting portrait of a person dressed in regal velvet robes and a gold crown, ornate palace interior, dramatic chiaroscuro lighting."
+  },
+  {
+    "id": "cozy-coffee-shop",
+    "title": "Cozy Coffee Shop",
+    "tags": ["cafe", "cozy", "lifestyle"],
+    "popularity": 70,
+    "preview": "cozy-coffee-shop.webp",
+    "prompt": "A person sitting by the window of a cozy coffee shop holding a warm mug, soft morning light, wooden furniture and plants, relaxed lifestyle photography."
+  },
+  {
+    "id": "anime-hero",
+    "title": "Anime Hero",
+    "tags": ["anime", "illustration", "hero"],
+    "popularity": 68,
+    "preview": "anime-hero.webp",
+    "prompt": "An anime style illustration of a person as a heroic main character, dynamic pose, flowing wind-swept clothes, vibrant colors, dramatic sky background."
+  },
+  {
+    "id": "desert-safari",
+    "title": "Desert Safari",
+    "tags": ["desert", "travel", "adventure"],
+    "popularity": 64,
+    "preview": "desert-safari.webp",
+    "prompt": "A person in a light linen outfit and sunglasses on a desert safari, rolling golden sand dunes behind them, warm late afternoon sun, travel photography."
+  },
+  {
+    "id": "rainy-tokyo-street",
+    "title": "Rainy Tokyo Street",
+    "tags": ["city", "rain", "japan", "night"],
+    "popularity": 60,
+    "preview": "rainy-tokyo-street.webp",
+    "prompt": "A person holding a clear umbrella on a narrow Tokyo street at night in the rain, glowing lantern lights and shop signs, reflections on the pavement, moody cinematic look."
+  }
+]
