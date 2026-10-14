@@ -32,6 +32,7 @@ class HomeNotifier extends AutoDisposeAsyncNotifier<List<TemplateSummary>> {
   }
 
   Future<void> retry() {
+    _debounce?.cancel();
     state = const AsyncLoading();
     return _reload();
   }

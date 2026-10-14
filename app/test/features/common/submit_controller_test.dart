@@ -59,7 +59,7 @@ void main() {
 
     expect(await future, 'job-1');
     expect(container.read(submitControllerProvider), isFalse);
-    expect(container.read(lastRequestProvider), same(request));
+    expect(container.read(lastRequestProvider), (jobId: 'job-1', request: request));
   });
 
   test('failure rethrows, resets the flag, and keeps the previous request', () async {

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +65,9 @@ Future<_Harness> _pump(
         apiClientProvider.overrideWithValue(fakeClient),
         imageActionsProvider.overrideWithValue(actions),
         showImageActionsProvider.overrideWithValue(showActions),
-        lastRequestProvider.overrideWith((_) => lastRequest),
+        lastRequestProvider.overrideWith(
+          (_) => lastRequest == null ? null : (jobId: 'job-1', request: lastRequest),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -124,6 +127,28 @@ void main() {
 
     expect(client.submitted.single, same(request));
     expect(client.statusCalls, containsAllInOrder(['job-1', 'job-2']));
+  });
+
+  testWidgets('a failed poll shows a friendly message, not the raw exception', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (_) async => throw DioException(
+            requestOptions: RequestOptions(path: '/generations/job-1'),
+            message: 'connection error',
+          );
+    await _pump(tester, client: client);
+
+    expect(find.textContaining('Could not reach the server'), findsOneWidget);
+    expect(find.textContaining('DioException'), findsNothing);
+  });
+
+  testWidgets('Retry is hidden on a job the last request did not create', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (id) async =>
+          GenerationJob(jobId: id, status: JobStatus.failed, error: 'pipeline_failed');
+    await _pump(tester, client: client, lastRequest: _request(), jobId: 'job-9');
+
+    expect(find.text('pipeline_failed'), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
   });
 
   testWidgets('Home returns to the home screen', (tester) async {

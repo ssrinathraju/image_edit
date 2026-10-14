@@ -20,7 +20,7 @@ class PlatformImageActions implements ImageActions {
     try {
       final hasAccess = await Gal.hasAccess() || await Gal.requestAccess();
       if (!hasAccess) return SaveResult.permissionDenied;
-      await Gal.putImageBytes(bytes, name: name);
+      await Gal.putImageBytes(bytes, name: '$name.${_detectFormat(bytes).extension}');
       return SaveResult.saved;
     } on GalException catch (error) {
       if (error.type == GalExceptionType.accessDenied) {
@@ -32,14 +32,39 @@ class PlatformImageActions implements ImageActions {
 
   @override
   Future<void> share(Uint8List bytes, {required String name, Rect? origin}) async {
+    final format = _detectFormat(bytes);
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile.fromData(bytes, mimeType: 'image/png')],
-        fileNameOverrides: ['$name.png'],
+        files: [XFile.fromData(bytes, mimeType: format.mimeType)],
+        fileNameOverrides: ['$name.${format.extension}'],
         sharePositionOrigin: origin,
       ),
     );
   }
+}
+
+typedef _ImageFormat = ({String extension, String mimeType});
+
+const _ImageFormat _png = (extension: 'png', mimeType: 'image/png');
+const _ImageFormat _jpeg = (extension: 'jpg', mimeType: 'image/jpeg');
+const _ImageFormat _webp = (extension: 'webp', mimeType: 'image/webp');
+
+/// Sniffs the container from magic bytes; the server's output format is not
+/// part of the job payload. Falls back to PNG, which the pipeline produces.
+_ImageFormat _detectFormat(Uint8List bytes) {
+  bool startsWith(List<int> prefix, {int offset = 0}) =>
+      bytes.length >= offset + prefix.length &&
+      [for (var i = 0; i < prefix.length; i++) bytes[offset + i]]
+          .asMap()
+          .entries
+          .every((e) => e.value == prefix[e.key]);
+
+  if (startsWith([0xFF, 0xD8, 0xFF])) return _jpeg;
+  if (startsWith([0x52, 0x49, 0x46, 0x46]) &&
+      startsWith([0x57, 0x45, 0x42, 0x50], offset: 8)) {
+    return _webp;
+  }
+  return _png;
 }
 
 final imageActionsProvider =

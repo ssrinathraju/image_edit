@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../schemas/job.dart';
 import '../../services/image_actions.dart';
+import '../common/error_message.dart';
 import '../common/submit_controller.dart';
 import '../common/submit_flow.dart';
 import 'generation_status_notifier.dart';
@@ -24,13 +25,16 @@ class GenerationStatusScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Generation Status')),
       body: asyncJob.when(
         loading: () => const _ProgressView(message: 'Starting…'),
-        error: (e, _) => _FailureView(message: e.toString()),
+        error: (e, _) =>
+            _FailureView(jobId: jobId, message: describeError(e)),
         data: (job) => switch (job.status) {
           JobStatus.queued => const _ProgressView(message: 'Queued…'),
           JobStatus.running => const _ProgressView(message: 'Generating…'),
           JobStatus.succeeded => _SuccessView(job: job),
-          JobStatus.failed =>
-            _FailureView(message: job.error ?? 'Generation failed'),
+          JobStatus.failed => _FailureView(
+              jobId: jobId,
+              message: job.error ?? 'Generation failed',
+            ),
         },
       ),
     );
@@ -65,12 +69,15 @@ class _SuccessView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final url = job.resultUrl;
-    if (url == null) return const _FailureView(message: 'The image is missing.');
+    if (url == null) {
+      return _FailureView(jobId: job.jobId, message: 'The image is missing.');
+    }
     final bytes = ref.watch(resultImageBytesProvider(url));
 
     return bytes.when(
       loading: () => const _ProgressView(message: 'Loading image…'),
       error: (_, _) => _FailureView(
+        jobId: job.jobId,
         message: 'Could not load the image.',
         onReload: () => ref.invalidate(resultImageBytesProvider(url)),
       ),
@@ -116,7 +123,7 @@ class _ResultBody extends ConsumerWidget {
             ],
           ),
         const SizedBox(height: 12),
-        const _NavigationButtons(homeLabel: 'Home'),
+        _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
       ],
     );
   }
@@ -157,8 +164,13 @@ class _ResultBody extends ConsumerWidget {
 }
 
 class _FailureView extends StatelessWidget {
-  const _FailureView({required this.message, this.onReload});
+  const _FailureView({
+    required this.jobId,
+    required this.message,
+    this.onReload,
+  });
 
+  final String jobId;
   final String message;
   final VoidCallback? onReload;
 
@@ -178,7 +190,7 @@ class _FailureView extends StatelessWidget {
               FilledButton(onPressed: onReload, child: const Text('Reload')),
               const SizedBox(height: 12),
             ],
-            const _NavigationButtons(homeLabel: 'New Generation'),
+            _NavigationButtons(jobId: jobId, homeLabel: 'New Generation'),
           ],
         ),
       ),
@@ -187,13 +199,15 @@ class _FailureView extends StatelessWidget {
 }
 
 class _NavigationButtons extends ConsumerWidget {
-  const _NavigationButtons({required this.homeLabel});
+  const _NavigationButtons({required this.jobId, required this.homeLabel});
 
+  final String jobId;
   final String homeLabel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final lastRequest = ref.watch(lastRequestProvider);
+    final submitted = ref.watch(lastRequestProvider);
+    final lastRequest = submitted?.jobId == jobId ? submitted?.request : null;
     final isSubmitting = ref.watch(submitControllerProvider);
     return Wrap(
       alignment: WrapAlignment.center,
@@ -209,7 +223,10 @@ class _NavigationButtons extends ConsumerWidget {
             label: const Text('Retry'),
           ),
         FilledButton.tonal(
-          onPressed: () => context.go('/'),
+          onPressed: () {
+            ref.read(lastRequestProvider.notifier).state = null;
+            context.go('/');
+          },
           child: Text(homeLabel),
         ),
       ],

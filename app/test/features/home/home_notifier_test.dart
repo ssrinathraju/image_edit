@@ -89,4 +89,20 @@ void main() {
 
     expect(container.read(homeNotifierProvider).value!.single.id, 'ok');
   });
+
+  test('retry cancels a pending search debounce', () async {
+    final client = FakeApiClient()
+      ..onListTemplates = (q) async => [fakeTemplate(q ?? 'all')];
+    final container = _container(client);
+    final sub = container.listen(homeNotifierProvider, (_, _) {});
+    addTearDown(sub.close);
+    await container.read(homeNotifierProvider.future);
+    final notifier = container.read(homeNotifierProvider.notifier);
+
+    notifier.setQuery('beach');
+    await notifier.retry();
+    await _wait();
+
+    expect(client.queries, [null, 'beach']);
+  });
 }

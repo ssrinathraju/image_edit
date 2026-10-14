@@ -21,6 +21,32 @@ void main() {
     expect(describeError(error), "unknown template_id 'x'");
   });
 
+  test('uses a plain-string detail', () {
+    final error = _dio(
+      response: Response(
+        requestOptions: RequestOptions(path: '/generations'),
+        statusCode: 404,
+        data: {'detail': 'Not Found'},
+      ),
+    );
+    expect(describeError(error), 'Not Found');
+  });
+
+  test('uses the first message of a 422 validation list', () {
+    final error = _dio(
+      response: Response(
+        requestOptions: RequestOptions(path: '/generations'),
+        statusCode: 422,
+        data: {
+          'detail': [
+            {'loc': ['body', 'photo'], 'msg': 'Field required', 'type': 'missing'},
+          ],
+        },
+      ),
+    );
+    expect(describeError(error), 'Field required');
+  });
+
   test('explains connection failures', () {
     expect(describeError(_dio()), contains('Could not reach the server'));
   });
