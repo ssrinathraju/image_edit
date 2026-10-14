@@ -88,6 +88,10 @@ class SqliteUserStore:
         token = secrets.token_urlsafe(SESSION_TOKEN_BYTES)
         now = self._clock()
         with self._lock, self._conn:
+            # Housekeeping: expired rows are never read again, so drop them here.
+            self._conn.execute(
+                "DELETE FROM sessions WHERE expires_at <= ?", (now.isoformat(),)
+            )
             self._conn.execute(
                 "INSERT INTO sessions (token_hash, user_id, created_at, expires_at)"
                 " VALUES (?, ?, ?, ?)",

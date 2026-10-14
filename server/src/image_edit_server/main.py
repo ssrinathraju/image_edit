@@ -61,7 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
         workers = [
-            asyncio.create_task(run_worker(store, pipeline, cfg))
+            asyncio.create_task(run_worker(
+                store,
+                pipeline,
+                cfg,
+                lambda user_id: user_store.get_by_id(user_id) is not None,
+            ))
             for _ in range(cfg.JOB_CONCURRENCY)
         ]
         yield

@@ -56,13 +56,7 @@ class AuthService:
 
     def login(self, email: str, password: str) -> tuple[str, User]:
         normalized = normalize_email(email)
-        if self._throttle.is_locked(normalized):
-            raise _error(
-                429,
-                "too_many_attempts",
-                f"too many failed attempts; try again in "
-                f"{self._settings.LOGIN_LOCKOUT_MINUTES} minutes",
-            )
+        self._reject_if_locked(normalized)
         user = self._users.get_by_email(normalized)
         stored = self._users.get_password_hash(user.id) if user else None
         if not verify_password(password, stored or _DUMMY_HASH) or user is None:
@@ -75,12 +69,27 @@ class AuthService:
         self._users.delete_session(token)
 
     def delete_account(self, user: User, password: str) -> None:
+        self._reject_if_locked(user.email)
         stored = self._users.get_password_hash(user.id)
         if stored is None or not verify_password(password, stored):
+            self._throttle.record_failure(user.email)
             raise _error(403, "invalid_password", "password is incorrect")
-        self._purge_user_jobs(user.id)
+        self._throttle.reset(user.email)
+        # The user goes first so a submit that was already in flight cannot
+        # attach a job to an account that is about to disappear; the worker
+        # drops any job whose owner is gone.
         self._users.delete_user(user.id)
+        self._purge_user_jobs(user.id)
         logger.info("Deleted account %s", user.id)
+
+    def _reject_if_locked(self, email: str) -> None:
+        if self._throttle.is_locked(email):
+            raise _error(
+                429,
+                "too_many_attempts",
+                f"too many failed attempts; try again in "
+                f"{self._settings.LOGIN_LOCKOUT_MINUTES} minutes",
+            )
 
     def _start_session(self, user: User) -> str:
         ttl = timedelta(days=self._settings.SESSION_TTL_DAYS)

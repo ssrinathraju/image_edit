@@ -37,7 +37,8 @@ class SessionNotifier extends AsyncNotifier<Session?> {
       return Session(token: saved.token, userId: me.id, email: me.email);
     } on DioException catch (error) {
       if (error.response?.statusCode != 401) rethrow;
-      await _clearLocalSession();
+      // Returning is what sets state here; build must not assign it.
+      await _discardStoredSession();
       return null;
     } finally {
       _restoring = false;
@@ -89,11 +90,15 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     state = AsyncData(session);
   }
 
-  Future<void> _clearLocalSession() async {
+  Future<void> _discardStoredSession() async {
     ref.read(sessionTokenHolderProvider).token = null;
+    await ref.read(sessionStorageProvider).clear();
+  }
+
+  Future<void> _clearLocalSession() async {
     ref.invalidate(lastRequestProvider);
     ref.invalidate(homeNotifierProvider);
-    await ref.read(sessionStorageProvider).clear();
+    await _discardStoredSession();
     state = const AsyncData(null);
   }
 }

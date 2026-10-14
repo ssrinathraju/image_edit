@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+MAX_EMAIL_CHARS = 254
+MAX_PASSWORD_CHARS = 128
 
 
 @dataclass(frozen=True)
@@ -13,8 +16,8 @@ class User:
 
 
 class Credentials(BaseModel):
-    email: str
-    password: str
+    email: str = Field(max_length=MAX_EMAIL_CHARS)
+    password: str = Field(max_length=MAX_PASSWORD_CHARS)
 
 
 class AuthResponse(BaseModel):
@@ -30,4 +33,4 @@ class MeResponse(BaseModel):
 
 
 class DeleteAccountRequest(BaseModel):
-    password: str
+    password: str = Field(max_length=MAX_PASSWORD_CHARS)

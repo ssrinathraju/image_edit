@@ -162,3 +162,21 @@ def test_no_response_body_contains_a_password(anon_client):
 
     assert all(DEFAULT_PASSWORD not in body for body in bodies)
     assert all("hash" not in body.lower() for body in bodies)
+
+
+def test_overlong_credentials_are_rejected_before_any_hashing(anon_client, client):
+    long_email = "a" * 250 + "@example.com"
+    long_password = "p" * 129
+
+    login = anon_client.post(
+        "/auth/login", json={"email": long_email, "password": DEFAULT_PASSWORD}
+    )
+    login_password = anon_client.post(
+        "/auth/login", json={"email": "ana@example.com", "password": long_password}
+    )
+    delete = client.request("DELETE", "/me", json={"password": long_password})
+
+    assert login.status_code == 422
+    assert login_password.status_code == 422
+    assert delete.status_code == 422
+    assert client.get("/me").status_code == 200

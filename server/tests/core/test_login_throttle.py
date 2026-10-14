@@ -70,3 +70,13 @@ def test_emails_are_independent(throttle):
 
     assert throttle.is_locked("a@x.com")
     assert not throttle.is_locked("b@x.com")
+
+
+def test_expired_entries_for_other_emails_are_dropped(throttle, clock):
+    for i in range(20):
+        _fail(throttle, f"user{i}@x.com", 1)
+    clock.now += LOCKOUT
+
+    _fail(throttle, "fresh@x.com", 1)
+
+    assert list(throttle._failures) == ["fresh@x.com"]

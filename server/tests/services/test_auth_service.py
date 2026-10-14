@@ -164,3 +164,50 @@ def test_delete_with_right_password_removes_user_sessions_and_jobs(auth, users, 
     assert purged == [user.id]
     assert users.get_by_email("ana@example.com") is None
     assert users.get_user_by_session(token) is None
+
+
+def test_delete_removes_the_user_before_purging_their_jobs(users):
+    seen = []
+    settings = Settings()
+    throttle = LoginThrottle(5, timedelta(minutes=15))
+    auth = AuthService(
+        users,
+        throttle,
+        settings,
+        lambda user_id: seen.append(users.get_by_id(user_id)),
+    )
+    _, user = auth.register("ana@example.com", PASSWORD)
+
+    auth.delete_account(user, PASSWORD)
+
+    assert seen == [None]
+
+
+def test_wrong_password_attempts_on_delete_are_throttled(auth, users, purged):
+    token, user = auth.register("ana@example.com", PASSWORD)
+    for _ in range(5):
+        with pytest.raises(HTTPException) as wrong:
+            auth.delete_account(user, "wrong password")
+        assert wrong.value.status_code == 403
+
+    with pytest.raises(HTTPException) as locked:
+        auth.delete_account(user, PASSWORD)
+
+    assert _error(locked) == (429, "too_many_attempts")
+    assert purged == []
+    assert users.get_user_by_session(token) == user
+
+
+def test_delete_and_login_share_the_same_failure_count(auth):
+    _, user = auth.register("ana@example.com", PASSWORD)
+    for _ in range(3):
+        with pytest.raises(HTTPException):
+            auth.login("ana@example.com", "wrong password")
+    for _ in range(2):
+        with pytest.raises(HTTPException):
+            auth.delete_account(user, "wrong password")
+
+    with pytest.raises(HTTPException) as excinfo:
+        auth.login("ana@example.com", PASSWORD)
+
+    assert _error(excinfo) == (429, "too_many_attempts")

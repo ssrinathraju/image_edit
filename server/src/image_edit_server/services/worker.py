@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Callable, Optional
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.job_store import JobStore
@@ -17,6 +18,7 @@ async def run_worker(
     store: JobStore,
     pipeline: GenerationPipeline,
     settings: Settings,
+    user_exists: Optional[Callable[[str], bool]] = None,
 ) -> None:
     """Pull queued jobs and process them one at a time. Runs until cancelled."""
     while True:
@@ -27,6 +29,12 @@ async def run_worker(
 
         job = jobs[0]
         job_id = job.id
+        if user_exists is not None and not user_exists(job.user_id):
+            # The owner deleted their account after submitting; drop the job.
+            store.delete(job_id)
+            file_storage.delete_inputs(job_id, settings.STORAGE_ROOT)
+            logger.info("Dropped job %s: its owner no longer exists", job_id)
+            continue
         store.update(job_id, status=JobStatus.running)
         logger.info("Processing job %s", job_id)
 
@@ -36,8 +44,6 @@ async def run_worker(
         try:
             await pipeline.run(face_paths, job.prompt, out_path)
             if store.get(job_id) is None:
-                # Owner deleted the account mid-run; do not leave the output behind.
-                out_path.unlink(missing_ok=True)
                 logger.info("Job %s was deleted while running; output discarded", job_id)
                 continue
             result_url = f"/images/{job_id}.png"
@@ -48,3 +54,7 @@ async def run_worker(
             store.update(job_id, status=JobStatus.failed, error="pipeline_failed")
         finally:
             file_storage.delete_inputs(job_id, settings.STORAGE_ROOT)
+            if store.get(job_id) is None:
+                # Owner deleted the account mid-run; never leave an output behind,
+                # whether the pipeline succeeded, failed, or wrote a partial file.
+                out_path.unlink(missing_ok=True)

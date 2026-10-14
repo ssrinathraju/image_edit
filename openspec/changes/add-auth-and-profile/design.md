@@ -117,7 +117,7 @@ A job may be `running` when its owner deletes the account, and the worker would 
 
 ## Risks / Trade-offs
 
-- [Generated images are fetchable by anyone who has the URL] → Job ids are 128-bit ULIDs and not enumerable, and the status endpoint is owner-only, so URLs are only known to the owner; documented. Signed or authenticated image URLs are a follow-up before any public deployment.
+- [Generated images are fetchable by anyone who has the URL] → Job ids are ULIDs (48 bits of timestamp plus 80 random bits): time-ordered, but not guessable, and the status endpoint is owner-only, so URLs are only known to the owner. The real exposure is that anyone who holds a URL can fetch the image; documented. Signed or authenticated image URLs are a follow-up before any public deployment.
 - [No email verification] → Anyone can register any address. Harmless now; it matters for referral rewards (change 2), which should not pay out on unverified accounts. Flagged there.
 - [Per-email lockout can be abused to lock a known user out for 15 minutes] → Accepted; bounded duration (Decision 4).
 - [Jobs are still in memory, sessions are not] → After a server restart users stay signed in but their old job ids 404. Already true of jobs today; fixed by persistence in change 3.

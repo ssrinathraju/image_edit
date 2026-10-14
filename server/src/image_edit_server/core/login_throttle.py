@@ -38,6 +38,11 @@ class LoginThrottle:
     def record_failure(self, email: str) -> None:
         with self._lock:
             now = self._clock()
+            self._failures = {
+                key: entry
+                for key, entry in self._failures.items()
+                if now - entry[1] < self._lockout
+            }
             count, last_failure = self._failures.get(email, (0, now))
             if now - last_failure >= self._lockout:
                 count = 0

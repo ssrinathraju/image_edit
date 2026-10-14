@@ -87,3 +87,16 @@ def test_token_is_not_stored_in_plain_text(users):
 
     rows = users._conn.execute("SELECT token_hash FROM sessions").fetchall()
     assert token not in [r[0] for r in rows]
+
+
+def test_creating_a_session_prunes_expired_ones(users, clock):
+    user = users.create_user("ana@example.com", "hash-1")
+    users.create_session(user.id, TTL)
+    users.create_session(user.id, TTL)
+    clock.now += TTL + timedelta(seconds=1)
+
+    live = users.create_session(user.id, TTL)
+
+    rows = users._conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    assert rows == 1
+    assert users.get_user_by_session(live) == user

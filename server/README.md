@@ -49,7 +49,8 @@ curl -X DELETE http://localhost:8000/me \
 Errors: `401 unauthorized` (missing, unknown, expired or revoked token), `409 email_taken`,
 `400 invalid_credentials_format` (malformed email or a password outside 8-128 characters),
 `401 invalid_credentials`, `429 too_many_attempts` (5 failed logins for one email locks it for
-15 minutes), `403 invalid_password` (account deletion).
+15 minutes; wrong passwords on account deletion count toward the same limit),
+`403 invalid_password` (account deletion), `422` (email over 254 or password over 128 characters).
 
 Notes:
 
