@@ -26,6 +26,25 @@ curl -X POST http://localhost:8000/generations \
 # → {"job_id": "01HE..."}
 ```
 
+## Submit from a template
+
+Browse the catalog (add `?q=` to search titles and tags), then submit with a `template_id`
+instead of a `prompt` (send exactly one of the two):
+
+```bash
+curl "http://localhost:8000/templates?q=beach"
+# → [{"id": "golden-hour-beach", "title": "Golden Hour Beach", "tags": [...],
+#     "preview_url": "/template-previews/golden-hour-beach.webp"}]
+
+curl -X POST http://localhost:8000/generations \
+  -F "template_id=golden-hour-beach" \
+  -F "faces=@/path/to/face.jpg"
+# → {"job_id": "01HE..."}
+```
+
+Template prompts stay on the server. Sending both `prompt` and `template_id`, or an unknown
+`template_id`, returns 400 with error code `invalid_template`.
+
 ## Poll for status
 
 ```bash

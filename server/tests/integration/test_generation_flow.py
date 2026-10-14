@@ -16,8 +16,8 @@ SMALL_PNG = (
 
 
 @pytest.fixture
-def app_client(tmp_path):
-    settings = Settings(STORAGE_ROOT=str(tmp_path))
+def app_client(tmp_path, templates_dir):
+    settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
     app = create_app(settings=settings)
     with TestClient(app) as client:
         yield client
@@ -65,3 +65,22 @@ def test_static_files_serve_png(app_client, tmp_path):
     resp = app_client.get("/images/foo.png")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("image/png")
+
+
+def test_template_generation_flow(app_client):
+    resp = app_client.post(
+        "/generations",
+        data={"template_id": "sunset-beach"},
+        files=[("faces", ("face.png", io.BytesIO(SMALL_PNG), "image/png"))],
+    )
+    assert resp.status_code == 202
+    job_id = resp.json()["job_id"]
+
+    for _ in range(40):
+        body = app_client.get(f"/generations/{job_id}").json()
+        if body["status"] in ("succeeded", "failed"):
+            break
+        time.sleep(0.1)
+
+    assert body["status"] == "succeeded"
+    assert app_client.get(body["result_url"]).status_code == 200

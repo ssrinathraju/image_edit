@@ -23,9 +23,9 @@ All work happens on branch `feat/add-trending-templates`. Do not push to `main`;
 
 ## 4. Server: template-based generation
 
-- [ ] 4.1 Add `template_id: Optional[str] = None` to `schemas/job.py` `Job`; in `api/generations.py` make `prompt` optional and add the `template_id` form field; in `services/generation_service.submit` add the `catalog` parameter and the validation order from design.md Decision 4 (`invalid_template` for both fields given or an unknown id; neither given → `invalid_prompt`). Verify `server/tests/api/test_generations_submit.py` gains cases for: template accepted (202, job prompt equals the template prompt), unknown id → 400 `invalid_template`, both fields → 400 `invalid_template`, neither → 400 `invalid_prompt`; all existing submit tests still pass
-- [ ] 4.2 Extend `server/tests/integration/test_generation_flow.py` with a template submission that polls to `succeeded` using the stub pipeline; verify it passes
-- [ ] 4.3 Update `server/README.md` with `GET /templates` and the `template_id` field on `POST /generations` (including a curl example); verify the curl example works against a locally running server
+- [x] 4.1 Add `template_id: Optional[str] = None` to `schemas/job.py` `Job`; in `api/generations.py` make `prompt` optional and add the `template_id` form field; in `services/generation_service.submit` add the `catalog` parameter and the validation order from design.md Decision 4 (`invalid_template` for both fields given or an unknown id; neither given → `invalid_prompt`). Verify `server/tests/api/test_generations_submit.py` gains cases for: template accepted (202, job prompt equals the template prompt), unknown id → 400 `invalid_template`, both fields → 400 `invalid_template`, neither → 400 `invalid_prompt`; all existing submit tests still pass
+- [x] 4.2 Extend `server/tests/integration/test_generation_flow.py` with a template submission that polls to `succeeded` using the stub pipeline; verify it passes
+- [x] 4.3 Update `server/README.md` with `GET /templates` and the `template_id` field on `POST /generations` (including a curl example); verify the curl example works against a locally running server
 
 ## 5. App: dependencies, platform config, API client
 

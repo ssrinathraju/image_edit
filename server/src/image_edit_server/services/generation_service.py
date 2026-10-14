@@ -9,6 +9,7 @@ from fastapi import HTTPException, UploadFile
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.repos import file_storage
+from image_edit_server.repos.template_catalog import TemplateCatalog
 from image_edit_server.schemas.api import ErrorBody, JobStatusResponse
 from image_edit_server.schemas.job import Job, JobStatus
 
@@ -19,16 +20,18 @@ _SETTINGS = Settings()
 
 async def submit(
     faces: list[UploadFile],
-    prompt: str,
+    prompt: Optional[str],
+    template_id: Optional[str],
     store: JobStore,
+    catalog: TemplateCatalog,
     settings: Settings = _SETTINGS,
 ) -> str:
     """Validate inputs, persist uploads, create a queued job. Return job_id."""
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
-    _validate_prompt(prompt, settings)
+    resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
 
-    job = Job(id="", prompt=prompt)
+    job = Job(id="", prompt=resolved_prompt, template_id=template_id)
     job_id = store.create(job)
 
     for i, data in enumerate(face_data):
@@ -92,6 +95,30 @@ async def _read_and_validate_faces(
             )
         result.append(data)
     return result
+
+
+def _resolve_prompt(
+    prompt: Optional[str],
+    template_id: Optional[str],
+    catalog: TemplateCatalog,
+    settings: Settings,
+) -> str:
+    if template_id is None:
+        text = prompt or ""
+        _validate_prompt(text, settings)
+        return text
+    if prompt is not None:
+        raise _invalid_template("provide either 'prompt' or 'template_id', not both")
+    template = catalog.get(template_id)
+    if template is None:
+        raise _invalid_template(f"unknown template_id '{template_id}'")
+    return template.prompt
+
+
+def _invalid_template(detail: str) -> HTTPException:
+    return HTTPException(
+        400, ErrorBody(error="invalid_template", detail=detail).model_dump()
+    )
 
 
 def _validate_prompt(prompt: str, settings: Settings) -> None:

@@ -76,3 +76,43 @@ def test_overlong_prompt_returns_400(client):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"]["error"] == "invalid_prompt"
+
+
+def test_template_submission_uses_the_template_prompt(client, store):
+    resp = client.post(
+        "/generations",
+        data={"template_id": "sunset-beach"},
+        files=[_face()],
+    )
+    assert resp.status_code == 202
+    job = store.get(resp.json()["job_id"])
+    assert job.prompt == "TEMPLATE PROMPT sunset beach"
+    assert job.template_id == "sunset-beach"
+
+
+def test_unknown_template_id_returns_400(client, store):
+    resp = client.post(
+        "/generations",
+        data={"template_id": "does-not-exist"},
+        files=[_face()],
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_template"
+    assert list(store.list_queued()) == []
+
+
+def test_prompt_and_template_together_return_400(client, store):
+    resp = client.post(
+        "/generations",
+        data={"prompt": VALID_PROMPT, "template_id": "sunset-beach"},
+        files=[_face()],
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_template"
+    assert list(store.list_queued()) == []
+
+
+def test_neither_prompt_nor_template_returns_invalid_prompt(client):
+    resp = client.post("/generations", files=[_face()])
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_prompt"
