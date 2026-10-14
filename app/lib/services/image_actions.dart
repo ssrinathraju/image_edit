@@ -20,7 +20,7 @@ class PlatformImageActions implements ImageActions {
     try {
       final hasAccess = await Gal.hasAccess() || await Gal.requestAccess();
       if (!hasAccess) return SaveResult.permissionDenied;
-      await Gal.putImageBytes(bytes, name: '$name.${_detectFormat(bytes).extension}');
+      await Gal.putImageBytes(bytes, name: name);
       return SaveResult.saved;
     } on GalException catch (error) {
       if (error.type == GalExceptionType.accessDenied) {
