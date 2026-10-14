@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../schemas/job.dart';
-import '../new_generation/new_generation_notifier.dart';
+import '../../services/generation_providers.dart';
 
 class GenerationStatusNotifier
     extends AutoDisposeFamilyAsyncNotifier<GenerationJob, String> {

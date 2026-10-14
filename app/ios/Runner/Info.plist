@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to use as the reference for your generated image.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save generated images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Select reference face photos for image generation.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
