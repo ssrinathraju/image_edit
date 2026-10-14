@@ -30,6 +30,10 @@ class _ControlledClient implements GenerationApiClient {
 
   @override
   String resolveUrl(String path) => path;
+
+  // These tests exercise generation only; the account calls are never made.
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {

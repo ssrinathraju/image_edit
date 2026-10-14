@@ -35,6 +35,10 @@ class _FakeClient implements GenerationApiClient {
 
   @override
   String resolveUrl(String path) => 'http://localhost$path';
+
+  // These tests exercise generation only; the account calls are never made.
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {

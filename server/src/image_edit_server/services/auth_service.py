@@ -51,7 +51,7 @@ class AuthService:
         try:
             user = self._users.create_user(normalized, hash_password(password))
         except EmailTakenError:
-            raise _error(409, "email_taken", "an account with this email already exists")
+            raise _error(409, "email_taken", "this email is already registered")
         return self._start_session(user), user
 
     def login(self, email: str, password: str) -> tuple[str, User]:
