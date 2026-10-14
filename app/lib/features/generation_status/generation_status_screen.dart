@@ -1,9 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../schemas/job.dart';
+import '../../services/image_actions.dart';
+import '../common/submit_controller.dart';
+import '../common/submit_flow.dart';
 import 'generation_status_notifier.dart';
+import 'result_image_provider.dart';
 
 class GenerationStatusScreen extends ConsumerWidget {
   const GenerationStatusScreen({required this.jobId, super.key});
@@ -18,18 +24,13 @@ class GenerationStatusScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Generation Status')),
       body: asyncJob.when(
         loading: () => const _ProgressView(message: 'Starting…'),
-        error: (e, _) => _ErrorView(
-          message: e.toString(),
-          onRetry: () => context.go('/'),
-        ),
+        error: (e, _) => _FailureView(message: e.toString()),
         data: (job) => switch (job.status) {
           JobStatus.queued => const _ProgressView(message: 'Queued…'),
           JobStatus.running => const _ProgressView(message: 'Generating…'),
-          JobStatus.succeeded => _SuccessView(resultUrl: job.resultUrl ?? ''),
-          JobStatus.failed => _ErrorView(
-              message: job.error ?? 'Generation failed',
-              onRetry: () => context.go('/'),
-            ),
+          JobStatus.succeeded => _SuccessView(job: job),
+          JobStatus.failed =>
+            _FailureView(message: job.error ?? 'Generation failed'),
         },
       ),
     );
@@ -56,30 +57,110 @@ class _ProgressView extends StatelessWidget {
   }
 }
 
-class _SuccessView extends StatelessWidget {
-  const _SuccessView({required this.resultUrl});
+class _SuccessView extends ConsumerWidget {
+  const _SuccessView({required this.job});
 
-  final String resultUrl;
+  final GenerationJob job;
 
   @override
-  Widget build(BuildContext context) {
-    return Image.network(
-      resultUrl,
-      fit: BoxFit.contain,
-      loadingBuilder: (_, child, progress) => progress == null
-          ? child
-          : const Center(child: CircularProgressIndicator()),
-      errorBuilder: (_, _, _) =>
-          const Center(child: Text('Could not load image')),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final url = job.resultUrl;
+    if (url == null) return const _FailureView(message: 'The image is missing.');
+    final bytes = ref.watch(resultImageBytesProvider(url));
+
+    return bytes.when(
+      loading: () => const _ProgressView(message: 'Loading image…'),
+      error: (_, _) => _FailureView(
+        message: 'Could not load the image.',
+        onReload: () => ref.invalidate(resultImageBytesProvider(url)),
+      ),
+      data: (data) => _ResultBody(jobId: job.jobId, bytes: data),
     );
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
+class _ResultBody extends ConsumerWidget {
+  const _ResultBody({required this.jobId, required this.bytes});
+
+  final String jobId;
+  final Uint8List bytes;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showActions = ref.watch(showImageActionsProvider);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Image.memory(bytes, fit: BoxFit.contain),
+        const SizedBox(height: 16),
+        if (showActions)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _download(context, ref),
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Builder(
+                  builder: (buttonContext) => OutlinedButton.icon(
+                    onPressed: () => _share(buttonContext, ref),
+                    icon: const Icon(Icons.share),
+                    label: const Text('Share'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        const SizedBox(height: 12),
+        const _NavigationButtons(homeLabel: 'Home'),
+      ],
+    );
+  }
+
+  Future<void> _download(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String message;
+    try {
+      final result =
+          await ref.read(imageActionsProvider).saveToLibrary(bytes, name: jobId);
+      message = switch (result) {
+        SaveResult.saved => 'Saved to your photo library.',
+        SaveResult.permissionDenied =>
+          'Photo library access is required to save images. '
+              'Allow it in Settings and try again.',
+      };
+    } catch (_) {
+      message = 'Could not save the image.';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _share(BuildContext buttonContext, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(buttonContext);
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin =
+        box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+    try {
+      await ref
+          .read(imageActionsProvider)
+          .share(bytes, name: jobId, origin: origin);
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not open the share sheet.')),
+      );
+    }
+  }
+}
+
+class _FailureView extends StatelessWidget {
+  const _FailureView({required this.message, this.onReload});
 
   final String message;
-  final VoidCallback onRetry;
+  final VoidCallback? onReload;
 
   @override
   Widget build(BuildContext context) {
@@ -93,13 +174,45 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('New Generation'),
-            ),
+            if (onReload != null) ...[
+              FilledButton(onPressed: onReload, child: const Text('Reload')),
+              const SizedBox(height: 12),
+            ],
+            const _NavigationButtons(homeLabel: 'New Generation'),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NavigationButtons extends ConsumerWidget {
+  const _NavigationButtons({required this.homeLabel});
+
+  final String homeLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lastRequest = ref.watch(lastRequestProvider);
+    final isSubmitting = ref.watch(submitControllerProvider);
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        if (lastRequest != null)
+          FilledButton.icon(
+            onPressed: isSubmitting
+                ? null
+                : () => submitAndOpenStatus(context, ref, lastRequest),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        FilledButton.tonal(
+          onPressed: () => context.go('/'),
+          child: Text(homeLabel),
+        ),
+      ],
     );
   }
 }

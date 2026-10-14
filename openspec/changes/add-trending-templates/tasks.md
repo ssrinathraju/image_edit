@@ -48,11 +48,11 @@ All work happens on branch `feat/add-trending-templates`. Do not push to `main`;
 
 ## 8. App: status screen actions
 
-- [ ] 8.1 Rework `generation_status_screen.dart`: on a terminal state show Retry (hidden when `lastRequestProvider` is null; it resubmits and calls `context.go` to the new job) and Home (`context.go('/')`); on success also show Download and Share (both hidden when `kIsWeb`); fetch the image bytes once and cache them in the status notifier. Verify with a widget test covering which buttons appear for succeeded, failed, and web
-- [ ] 8.2 Implement Download with `gal` (check or request access, `putImageBytes`, success snackbar, permission-denied message) and Share with `share_plus` (`XFile.fromData`, PNG mime type, `sharePositionOrigin` from the button's render box); wrap both behind a small `ImageActions` interface provided through Riverpod so the widget test can fake them; verify a widget test that tapping each calls the fake with the cached bytes
+- [x] 8.1 Rework `generation_status_screen.dart`: on a terminal state show Retry (hidden when `lastRequestProvider` is null; it resubmits and calls `context.go` to the new job) and Home (`context.go('/')`); on success also show Download and Share (both hidden when `kIsWeb`); fetch the image bytes once and cache them in the status notifier. Verify with a widget test covering which buttons appear for succeeded, failed, and web
+- [x] 8.2 Implement Download with `gal` (check or request access, `putImageBytes`, success snackbar, permission-denied message) and Share with `share_plus` (`XFile.fromData`, PNG mime type, `sharePositionOrigin` from the button's render box); wrap both behind a small `ImageActions` interface provided through Riverpod so the widget test can fake them; verify a widget test that tapping each calls the fake with the cached bytes
 
 ## 9. Integration and PR
 
-- [ ] 9.1 Run `uv run pytest` in `server/` and `flutter analyze && flutter test` in `app/`; verify all pass with zero analyzer warnings
+- [x] 9.1 Run `uv run pytest` in `server/` and `flutter analyze && flutter test` in `app/`; verify all pass with zero analyzer warnings
 - [ ] 9.2 With the stub server running and the app on the iOS simulator: home grid loads with placeholder previews → search "beach" filters → empty search shows "Create your own" → template flow with a library photo reaches a succeeded result → Retry starts a new job → Share opens the sheet → Download saves to Photos → Home clears state → custom flow with pre-filled search text succeeds. Record the outcome in the PR description
 - [ ] 9.3 Run `openspec validate add-trending-templates --strict` and fix any issues; then push the branch and open a PR to `main` with a summary, test plan, and screenshots from 9.2; verify the PR URL is returned
