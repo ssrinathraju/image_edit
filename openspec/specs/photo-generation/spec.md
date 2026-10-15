@@ -122,15 +122,6 @@ The system SHALL delete all uploaded reference face files associated with a job 
 - **WHEN** a job reaches `succeeded` or `failed`
 - **THEN** all reference face files uploaded with that job are deleted from storage
 
-### Requirement: Expose endpoints without authentication (transitional)
-
-The system SHALL accept `POST /generations` and `GET /generations/{job_id}` requests without any authentication credentials in this change. This is transitional: authentication MUST be added by a subsequent change before the endpoints are exposed outside a trusted local network. The spec records this constraint so that the gap is not forgotten.
-
-#### Scenario: Unauthenticated request is accepted
-
-- **WHEN** a client posts a valid request to `POST /generations` with no `Authorization` header and no API key
-- **THEN** the system accepts the request and returns HTTP 202
-
 ### Requirement: Use configured model backend for inference
 
 The system SHALL generate output images by running the prompt through the configured text-to-image model backend. The active backend SHALL be selected via the `MODEL_BACKEND` server configuration. When `MODEL_BACKEND` is `stub`, the server MAY return a placeholder image (for testing and CI); in any other configuration, the server SHALL run real model inference to produce the output image.
@@ -162,3 +153,32 @@ The system SHALL reject a `POST /generations` request with HTTP 400 and error co
 - **WHEN** a client posts a valid face image with both a `prompt` and a valid `template_id`
 - **THEN** the system responds with HTTP 400 and error `invalid_template`
 - **AND** no job is created
+
+### Requirement: Require authentication for generation endpoints
+
+The system SHALL require an authenticated session for `POST /generations` and `GET /generations/{job_id}`, and SHALL respond with HTTP 401 and error `unauthorized` when the request has no valid session. No job SHALL be created for an unauthenticated request.
+
+#### Scenario: Unauthenticated submission is rejected
+
+- **WHEN** a client posts a valid request to `POST /generations` with no `Authorization` header
+- **THEN** the system responds with HTTP 401
+- **AND** no job is created
+
+#### Scenario: Unauthenticated status request is rejected
+
+- **WHEN** a client calls `GET /generations/{job_id}` with no `Authorization` header
+- **THEN** the system responds with HTTP 401
+
+### Requirement: Scope jobs to their owner
+
+The system SHALL associate each job with the user who submitted it and SHALL make the job and its status visible only to that user. Requesting a job that exists but belongs to another user SHALL be indistinguishable from requesting an unknown job: HTTP 404.
+
+#### Scenario: Owner can read their job
+
+- **WHEN** a user submits a job and then calls `GET /generations/{job_id}` with their own session
+- **THEN** the system responds with HTTP 200 and the job's status
+
+#### Scenario: Another user cannot read the job
+
+- **WHEN** a second authenticated user calls `GET /generations/{job_id}` for the first user's job
+- **THEN** the system responds with HTTP 404
