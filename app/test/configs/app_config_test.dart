@@ -22,4 +22,12 @@ void main() {
     expect(AppConfig.termsUrl, 'https://example.com/terms');
     expect(AppConfig.supportEmail, 'help@example.com');
   });
+
+  test('the invite url is optional', () {
+    dotenv.testLoad(fileInput: 'INVITE_URL=\n');
+    expect(AppConfig.inviteUrl, isNull);
+
+    dotenv.testLoad(fileInput: 'INVITE_URL=https://example.com/get\n');
+    expect(AppConfig.inviteUrl, 'https://example.com/get');
+  });
 }

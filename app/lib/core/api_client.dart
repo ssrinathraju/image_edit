@@ -16,7 +16,11 @@ abstract class GenerationApiClient {
   Future<Uint8List> fetchImageBytes(String url);
   String resolveUrl(String path);
 
-  Future<Session> register({required String email, required String password});
+  Future<Session> register({
+    required String email,
+    required String password,
+    String? referralCode,
+  });
   Future<Session> login({required String email, required String password});
   Future<void> logout();
   Future<UserProfile> fetchMe();
@@ -124,8 +128,19 @@ class DioApiClient implements GenerationApiClient {
   String resolveUrl(String path) => '$_baseUrl$path';
 
   @override
-  Future<Session> register({required String email, required String password}) =>
-      _authenticate(_registerPath, email, password);
+  Future<Session> register({
+    required String email,
+    required String password,
+    String? referralCode,
+  }) {
+    final code = referralCode?.trim();
+    return _authenticate(
+      _registerPath,
+      email,
+      password,
+      referralCode: code == null || code.isEmpty ? null : code,
+    );
+  }
 
   @override
   Future<Session> login({required String email, required String password}) =>
@@ -137,18 +152,26 @@ class DioApiClient implements GenerationApiClient {
   @override
   Future<UserProfile> fetchMe() async {
     final response = await _dio.get<Map<String, dynamic>>('/me');
-    final data = response.data!;
-    return UserProfile(id: data['id'] as String, email: data['email'] as String);
+    return UserProfile.fromJson(response.data!);
   }
 
   @override
   Future<void> deleteAccount({required String password}) =>
       _dio.delete<void>('/me', data: {'password': password});
 
-  Future<Session> _authenticate(String path, String email, String password) async {
+  Future<Session> _authenticate(
+    String path,
+    String email,
+    String password, {
+    String? referralCode,
+  }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       path,
-      data: {'email': email, 'password': password},
+      data: {
+        'email': email,
+        'password': password,
+        'referral_code': ?referralCode,
+      },
     );
     return Session.fromJson(response.data!);
   }

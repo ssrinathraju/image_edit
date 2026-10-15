@@ -14,6 +14,7 @@ Future<void> pumpScreen(
   required Widget screen,
   required FakeApiClient client,
   FakeImagePicker? picker,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -22,6 +23,8 @@ Future<void> pumpScreen(
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => screen),
+      GoRoute(path: '/upgrade', builder: (_, _) => const Text('upgrade-screen')),
+      GoRoute(path: '/invite', builder: (_, _) => const Text('invite-screen')),
       GoRoute(
         path: '/status/:jobId',
         builder: (_, state) => Text('status:${state.pathParameters['jobId']}'),
@@ -35,6 +38,7 @@ Future<void> pumpScreen(
         imagePickerProvider.overrideWithValue(
           picker ?? FakeImagePicker(result: XFile.fromData(tinyPng, name: 'me.png')),
         ),
+        ...overrides,
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

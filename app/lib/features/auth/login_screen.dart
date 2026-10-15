@@ -22,7 +22,7 @@ class LoginScreen extends ConsumerWidget {
               children: [
                 CredentialsForm(
                   submitLabel: 'Sign in',
-                  onSubmit: (email, password) => ref
+                  onSubmit: (email, password, _) => ref
                       .read(sessionProvider.notifier)
                       .signIn(email: email, password: password),
                 ),
