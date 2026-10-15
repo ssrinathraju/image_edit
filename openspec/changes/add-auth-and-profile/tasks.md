@@ -56,4 +56,4 @@ Work on branch `feat/add-auth-and-profile`. Do not push to `main`; open a PR at 
 
 - [x] 11.1 Run `uv run pytest` in `server/` and `flutter analyze && flutter test` in `app/`; verify everything passes with zero analyzer warnings, then run `openspec validate add-auth-and-profile --strict`
 - [ ] 11.2 Manual run on the iOS simulator against a local server: launch signed out → register → home → open profile → log out → sign in again → template flow to a finished result → log out and in as a second account and confirm the first account's job id is 404 via `curl` → delete the second account and confirm sign-in fails. Record the outcome in the PR description and leave this box unchecked if any step could not be run
-- [ ] 11.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 11.2 were or were not exercised
+- [x] 11.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 11.2 were or were not exercised

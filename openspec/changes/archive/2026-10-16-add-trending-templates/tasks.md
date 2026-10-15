@@ -55,4 +55,4 @@ All work happens on branch `feat/add-trending-templates`. Do not push to `main`;
 
 - [x] 9.1 Run `uv run pytest` in `server/` and `flutter analyze && flutter test` in `app/`; verify all pass with zero analyzer warnings
 - [ ] 9.2 With the stub server running and the app on the iOS simulator: home grid loads with placeholder previews → search "beach" filters → empty search shows "Create your own" → template flow with a library photo reaches a succeeded result → Retry starts a new job → Share opens the sheet → Download saves to Photos → Home clears state → custom flow with pre-filled search text succeeds. Record the outcome in the PR description
-- [ ] 9.3 Run `openspec validate add-trending-templates --strict` and fix any issues; then push the branch and open a PR to `main` with a summary, test plan, and screenshots from 9.2; verify the PR URL is returned
+- [x] 9.3 Run `openspec validate add-trending-templates --strict` and fix any issues; then push the branch and open a PR to `main` with a summary, test plan, and screenshots from 9.2; verify the PR URL is returned
