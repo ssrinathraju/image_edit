@@ -8,13 +8,19 @@ Accepts one or more reference face images plus a text prompt and produces a comp
 
 ### Requirement: Submit a generation job
 
-The system SHALL accept a `POST /generations` request carrying between 1 and 4 reference face images (multipart form field `faces`) and a non-empty `prompt` string. On a valid request, the system SHALL enqueue a new generation job and respond with HTTP 202 and a body containing a `job_id` string that uniquely identifies the job.
+The system SHALL accept a `POST /generations` request carrying between 1 and 4 reference face images (multipart form field `faces`) and exactly one of: a non-empty `prompt` string, or a `template_id` naming a template in the catalog. On a valid request, the system SHALL enqueue a new generation job and respond with HTTP 202 and a body containing a `job_id` string that uniquely identifies the job. For a `template_id` request, the job SHALL run with that template's prompt.
 
 #### Scenario: Valid submission is accepted
 
 - **WHEN** a client posts 2 reference images and a 50-character prompt to `POST /generations`
 - **THEN** the system responds with HTTP 202 and a body containing a `job_id`
 - **AND** the job is enqueued for processing
+
+#### Scenario: Template submission is accepted
+
+- **WHEN** a client posts 1 reference image and the `template_id` of an existing template, with no `prompt`
+- **THEN** the system responds with HTTP 202 and a body containing a `job_id`
+- **AND** the job is processed using that template's prompt
 
 ### Requirement: Reject requests with an invalid face count
 
@@ -50,11 +56,11 @@ The system SHALL reject any `faces` upload whose MIME type is not an accepted im
 
 ### Requirement: Reject invalid prompts
 
-The system SHALL reject requests whose `prompt` is empty or exceeds the configured maximum character length. Rejection SHALL return HTTP 400 and SHALL NOT create a job.
+The system SHALL reject requests that supply a `prompt` which is empty or exceeds the configured maximum character length. Rejection SHALL return HTTP 400 and SHALL NOT create a job. This check applies only when the request uses `prompt` rather than `template_id`.
 
 #### Scenario: Empty prompt is rejected
 
-- **WHEN** a client posts `POST /generations` with a valid face image and an empty `prompt`
+- **WHEN** a client posts `POST /generations` with a valid face image, no `template_id`, and an empty `prompt`
 - **THEN** the system responds with HTTP 400
 
 #### Scenario: Overlong prompt is rejected
@@ -116,15 +122,6 @@ The system SHALL delete all uploaded reference face files associated with a job 
 - **WHEN** a job reaches `succeeded` or `failed`
 - **THEN** all reference face files uploaded with that job are deleted from storage
 
-### Requirement: Expose endpoints without authentication (transitional)
-
-The system SHALL accept `POST /generations` and `GET /generations/{job_id}` requests without any authentication credentials in this change. This is transitional: authentication MUST be added by a subsequent change before the endpoints are exposed outside a trusted local network. The spec records this constraint so that the gap is not forgotten.
-
-#### Scenario: Unauthenticated request is accepted
-
-- **WHEN** a client posts a valid request to `POST /generations` with no `Authorization` header and no API key
-- **THEN** the system accepts the request and returns HTTP 202
-
 ### Requirement: Use configured model backend for inference
 
 The system SHALL generate output images by running the prompt through the configured text-to-image model backend. The active backend SHALL be selected via the `MODEL_BACKEND` server configuration. When `MODEL_BACKEND` is `stub`, the server MAY return a placeholder image (for testing and CI); in any other configuration, the server SHALL run real model inference to produce the output image.
@@ -140,3 +137,48 @@ The system SHALL generate output images by running the prompt through the config
 - **WHEN** the server is started with `MODEL_BACKEND=stub`
 - **AND** a generation job completes successfully
 - **THEN** the output image is a placeholder and no model inference is performed
+
+### Requirement: Reject invalid template selection
+
+The system SHALL reject a `POST /generations` request with HTTP 400 and error code `invalid_template` when it supplies both `prompt` and `template_id`, or when `template_id` does not name a template in the catalog. No job SHALL be created.
+
+#### Scenario: Unknown template id is rejected
+
+- **WHEN** a client posts a valid face image with `template_id=does-not-exist`
+- **THEN** the system responds with HTTP 400 and error `invalid_template`
+- **AND** no job is created
+
+#### Scenario: Prompt and template together are rejected
+
+- **WHEN** a client posts a valid face image with both a `prompt` and a valid `template_id`
+- **THEN** the system responds with HTTP 400 and error `invalid_template`
+- **AND** no job is created
+
+### Requirement: Require authentication for generation endpoints
+
+The system SHALL require an authenticated session for `POST /generations` and `GET /generations/{job_id}`, and SHALL respond with HTTP 401 and error `unauthorized` when the request has no valid session. No job SHALL be created for an unauthenticated request.
+
+#### Scenario: Unauthenticated submission is rejected
+
+- **WHEN** a client posts a valid request to `POST /generations` with no `Authorization` header
+- **THEN** the system responds with HTTP 401
+- **AND** no job is created
+
+#### Scenario: Unauthenticated status request is rejected
+
+- **WHEN** a client calls `GET /generations/{job_id}` with no `Authorization` header
+- **THEN** the system responds with HTTP 401
+
+### Requirement: Scope jobs to their owner
+
+The system SHALL associate each job with the user who submitted it and SHALL make the job and its status visible only to that user. Requesting a job that exists but belongs to another user SHALL be indistinguishable from requesting an unknown job: HTTP 404.
+
+#### Scenario: Owner can read their job
+
+- **WHEN** a user submits a job and then calls `GET /generations/{job_id}` with their own session
+- **THEN** the system responds with HTTP 200 and the job's status
+
+#### Scenario: Another user cannot read the job
+
+- **WHEN** a second authenticated user calls `GET /generations/{job_id}` for the first user's job
+- **THEN** the system responds with HTTP 404
