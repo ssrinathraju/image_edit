@@ -3,14 +3,18 @@ from __future__ import annotations
 import logging
 import re
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, Optional
 
 from fastapi import HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.passwords import hash_password, verify_password
-from image_edit_server.core.user_store import EmailTakenError, UserStore
+from image_edit_server.core.user_store import (
+    EmailTakenError,
+    InvalidReferralCode,
+    UserStore,
+)
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
 
@@ -44,14 +48,26 @@ class AuthService:
         self._settings = settings
         self._purge_user_jobs = purge_user_jobs
 
-    def register(self, email: str, password: str) -> tuple[str, User]:
+    def register(
+        self, email: str, password: str, referral_code: Optional[str] = None
+    ) -> tuple[str, User]:
         """Create an account and its first session; returns (token, user)."""
         normalized = normalize_email(email)
         self._validate_credentials_format(normalized, password)
         try:
-            user = self._users.create_user(normalized, hash_password(password))
+            user = self._users.register_user(
+                normalized,
+                hash_password(password),
+                referral_code,
+                self._settings.REFERRAL_BONUS,
+                self._settings.REFERRAL_MAX_REWARDS,
+            )
         except EmailTakenError:
             raise _error(409, "email_taken", "this email is already registered")
+        except InvalidReferralCode:
+            raise _error(
+                400, "invalid_referral_code", "this referral code was not recognised"
+            )
         return self._start_session(user), user
 
     def login(self, email: str, password: str) -> tuple[str, User]:

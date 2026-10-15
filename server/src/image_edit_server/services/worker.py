@@ -19,6 +19,7 @@ async def run_worker(
     pipeline: GenerationPipeline,
     settings: Settings,
     user_exists: Optional[Callable[[str], bool]] = None,
+    refund: Optional[Callable[[str], None]] = None,
 ) -> None:
     """Pull queued jobs and process them one at a time. Runs until cancelled."""
     while True:
@@ -52,6 +53,8 @@ async def run_worker(
         except Exception:
             logger.exception("Job %s failed", job_id)
             store.update(job_id, status=JobStatus.failed, error="pipeline_failed")
+            if refund is not None and job.reservation_id:
+                refund(job.reservation_id)
         finally:
             file_storage.delete_inputs(job_id, settings.STORAGE_ROOT)
             if store.get(job_id) is None:

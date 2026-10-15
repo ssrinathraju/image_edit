@@ -1,4 +1,6 @@
 import asyncio
+from datetime import datetime, timezone
+
 import pytest
 from pathlib import Path
 
@@ -145,3 +147,53 @@ async def test_job_whose_owner_is_gone_is_dropped_without_running(tmp_path):
     assert not (tmp_path / "inputs" / orphan).exists()
     assert store.get(kept).status == JobStatus.succeeded
     assert pipeline.runs == 1
+
+
+async def _run_with_refund(tmp_path, pipeline, grant_bonus_credit=False):
+    from image_edit_server.repos.user_store import SqliteUserStore
+    from tests.helpers import grant_bonus
+
+    users = SqliteUserStore(":memory:")
+    user = users.create_user("ana@example.com", "hash")
+    if grant_bonus_credit:
+        grant_bonus(users, user.id, 1)
+        for _ in range(3):
+            users.reserve_generation(user.id, 3, datetime.now(timezone.utc))
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    reservation = users.reserve_generation(user.id, 3, datetime.now(timezone.utc))
+    store.create(Job(id="", prompt="p", user_id=user.id, reservation_id=reservation))
+
+    task = asyncio.create_task(
+        run_worker(store, pipeline, settings, refund=users.refund_generation)
+    )
+    await asyncio.sleep(0.4)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    return users, user
+
+
+async def test_failed_job_restores_the_daily_generation(tmp_path):
+    users, user = await _run_with_refund(tmp_path, _FailingPipeline())
+
+    assert users.usage_snapshot(user.id, 3, datetime.now(timezone.utc)).used_today == 0
+
+
+async def test_succeeded_job_is_not_refunded(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    users, user = await _run_with_refund(tmp_path, StubPipeline())
+
+    assert users.usage_snapshot(user.id, 3, datetime.now(timezone.utc)).used_today == 1
+
+
+async def test_failed_job_paid_with_a_bonus_credit_restores_the_credit(tmp_path):
+    users, user = await _run_with_refund(
+        tmp_path, _FailingPipeline(), grant_bonus_credit=True
+    )
+
+    snapshot = users.usage_snapshot(user.id, 3, datetime.now(timezone.utc))
+    assert snapshot.bonus_credits == 1

@@ -110,7 +110,7 @@ def test_me_returns_identity_without_password_material(client):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"id", "email", "created_at"}
+    assert set(body) == {"id", "email", "created_at", "plan", "usage", "referral"}
     assert "password" not in resp.text
 
 
@@ -180,3 +180,60 @@ def test_overlong_credentials_are_rejected_before_any_hashing(anon_client, clien
     assert login_password.status_code == 422
     assert delete.status_code == 422
     assert client.get("/me").status_code == 200
+
+
+def _me(client, token):
+    return client.get("/me", headers=_bearer(token)).json()
+
+
+def test_register_with_a_lowercase_referral_code_rewards_both(anon_client):
+    referrer = _register(anon_client).json()
+    code = _me(anon_client, referrer["token"])["referral"]["code"]
+
+    resp = anon_client.post(
+        "/auth/register",
+        json={"email": "ben@example.com", "password": DEFAULT_PASSWORD, "referral_code": f" {code.lower()} "},
+    )
+
+    assert resp.status_code == 201
+    assert _me(anon_client, resp.json()["token"])["usage"]["bonus_credits"] == 5
+    assert _me(anon_client, referrer["token"])["usage"]["bonus_credits"] == 5
+    assert _me(anon_client, referrer["token"])["referral"]["rewards"] == 1
+
+
+def test_register_with_an_unknown_referral_code_is_400_and_creates_nothing(anon_client):
+    resp = anon_client.post(
+        "/auth/register",
+        json={"email": "ben@example.com", "password": DEFAULT_PASSWORD, "referral_code": "NOSUCH22"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_referral_code"
+    login = anon_client.post(
+        "/auth/login", json={"email": "ben@example.com", "password": DEFAULT_PASSWORD}
+    )
+    assert login.status_code == 401
+
+
+def test_register_without_a_code_grants_no_bonus(anon_client):
+    token = _register(anon_client).json()["token"]
+
+    assert _me(anon_client, token)["usage"]["bonus_credits"] == 0
+
+
+def test_blank_referral_code_is_treated_as_absent(anon_client):
+    resp = anon_client.post(
+        "/auth/register",
+        json={"email": "ben@example.com", "password": DEFAULT_PASSWORD, "referral_code": "  "},
+    )
+
+    assert resp.status_code == 201
+
+
+def test_overlong_referral_code_is_422(anon_client):
+    resp = anon_client.post(
+        "/auth/register",
+        json={"email": "ben@example.com", "password": DEFAULT_PASSWORD, "referral_code": "X" * 33},
+    )
+
+    assert resp.status_code == 422

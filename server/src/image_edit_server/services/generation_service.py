@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -8,10 +9,13 @@ from fastapi import HTTPException, UploadFile
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.job_store import JobStore
+from image_edit_server.core.user_store import QuotaExceeded, UserNotFound
 from image_edit_server.repos import file_storage
 from image_edit_server.repos.template_catalog import TemplateCatalog
 from image_edit_server.schemas.api import ErrorBody, JobStatusResponse
 from image_edit_server.schemas.job import Job, JobStatus
+from image_edit_server.schemas.user import User
+from image_edit_server.services.quota_service import QuotaService
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +28,35 @@ async def submit(
     template_id: Optional[str],
     store: JobStore,
     catalog: TemplateCatalog,
-    user_id: str,
+    user: User,
+    quota: QuotaService,
     settings: Settings = _SETTINGS,
 ) -> str:
-    """Validate inputs, persist uploads, create a queued job. Return job_id."""
+    """Validate inputs, reserve a generation, persist uploads, queue a job."""
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
 
-    job = Job(id="", prompt=resolved_prompt, template_id=template_id, user_id=user_id)
-    job_id = store.create(job)
-
-    for i, data in enumerate(face_data):
-        path = file_storage.save_upload(job_id, i, data, settings.STORAGE_ROOT)
-        job.face_paths.append(str(path))
+    # Reserved only after validation passed, so a rejected request costs nothing.
+    reservation_id = await _reserve(quota, user)
+    job = Job(
+        id="",
+        prompt=resolved_prompt,
+        template_id=template_id,
+        user_id=user.id,
+        reservation_id=reservation_id,
+    )
+    job_id: Optional[str] = None
+    try:
+        job_id = store.create(job)
+        for i, data in enumerate(face_data):
+            path = file_storage.save_upload(job_id, i, data, settings.STORAGE_ROOT)
+            job.face_paths.append(str(path))
+    except Exception:
+        quota.release(reservation_id)
+        if job_id is not None:
+            store.delete(job_id)
+        raise
 
     logger.info("Enqueued job %s with %d face(s)", job_id, len(faces))
     return job_id
@@ -57,6 +76,24 @@ def get_status(job_id: str, user_id: str, store: JobStore) -> Optional[JobStatus
 
 
 # ── private helpers ──────────────────────────────────────────────────────────
+
+async def _reserve(quota: QuotaService, user: User) -> str:
+    try:
+        return await asyncio.to_thread(quota.reserve, user)
+    except QuotaExceeded:
+        raise HTTPException(
+            429,
+            ErrorBody(
+                error="quota_exceeded",
+                detail="the daily generation limit has been reached",
+            ).model_dump(),
+        )
+    except UserNotFound:
+        raise HTTPException(
+            401,
+            ErrorBody(error="unauthorized", detail="a valid session is required").model_dump(),
+        )
+
 
 def _validate_face_count(faces: list[UploadFile], settings: Settings) -> None:
     n = len(faces)

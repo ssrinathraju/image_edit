@@ -10,17 +10,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from image_edit_server.api.auth import router as auth_router
-from image_edit_server.api.deps import get_auth_service, get_user_store
+from image_edit_server.api.deps import (
+    get_auth_service,
+    get_quota_service,
+    get_referral_service,
+    get_user_store,
+)
 from image_edit_server.api.generations import get_store, router as generations_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
-from image_edit_server.repos.user_store import SqliteUserStore
+from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
 from image_edit_server.services.account_cleanup import purge_user_jobs
 from image_edit_server.services.auth_service import AuthService
+from image_edit_server.services.quota_service import QuotaService
+from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
 
@@ -36,7 +43,7 @@ def _make_pipeline(cfg: Settings) -> GenerationPipeline:
 
 
 def _open_user_store(cfg: Settings) -> SqliteUserStore:
-    db_path = Path(cfg.AUTH_DB_PATH or Path(cfg.STORAGE_ROOT) / "app.db")
+    db_path = Path(auth_db_path(cfg))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     return SqliteUserStore(str(db_path))
 
@@ -55,6 +62,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lambda user_id: purge_user_jobs(user_id, store, cfg.STORAGE_ROOT),
     )
 
+    quota_service = QuotaService(user_store, cfg)
+    referral_service = ReferralService(cfg)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
@@ -66,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 pipeline,
                 cfg,
                 lambda user_id: user_store.get_by_id(user_id) is not None,
+                quota_service.release,
             ))
             for _ in range(cfg.JOB_CONCURRENCY)
         ]
@@ -86,6 +97,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_quota_service] = lambda: quota_service
+    app.dependency_overrides[get_referral_service] = lambda: referral_service
     app.include_router(auth_router)
     app.include_router(generations_router)
     app.include_router(templates_router)

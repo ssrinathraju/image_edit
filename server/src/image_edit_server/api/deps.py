@@ -8,6 +8,8 @@ from image_edit_server.core.user_store import UserStore
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
 from image_edit_server.services.auth_service import AuthService
+from image_edit_server.services.quota_service import QuotaService
+from image_edit_server.services.referral_service import ReferralService
 
 BEARER_PREFIX = "bearer "
 
@@ -18,6 +20,14 @@ def get_user_store() -> UserStore:
 
 def get_auth_service() -> AuthService:
     raise RuntimeError("auth service is not configured; override get_auth_service")
+
+
+def get_quota_service() -> QuotaService:
+    raise RuntimeError("quota service is not configured; override get_quota_service")
+
+
+def get_referral_service() -> ReferralService:
+    raise RuntimeError("referral service is not configured; override get_referral_service")
 
 
 def _unauthorized() -> HTTPException:
@@ -40,6 +50,8 @@ def get_bearer_token(authorization: Annotated[Optional[str], Header()] = None) -
 TokenDep = Annotated[str, Depends(get_bearer_token)]
 UserStoreDep = Annotated[UserStore, Depends(get_user_store)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+QuotaDep = Annotated[QuotaService, Depends(get_quota_service)]
+ReferralDep = Annotated[ReferralService, Depends(get_referral_service)]
 
 
 def get_current_user(token: TokenDep, users: UserStoreDep) -> User:

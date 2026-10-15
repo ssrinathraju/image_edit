@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     LOGIN_MAX_FAILURES: int = 5
     LOGIN_LOCKOUT_MINUTES: int = 15
 
+    FREE_DAILY_LIMIT: int = 3
+    PREMIUM_DAILY_LIMIT: int = 30
+    REFERRAL_BONUS: int = 5
+    REFERRAL_MAX_REWARDS: int = 10
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"
