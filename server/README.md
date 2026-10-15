@@ -23,6 +23,7 @@ Generation endpoints require a session. Register (or log in) to get a bearer tok
 
 ```bash
 # Register → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+# `referral_code` is optional; an unknown code is a 400 invalid_referral_code
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "ana@example.com", "password": "correct horse battery"}'
@@ -35,7 +36,10 @@ curl -X POST http://localhost:8000/auth/login \
 TOKEN=<token from the response>
 
 curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
-# → {"id": "...", "email": "ana@example.com", "created_at": "..."}
+# → {"id": "...", "email": "ana@example.com", "created_at": "...", "plan": "free",
+#    "usage": {"daily_limit": 3, "used_today": 0, "bonus_credits": 0, "remaining": 3,
+#              "resets_at": "2026-10-17T00:00:00+00:00", "plan_limits": {"free": 3, "premium": 30}},
+#    "referral": {"code": "K7M2QX9P", "rewards": 0, "max_rewards": 10, "bonus_per_referral": 5}}
 
 # Log out: revokes this token only → 204
 curl -X POST http://localhost:8000/auth/logout -H "Authorization: Bearer $TOKEN"
@@ -60,6 +64,40 @@ Notes:
   HTTPS.
 - Generated images at `/images/<job_id>.png` are not authenticated; job ids are unguessable and
   only the owner can look them up, but treat the URLs as secrets.
+
+## Plans, daily limit, and referrals
+
+Every account is on the `free` plan (3 generations per UTC day) or `premium` (30). A generation
+is reserved when `POST /generations` is accepted and returned if the job ends `failed`; requests
+that fail validation never use one. When the daily allowance and any bonus credits are gone the
+server answers:
+
+```
+429 {"detail": {"error": "quota_exceeded", "detail": "the daily generation limit has been reached"}}
+```
+
+Bonus credits are one-time and are spent only after the daily allowance. Each account has a
+referral code (`referral.code` in `/me`). Registering with someone's code gives both accounts
+`REFERRAL_BONUS` credits; a referrer is rewarded for at most `REFERRAL_MAX_REWARDS` friends.
+
+```bash
+# Register with a friend's code (case and surrounding spaces are ignored)
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ben@example.com", "password": "correct horse battery", "referral_code": "k7m2qx9p"}'
+```
+
+There is no endpoint that changes a plan. Promote or demote an account from `server/` with the
+operator script, which reads the same `IMAGE_EDIT_*` settings as the server (so run it with the
+same `IMAGE_EDIT_STORAGE_ROOT` or `IMAGE_EDIT_AUTH_DB_PATH`). A running server picks the change up
+on the next request:
+
+```bash
+uv run python scripts/set_plan.py --email ana@example.com --plan premium
+```
+
+The first start after upgrading migrates an existing `app.db` in place: users keep their data,
+become `free` with no bonus credits, and receive referral codes. The migration is idempotent.
 
 ## Submit a generation job
 
@@ -132,6 +170,10 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_PASSWORD_MAX_CHARS` | `128` | Maximum password length |
 | `IMAGE_EDIT_LOGIN_MAX_FAILURES` | `5` | Consecutive failed logins per email before lockout |
 | `IMAGE_EDIT_LOGIN_LOCKOUT_MINUTES` | `15` | Lockout length, counted from the latest failure |
+| `IMAGE_EDIT_FREE_DAILY_LIMIT` | `3` | Generations per UTC day on the `free` plan |
+| `IMAGE_EDIT_PREMIUM_DAILY_LIMIT` | `30` | Generations per UTC day on the `premium` plan |
+| `IMAGE_EDIT_REFERRAL_BONUS` | `5` | Bonus credits given to each side of a referral |
+| `IMAGE_EDIT_REFERRAL_MAX_REWARDS` | `10` | Friends a single account is rewarded for |
 
 ## Running with Sana
 

@@ -33,7 +33,7 @@ Work on branch `feat/add-plans-and-referrals`. Do not push to `main`; open a PR 
 ## 6. Server: operator tooling and docs
 
 - [x] 6.1 Add `scripts/set_plan.py --email <email> --plan free|premium` using `auth_db_path(Settings())`, with a clear error for an unknown email or plan; verify `tests/scripts/test_set_plan.py` covers success, unknown email, unknown plan, and that a running store sees the change on its next read
-- [ ] 6.2 Update `server/README.md`: the new settings, the `429 quota_exceeded` error, the extra `/me` fields, the optional `referral_code` on register with a curl example, the `set_plan.py` usage, and the note that the first start upgrades an existing `app.db`; verify each curl example by running it against a local server
+- [x] 6.2 Update `server/README.md`: the new settings, the `429 quota_exceeded` error, the extra `/me` fields, the optional `referral_code` on register with a curl example, the `set_plan.py` usage, and the note that the first start upgrades an existing `app.db`; verify each curl example by running it against a local server
 
 ## 7. App: models, client, providers
 
