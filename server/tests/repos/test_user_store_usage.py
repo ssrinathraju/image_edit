@@ -183,3 +183,41 @@ def test_a_ledger_without_the_settled_column_is_upgraded(tmp_path):
 
     columns = {r[1] for r in store._conn.execute("PRAGMA table_info(generation_usage)")}
     assert "settled" in columns
+
+
+def test_upgrading_a_ledger_without_settled_does_not_refund_history(tmp_path):
+    """A database written before the settled flag existed holds paid-for work."""
+    import sqlite3
+
+    path = str(tmp_path / "before-settled.db")
+    first = SqliteUserStore(path)
+    owner = first.create_user("ana@example.com", "hash")
+    _grant_bonus(first, owner.id, 1)
+    for _ in range(4):  # three daily, one paid with the bonus credit
+        first.reserve_generation(owner.id, LIMIT, NOON)
+    first.close()
+
+    conn = sqlite3.connect(path)
+    conn.execute("ALTER TABLE generation_usage RENAME TO old_usage")
+    conn.execute(
+        "CREATE TABLE generation_usage (reservation_id TEXT PRIMARY KEY,"
+        " user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
+        " day TEXT NOT NULL, source TEXT NOT NULL,"
+        " refunded INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO generation_usage SELECT reservation_id, user_id, day, source,"
+        " refunded, created_at FROM old_usage"
+    )
+    conn.execute("DROP TABLE old_usage")
+    conn.commit()
+    conn.close()
+
+    store = SqliteUserStore(path)
+    before = store.usage_snapshot(owner.id, LIMIT, NOON)
+    refunded = store.refund_unsettled_generations()
+    after = store.usage_snapshot(owner.id, LIMIT, NOON)
+
+    assert refunded == 0
+    assert (before.used_today, before.bonus_credits) == (3, 0)
+    assert (after.used_today, after.bonus_credits) == (3, 0)

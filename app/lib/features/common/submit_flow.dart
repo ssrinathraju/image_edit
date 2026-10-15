@@ -31,6 +31,8 @@ Future<void> submitAndOpenStatus(
     router.go('/status/$jobId');
     unawaited(account.refresh());
   } catch (error) {
+    // The user may have left while the request was in flight.
+    if (!context.mounted) return;
     // The reset time comes from the account as last loaded; it only changes
     // at midnight UTC, so a stale value is still right.
     final resetsAt = ref.read(accountProvider).valueOrNull?.usage?.resetsAt;

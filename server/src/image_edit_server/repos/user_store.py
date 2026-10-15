@@ -144,6 +144,10 @@ class SqliteUserStore:
                         "ALTER TABLE generation_usage"
                         " ADD COLUMN settled INTEGER NOT NULL DEFAULT 0"
                     )
+                    # Nothing can be in flight while the database is upgraded, so
+                    # every row that exists is history. Left at 0 they would all be
+                    # refunded by the startup recovery, handing back paid-for work.
+                    self._conn.execute("UPDATE generation_usage SET settled = 1")
                 self._backfill_referral_codes()
                 self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 self._conn.commit()
