@@ -297,4 +297,14 @@ void main() {
       expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
     });
   });
+
+  test('the real client has connect and receive timeouts', () {
+    final options = apiBaseOptions('http://api.test');
+
+    expect(options.baseUrl, 'http://api.test');
+    expect(options.connectTimeout, connectTimeout);
+    expect(options.receiveTimeout, receiveTimeout);
+    expect(connectTimeout, greaterThan(Duration.zero));
+    expect(receiveTimeout, greaterThan(Duration.zero));
+  });
 }

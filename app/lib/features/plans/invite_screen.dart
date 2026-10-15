@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../configs/app_config.dart';
+import '../../schemas/account.dart';
 import 'account_notifier.dart';
 
 typedef ShareText = Future<void> Function(String text, {Rect? origin});
@@ -23,6 +24,18 @@ String inviteMessage(String code, String? inviteUrl) {
   return inviteUrl == null ? base : '$base\n$inviteUrl';
 }
 
+/// Past the reward cap the referrer gets nothing more, so say only what is true.
+String _pitch(Referral referral) {
+  final bonus = referral.bonusPerReferral;
+  if (referral.rewards >= referral.maxRewards) {
+    return "You've been rewarded for the maximum of ${referral.maxRewards} "
+        'friends. Friends who sign up with your code still get $bonus bonus '
+        'generations.';
+  }
+  return 'Give friends $bonus bonus generations and get $bonus yourself when '
+      'they sign up with your code.';
+}
+
 class InviteScreen extends ConsumerWidget {
   const InviteScreen({super.key});
 
@@ -38,12 +51,7 @@ class InviteScreen extends ConsumerWidget {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Give friends ${referral.bonusPerReferral} bonus generations '
-                    'and get ${referral.bonusPerReferral} yourself when they '
-                    'sign up with your code.',
-                    textAlign: TextAlign.center,
-                  ),
+                  Text(_pitch(referral), textAlign: TextAlign.center),
                   const SizedBox(height: 24),
                   Center(
                     child: SelectableText(

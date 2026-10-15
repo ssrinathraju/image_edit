@@ -82,7 +82,7 @@ The system SHALL consume allowance only when a request is accepted for processin
 
 ### Requirement: Refund generations that fail
 
-The system SHALL return the generation to the account, to the allowance or the bonus credits it was taken from, when its job ends in `failed`. A job that ends in `succeeded` SHALL NOT be refunded.
+The system SHALL return the generation to the account, to the allowance or the bonus credits it was taken from, when its job ends in `failed`, and when the job was lost because the server restarted before it finished. A job that ends in `succeeded` SHALL NOT be refunded.
 
 #### Scenario: Failed job is refunded
 
@@ -93,6 +93,12 @@ The system SHALL return the generation to the account, to the allowance or the b
 
 - **WHEN** a job that spent a bonus credit ends in `failed`
 - **THEN** the account's bonus credits increase by one
+
+#### Scenario: Job lost to a restart is refunded
+
+- **WHEN** a job that was queued or running when the server stopped was never finished
+- **AND** the server starts again
+- **THEN** the account's remaining generations increase by one
 
 #### Scenario: Succeeded job is not refunded
 

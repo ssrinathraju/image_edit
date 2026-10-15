@@ -1,5 +1,6 @@
 """Register → use the allowance → 429 → restart → still 429."""
 import io
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,8 +25,18 @@ def test_limit_survives_a_server_restart(tmp_path, templates_dir):
 
     with TestClient(create_app(settings)) as first:
         headers = register_headers(first, "ana@example.com")
-        assert [_submit(first, headers).status_code for _ in range(3)] == [202] * 3
+        responses = [_submit(first, headers) for _ in range(3)]
+        assert [r.status_code for r in responses] == [202] * 3
         assert _submit(first, headers).status_code == 429
+        # Let the jobs finish: a job lost to the restart would be refunded.
+        for response in responses:
+            job_id = response.json()["job_id"]
+            for _ in range(50):
+                status = first.get(f"/generations/{job_id}", headers=headers).json()
+                if status["status"] == "succeeded":
+                    break
+                time.sleep(0.1)
+            assert status["status"] == "succeeded"
 
     with TestClient(create_app(settings)) as second:
         resp = _submit(second, headers)

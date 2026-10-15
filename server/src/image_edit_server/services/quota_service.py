@@ -32,6 +32,13 @@ class QuotaService:
     def release(self, reservation_id: str) -> None:
         self._users.refund_generation(reservation_id)
 
+    def settle(self, reservation_id: str) -> None:
+        self._users.settle_generation(reservation_id)
+
+    def refund_interrupted(self) -> int:
+        """Return generations whose jobs died with the previous server process."""
+        return self._users.refund_unsettled_generations()
+
     def summary(self, user: User) -> UsageResponse:
         limit = daily_limit(user.plan, self._settings)
         snapshot = self._users.usage_snapshot(user.id, limit, self._clock())

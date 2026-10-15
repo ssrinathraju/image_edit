@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS generation_usage (
     day TEXT NOT NULL,
     source TEXT NOT NULL,
     refunded INTEGER NOT NULL DEFAULT 0,
+    settled INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_user_day ON generation_usage(user_id, day);
@@ -134,6 +135,15 @@ class SqliteUserStore:
                 for statement in _USAGE_SCHEMA.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
+                usage_columns = {
+                    row[1]
+                    for row in self._conn.execute("PRAGMA table_info(generation_usage)")
+                }
+                if "settled" not in usage_columns:
+                    self._conn.execute(
+                        "ALTER TABLE generation_usage"
+                        " ADD COLUMN settled INTEGER NOT NULL DEFAULT 0"
+                    )
                 self._backfill_referral_codes()
                 self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 self._conn.commit()
@@ -202,6 +212,10 @@ class SqliteUserStore:
                         (bonus, referrer[0]),
                     )
         except sqlite3.IntegrityError as error:
+            # Only a duplicate email is the caller's fault; any other violation
+            # (say a referral-code collision) is a bug and must not read as one.
+            if "users.email" not in str(error):
+                raise
             raise EmailTakenError(email) from error
         return User(
             id=user_id,
@@ -335,6 +349,26 @@ class SqliteUserStore:
                     "UPDATE users SET bonus_credits = bonus_credits + 1 WHERE id = ?",
                     (row[0],),
                 )
+
+    def settle_generation(self, reservation_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE generation_usage SET settled = 1 WHERE reservation_id = ?",
+                (reservation_id,),
+            )
+
+    def refund_unsettled_generations(self) -> int:
+        with self._lock:
+            pending = [
+                row[0]
+                for row in self._conn.execute(
+                    "SELECT reservation_id FROM generation_usage"
+                    " WHERE settled = 0 AND refunded = 0"
+                )
+            ]
+        for reservation_id in pending:
+            self.refund_generation(reservation_id)
+        return len(pending)
 
     def usage_snapshot(
         self, user_id: str, daily_limit: int, now: datetime

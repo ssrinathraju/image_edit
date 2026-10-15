@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -30,6 +31,8 @@ from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
+
+logger = logging.getLogger(__name__)
 
 
 def _make_pipeline(cfg: Settings) -> GenerationPipeline:
@@ -70,6 +73,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
+        # Jobs are in memory, so none survived the restart; give their
+        # generations back before the first request is served.
+        interrupted = quota_service.refund_interrupted()
+        if interrupted:
+            logger.info("Refunded %d interrupted generation(s)", interrupted)
+
         workers = [
             asyncio.create_task(run_worker(
                 store,
@@ -77,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cfg,
                 lambda user_id: user_store.get_by_id(user_id) is not None,
                 quota_service.release,
+                quota_service.settle,
             ))
             for _ in range(cfg.JOB_CONCURRENCY)
         ]

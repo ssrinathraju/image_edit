@@ -68,4 +68,24 @@ void main() {
     expect(find.text('Share'), findsNothing);
     expect(find.textContaining('not available'), findsOneWidget);
   });
+
+  testWidgets('at the reward cap the copy no longer promises the referrer credits', (tester) async {
+    final client = FakeApiClient()
+      ..onFetchMe = () async => fakeProfile(rewards: 10);
+
+    await _openInvite(tester, client, share: FakeShare());
+
+    expect(find.textContaining('and get 5 yourself'), findsNothing);
+    expect(find.textContaining('maximum of 10 friends'), findsOneWidget);
+    expect(find.textContaining('still get 5 bonus generations'), findsOneWidget);
+    expect(find.text('10 of 10 friends rewarded'), findsOneWidget);
+  });
+
+  testWidgets('below the cap the copy promises credits to both sides', (tester) async {
+    final client = FakeApiClient()..onFetchMe = () async => fakeProfile(rewards: 3);
+
+    await _openInvite(tester, client, share: FakeShare());
+
+    expect(find.textContaining('and get 5 yourself'), findsOneWidget);
+  });
 }

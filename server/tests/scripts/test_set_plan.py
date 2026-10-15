@@ -64,3 +64,19 @@ def test_main_parses_arguments(script, settings, running_store, monkeypatch):
 
     assert code == 0
     assert running_store.get_by_email("ana@example.com").plan == "premium"
+
+
+def test_a_missing_database_is_refused_and_not_created(script, tmp_path, capsys):
+    settings = Settings(STORAGE_ROOT=str(tmp_path / "elsewhere"))
+
+    code = script.set_plan("ana@example.com", "premium", settings)
+
+    assert code == 3
+    assert "no database at" in capsys.readouterr().err
+    assert not (tmp_path / "elsewhere").exists()
+
+
+def test_success_prints_the_database_it_changed(script, settings, running_store, capsys):
+    script.set_plan("ana@example.com", "premium", settings)
+
+    assert str(Path(settings.STORAGE_ROOT).resolve() / "app.db") in capsys.readouterr().out

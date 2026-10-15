@@ -138,3 +138,48 @@ def test_two_threads_racing_for_the_last_generation_one_wins(users, user):
         t.join()
 
     assert sorted(outcomes) == ["ok", "refused"]
+
+
+def test_unsettled_reservations_are_refunded_at_startup(users, user):
+    _grant_bonus(users, user.id, 1)
+    ids = _reserve_n(users, user, 4)  # three daily, one bonus
+    users.settle_generation(ids[0])
+
+    refunded = users.refund_unsettled_generations()
+
+    assert refunded == 3
+    snapshot = users.usage_snapshot(user.id, LIMIT, NOON)
+    assert snapshot.used_today == 1
+    assert snapshot.bonus_credits == 1
+
+
+def test_startup_refund_skips_settled_and_already_refunded(users, user):
+    ids = _reserve_n(users, user, 3)
+    users.settle_generation(ids[0])
+    users.refund_generation(ids[1])
+
+    assert users.refund_unsettled_generations() == 1
+    assert users.refund_unsettled_generations() == 0
+    assert users.usage_snapshot(user.id, LIMIT, NOON).used_today == 1
+
+
+def test_a_ledger_without_the_settled_column_is_upgraded(tmp_path):
+    import sqlite3
+
+    path = str(tmp_path / "mid.db")
+    first = SqliteUserStore(path)
+    first.close()
+    conn = sqlite3.connect(path)
+    conn.execute("DROP TABLE generation_usage")
+    conn.execute(
+        "CREATE TABLE generation_usage (reservation_id TEXT PRIMARY KEY,"
+        " user_id TEXT NOT NULL, day TEXT NOT NULL, source TEXT NOT NULL,"
+        " refunded INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    store = SqliteUserStore(path)
+
+    columns = {r[1] for r in store._conn.execute("PRAGMA table_info(generation_usage)")}
+    assert "settled" in columns

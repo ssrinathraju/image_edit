@@ -96,6 +96,12 @@ on the next request:
 uv run python scripts/set_plan.py --email ana@example.com --plan premium
 ```
 
+`set_plan.py` prints the database it changed and refuses to run when that file does not exist, so
+a run from the wrong directory fails loudly instead of creating an empty database.
+
+Jobs are held in memory, so a restart loses any job that was queued or running. Their generations
+are refunded automatically when the server starts again.
+
 The first start after upgrading migrates an existing `app.db` in place: users keep their data,
 become `free` with no bonus credits, and receive referral codes. The migration is idempotent.
 

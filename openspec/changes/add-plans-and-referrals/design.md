@@ -81,6 +81,8 @@ The call is wrapped in `asyncio.to_thread` because `submit` is `async` and SQLit
 
 `refund_generation(reservation_id)` runs `UPDATE generation_usage SET refunded=1 WHERE reservation_id=? AND refunded=0`; when exactly one row changed and its source was `bonus`, it also increments `users.bonus_credits`. A daily refund needs no other bookkeeping because the daily count excludes refunded rows. Running it twice is harmless. The worker calls it from its `except` branch when a job becomes `failed`. Jobs dropped because their owner was deleted are not refunded (the ledger rows cascade away with the user).
 
+Jobs live in memory, so a restart kills every queued or running job while its ledger row survives. Each row therefore carries a `settled` flag that the worker sets when the job succeeds. At startup, before the first request is served, `refund_unsettled_generations()` refunds every row that is neither settled nor refunded; no job can still be in flight then. The worker also treats its own bookkeeping calls (refund, settle, owner lookup) as best-effort: a failure is logged and never stops the worker.
+
 A refund for a job from a previous UTC day marks it refunded but does not change today's count, which is correct: that day's allowance is gone.
 
 ### 5. Plans and limits

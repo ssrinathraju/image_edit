@@ -30,6 +30,17 @@ abstract class GenerationApiClient {
 const String _loginPath = '/auth/login';
 const String _registerPath = '/auth/register';
 
+const Duration connectTimeout = Duration(seconds: 10);
+const Duration receiveTimeout = Duration(seconds: 60);
+
+/// Default options for the real client: without timeouts a stalled server
+/// would leave every awaiting screen waiting forever.
+BaseOptions apiBaseOptions(String baseUrl) => BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: connectTimeout,
+      receiveTimeout: receiveTimeout,
+    );
+
 class DioApiClient implements GenerationApiClient {
   /// [tokenProvider] supplies the bearer token for every request;
   /// [onUnauthorized] fires on a 401 from anywhere except the credential
@@ -40,7 +51,7 @@ class DioApiClient implements GenerationApiClient {
     String? Function()? tokenProvider,
     void Function()? onUnauthorized,
   })  : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl,
-        _dio = dio ?? Dio(BaseOptions(baseUrl: baseUrl ?? AppConfig.apiBaseUrl)) {
+        _dio = dio ?? Dio(apiBaseOptions(baseUrl ?? AppConfig.apiBaseUrl)) {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {

@@ -98,3 +98,15 @@ def test_every_account_gets_a_distinct_code(users):
     codes = {_register(users, f"u{i}@example.com").referral_code for i in range(25)}
 
     assert len(codes) == 25
+
+
+def test_a_referral_code_collision_is_not_reported_as_a_taken_email(users, monkeypatch):
+    import sqlite3
+
+    existing = _register(users, "a@example.com")
+    monkeypatch.setattr(users, "_unused_code", lambda: existing.referral_code)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        _register(users, "b@example.com")
+
+    assert users.get_by_email("b@example.com") is None

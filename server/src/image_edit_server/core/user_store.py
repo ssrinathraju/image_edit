@@ -52,6 +52,18 @@ class UserStore(Protocol):
         """Return a reserved generation to the source it came from; idempotent."""
         ...
 
+    def settle_generation(self, reservation_id: str) -> None:
+        """Mark a reservation as finished so a restart will not refund it."""
+        ...
+
+    def refund_unsettled_generations(self) -> int:
+        """Refund every reservation that is neither settled nor refunded.
+
+        Only valid at startup, when no job can still be in flight. Returns the
+        number of reservations refunded.
+        """
+        ...
+
     def usage_snapshot(
         self, user_id: str, daily_limit: int, now: datetime
     ) -> UsageSnapshot: ...

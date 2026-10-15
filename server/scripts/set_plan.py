@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import Optional, Sequence
 
 from image_edit_server.configs.settings import Settings
@@ -20,14 +21,23 @@ def set_plan(email: str, plan: str, settings: Optional[Settings] = None) -> int:
     if plan not in ALL_PLANS:
         print(f"unknown plan {plan!r}; choose one of: {', '.join(ALL_PLANS)}", file=sys.stderr)
         return 2
-    store = SqliteUserStore(auth_db_path(settings or Settings()))
+    db_path = Path(auth_db_path(settings or Settings())).resolve()
+    if not db_path.is_file():
+        # The store would happily create and migrate an empty database here.
+        print(
+            f"no database at {db_path}; run from the server's directory or set "
+            "IMAGE_EDIT_STORAGE_ROOT / IMAGE_EDIT_AUTH_DB_PATH",
+            file=sys.stderr,
+        )
+        return 3
+    store = SqliteUserStore(str(db_path))
     try:
         if not store.set_plan(normalize_email(email), plan):
-            print(f"no account with email {email!r}", file=sys.stderr)
+            print(f"no account with email {email!r} in {db_path}", file=sys.stderr)
             return 1
     finally:
         store.close()
-    print(f"{email} is now on the {plan} plan")
+    print(f"{email} is now on the {plan} plan (database: {db_path})")
     return 0
 
 
