@@ -7,7 +7,7 @@ Identifies who is calling the API. Provides email and password accounts, revocab
 
 ### Requirement: Register an account
 
-The system SHALL accept `POST /auth/register` with an `email` and a `password`, create the account, and respond with HTTP 201 and a body containing a session `token` and the user's `id` and `email`. Emails SHALL be matched case-insensitively and stored in lowercase. Passwords SHALL be between 8 and 128 characters.
+The system SHALL accept `POST /auth/register` with an `email`, a `password`, and an optional `referral_code`, create the account, and respond with HTTP 201 and a body containing a session `token` and the user's `id` and `email`. Emails SHALL be matched case-insensitively and stored in lowercase. Passwords SHALL be between 8 and 128 characters. An unknown `referral_code` SHALL be rejected as described by the referrals capability.
 
 #### Scenario: Valid registration creates an account and a session
 
@@ -24,6 +24,12 @@ The system SHALL accept `POST /auth/register` with an `email` and a `password`, 
 
 - **WHEN** a client registers with a malformed email or a password shorter than 8 characters
 - **THEN** the system responds with HTTP 400 and error `invalid_credentials_format`
+- **AND** no account is created
+
+#### Scenario: Unknown referral code is rejected
+
+- **WHEN** a client registers with a valid email and password and a referral code that matches no account
+- **THEN** the system responds with HTTP 400 and error `invalid_referral_code`
 - **AND** no account is created
 
 ### Requirement: Store passwords as salted hashes
@@ -83,12 +89,17 @@ The system SHALL treat a request as authenticated only when it carries `Authoriz
 
 ### Requirement: Return the current user
 
-The system SHALL expose `GET /me` which returns the authenticated user's `id`, `email`, and `created_at`, and SHALL NOT return any password material.
+The system SHALL expose `GET /me` which returns the authenticated user's `id`, `email`, and `created_at`, together with the account's plan, usage, and referral details, and SHALL NOT return any password material.
 
 #### Scenario: Current user is returned
 
 - **WHEN** an authenticated client calls `GET /me`
 - **THEN** the system responds with HTTP 200 and the user's `id`, `email`, and `created_at`
+
+#### Scenario: Plan, usage, and referral details are included
+
+- **WHEN** an authenticated client calls `GET /me`
+- **THEN** the response also contains the account's `plan`, its usage figures, and its referral code and progress
 
 ### Requirement: Log out
 

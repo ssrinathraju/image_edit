@@ -21,6 +21,7 @@ Items deferred from PR #1 review. None block the merge.
 ## From archive
 
 - [ ] **Manual device pass not recorded** — the full manual simulator checklist for trending templates (add-trending-templates 9.2) and auth/profile (add-auth-and-profile 11.2) was not recorded. Only registration and sign-in against the real server were confirmed. Both tasks are left unchecked in the archived `tasks.md`.
+- [ ] **Plans/referrals manual device pass not recorded** — the manual simulator pass for add-plans-and-referrals (10.2) was not recorded, including upgrading a copy of a real data-bearing `app.db` and the full referral flow (register with a code, both accounts +5, generate with bonus, limit dialog, promote with `set_plan.py`). Left unchecked in the archived `tasks.md`.
 
 ## From PR #4 review (plans and referrals)
 

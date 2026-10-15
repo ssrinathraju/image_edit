@@ -58,4 +58,4 @@ Work on branch `feat/add-plans-and-referrals`. Do not push to `main`; open a PR 
 
 - [x] 10.1 Run `uv run pytest` in `server/` and `flutter analyze && flutter test` in `app/`; verify all pass with zero analyzer warnings, then run `openspec validate add-plans-and-referrals --strict`
 - [ ] 10.2 Manual run on the iOS simulator with a local server started on a copy of an existing `app.db`: the upgrade keeps the old account working → home shows 3 left → use 3 → limit dialog with reset time → Invite friends shows the code → register a second account with that code (both show +5) → generate with bonus → promote an account with `set_plan.py` and see Premium on the profile without restarting. Leave this box unchecked if any step could not be run and say which in the PR
-- [ ] 10.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 10.2 were exercised
+- [x] 10.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 10.2 were exercised
