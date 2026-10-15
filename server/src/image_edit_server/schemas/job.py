@@ -21,4 +21,5 @@ class Job:
     prompt: str = ""
     template_id: Optional[str] = None
     user_id: str = ""
+    reservation_id: Optional[str] = None
     face_paths: list[str] = field(default_factory=list)

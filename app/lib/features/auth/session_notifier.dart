@@ -55,10 +55,16 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _start(session);
   }
 
-  Future<void> register({required String email, required String password}) async {
-    final session = await ref
-        .read(apiClientProvider)
-        .register(email: email, password: password);
+  Future<void> register({
+    required String email,
+    required String password,
+    String? referralCode,
+  }) async {
+    final session = await ref.read(apiClientProvider).register(
+          email: email,
+          password: password,
+          referralCode: referralCode,
+        );
     await _start(session);
   }
 

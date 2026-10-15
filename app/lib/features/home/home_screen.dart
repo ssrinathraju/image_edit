@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../schemas/template.dart';
+import '../plans/account_notifier.dart';
 import 'home_notifier.dart';
 
 const double _tileMaxWidth = 220;
@@ -35,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final templates = ref.watch(homeNotifierProvider);
+    final usage = ref.watch(accountProvider).valueOrNull?.usage;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trending'),
@@ -63,6 +65,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 12),
             _CreateOwnCard(onTap: _openCustom),
+            if (usage != null) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  avatar: const Icon(Icons.bolt, size: 18),
+                  label: Text(_remainingLabel(usage.remaining)),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Expanded(
               child: templates.when(
@@ -81,6 +93,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
+
+String _remainingLabel(int remaining) =>
+    remaining == 1 ? '1 generation left today' : '$remaining generations left today';
 
 class _CreateOwnCard extends StatelessWidget {
   const _CreateOwnCard({required this.onTap});

@@ -2,18 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../schemas/account.dart';
+import '../../schemas/session.dart';
 import '../auth/session_notifier.dart';
 import '../common/error_message.dart';
+import '../plans/account_notifier.dart';
 import 'profile_providers.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final email = ref.watch(sessionProvider).value?.email ?? '';
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Usage may have changed since the account was last loaded.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(accountProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = ref.watch(sessionProvider).valueOrNull?.email ?? '';
     final links = ref.watch(profileLinksProvider);
-    final version = ref.watch(appVersionProvider).value;
+    final version = ref.watch(appVersionProvider).valueOrNull;
+    final account = ref.watch(accountProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -25,7 +43,14 @@ class ProfileScreen extends ConsumerWidget {
       body: ListView(
         children: [
           _Header(email: email),
+          if (account?.usage != null) _PlanCard(account: account!),
           const Divider(),
+          ListTile(
+            leading: const Icon(Icons.card_giftcard),
+            title: const Text('Invite friends'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/invite'),
+          ),
           if (links.supportEmail != null)
             _LinkTile(
               icon: Icons.help_outline,
@@ -112,6 +137,43 @@ class ProfileScreen extends ConsumerWidget {
     } catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
     }
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({required this.account});
+
+  final UserProfile account;
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = account.usage!;
+    final isFree = account.plan == Plan.free;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isFree ? 'Free plan' : 'Premium plan',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text('${usage.usedToday} of ${usage.dailyLimit} used today'),
+            Text('${usage.bonusCredits} bonus credits'),
+            if (isFree) ...[
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => context.push('/upgrade'),
+                child: const Text('Upgrade'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

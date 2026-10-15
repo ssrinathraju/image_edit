@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:image_edit/core/api_client.dart';
 import 'package:image_edit/features/common/generation_request.dart';
 import 'package:image_edit/schemas/job.dart';
+import 'package:image_edit/schemas/account.dart';
 import 'package:image_edit/schemas/session.dart';
 import 'package:image_edit/schemas/template.dart';
 
@@ -18,6 +19,7 @@ class FakeApiClient implements GenerationApiClient {
 
   Future<Session> Function(String email, String password) onRegister =
       (email, _) async => Session(token: 'token-new', userId: 'user-1', email: email);
+  final referralCodes = <String?>[];
   Future<Session> Function(String email, String password) onLogin =
       (email, _) async => Session(token: 'token-1', userId: 'user-1', email: email);
   Future<void> Function() onLogout = () async {};
@@ -58,8 +60,13 @@ class FakeApiClient implements GenerationApiClient {
   String resolveUrl(String path) => 'http://fake$path';
 
   @override
-  Future<Session> register({required String email, required String password}) {
+  Future<Session> register({
+    required String email,
+    required String password,
+    String? referralCode,
+  }) {
     registered.add(email);
+    referralCodes.add(referralCode);
     return onRegister(email, password);
   }
 
@@ -91,4 +98,34 @@ TemplateSummary fakeTemplate(String id, {String? title, List<String> tags = cons
       title: title ?? id,
       tags: tags,
       previewUrl: 'http://fake/template-previews/$id.webp',
+    );
+
+/// A `/me` payload with usage and referral details, as the new server sends.
+UserProfile fakeProfile({
+  Plan plan = Plan.free,
+  int dailyLimit = 3,
+  int usedToday = 0,
+  int bonusCredits = 0,
+  int rewards = 0,
+  String code = 'K7M2QX9P',
+  DateTime? resetsAt,
+}) =>
+    UserProfile(
+      id: 'user-1',
+      email: 'ana@example.com',
+      plan: plan,
+      usage: Usage(
+        dailyLimit: dailyLimit,
+        usedToday: usedToday,
+        bonusCredits: bonusCredits,
+        remaining: (dailyLimit - usedToday).clamp(0, dailyLimit) + bonusCredits,
+        resetsAt: resetsAt ?? DateTime.utc(2026, 10, 17),
+        planLimits: const {'free': 3, 'premium': 30},
+      ),
+      referral: Referral(
+        code: code,
+        rewards: rewards,
+        maxRewards: 10,
+        bonusPerReferral: 5,
+      ),
     );

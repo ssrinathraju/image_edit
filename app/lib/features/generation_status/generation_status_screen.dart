@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../schemas/job.dart';
 import '../../services/image_actions.dart';
 import '../common/error_message.dart';
+import '../plans/account_notifier.dart';
 import '../common/submit_controller.dart';
 import '../common/submit_flow.dart';
 import 'generation_status_notifier.dart';
@@ -20,6 +21,14 @@ class GenerationStatusScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncJob = ref.watch(generationStatusProvider(jobId));
+    // A failed job is refunded, so the remaining count changes.
+    ref.listen(generationStatusProvider(jobId), (previous, next) {
+      final failedNow = next.valueOrNull?.status == JobStatus.failed;
+      final failedBefore = previous?.valueOrNull?.status == JobStatus.failed;
+      if (failedNow && !failedBefore) {
+        ref.read(accountProvider.notifier).refresh();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(title: const Text('Generation Status')),

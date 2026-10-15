@@ -10,11 +10,18 @@ class CredentialsForm extends StatefulWidget {
     required this.submitLabel,
     required this.onSubmit,
     this.passwordError,
+    this.withReferralCode = false,
     super.key,
   });
 
   final String submitLabel;
-  final Future<void> Function(String email, String password) onSubmit;
+
+  /// Receives the trimmed entries; `referralCode` is empty when not shown or blank.
+  final Future<void> Function(String email, String password, String referralCode)
+      onSubmit;
+
+  /// Shows an optional referral code field below the password.
+  final bool withReferralCode;
 
   /// Returns an inline message for a password that is not acceptable yet.
   final String? Function(String password)? passwordError;
@@ -26,6 +33,7 @@ class CredentialsForm extends StatefulWidget {
 class _CredentialsFormState extends State<CredentialsForm> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _referral = TextEditingController();
   bool _submitting = false;
   String? _failure;
 
@@ -33,6 +41,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _referral.dispose();
     super.dispose();
   }
 
@@ -53,7 +62,11 @@ class _CredentialsFormState extends State<CredentialsForm> {
       _failure = null;
     });
     try {
-      await widget.onSubmit(_email.text.trim(), _password.text);
+      await widget.onSubmit(
+        _email.text.trim(),
+        _password.text,
+        _referral.text.trim(),
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _failure = describeError(error));
@@ -93,6 +106,18 @@ class _CredentialsFormState extends State<CredentialsForm> {
             if (_canSubmit) _submit();
           },
         ),
+        if (widget.withReferralCode) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _referral,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              labelText: 'Referral code (optional)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
         if (_failure != null) ...[
           const SizedBox(height: 12),
           Text(

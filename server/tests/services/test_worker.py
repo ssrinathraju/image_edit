@@ -1,4 +1,6 @@
 import asyncio
+from datetime import datetime, timezone
+
 import pytest
 from pathlib import Path
 
@@ -145,3 +147,141 @@ async def test_job_whose_owner_is_gone_is_dropped_without_running(tmp_path):
     assert not (tmp_path / "inputs" / orphan).exists()
     assert store.get(kept).status == JobStatus.succeeded
     assert pipeline.runs == 1
+
+
+async def _run_with_refund(tmp_path, pipeline, grant_bonus_credit=False):
+    from image_edit_server.repos.user_store import SqliteUserStore
+    from tests.helpers import grant_bonus
+
+    users = SqliteUserStore(":memory:")
+    user = users.create_user("ana@example.com", "hash")
+    if grant_bonus_credit:
+        grant_bonus(users, user.id, 1)
+        for _ in range(3):
+            users.reserve_generation(user.id, 3, datetime.now(timezone.utc))
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    reservation = users.reserve_generation(user.id, 3, datetime.now(timezone.utc))
+    store.create(Job(id="", prompt="p", user_id=user.id, reservation_id=reservation))
+
+    task = asyncio.create_task(
+        run_worker(store, pipeline, settings, refund=users.refund_generation)
+    )
+    await asyncio.sleep(0.4)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    return users, user
+
+
+async def test_failed_job_restores_the_daily_generation(tmp_path):
+    users, user = await _run_with_refund(tmp_path, _FailingPipeline())
+
+    assert users.usage_snapshot(user.id, 3, datetime.now(timezone.utc)).used_today == 0
+
+
+async def test_succeeded_job_is_not_refunded(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    users, user = await _run_with_refund(tmp_path, StubPipeline())
+
+    assert users.usage_snapshot(user.id, 3, datetime.now(timezone.utc)).used_today == 1
+
+
+async def test_failed_job_paid_with_a_bonus_credit_restores_the_credit(tmp_path):
+    users, user = await _run_with_refund(
+        tmp_path, _FailingPipeline(), grant_bonus_credit=True
+    )
+
+    snapshot = users.usage_snapshot(user.id, 3, datetime.now(timezone.utc))
+    assert snapshot.bonus_credits == 1
+
+
+async def _run_for(store, pipeline, settings, seconds=0.5, **callbacks):
+    task = asyncio.create_task(run_worker(store, pipeline, settings, **callbacks))
+    await asyncio.sleep(seconds)
+    died = task.done()
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
+    return died
+
+
+class _FailOnceThenSucceed:
+    def __init__(self):
+        self.calls = 0
+
+    async def run(self, faces, prompt, output_path):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("first job fails")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+
+
+async def test_a_refund_that_raises_does_not_kill_the_worker(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    first = store.create(Job(id="", prompt="p", reservation_id="r1"))
+    second = store.create(Job(id="", prompt="p", reservation_id="r2"))
+
+    def locked_refund(_reservation_id):
+        raise RuntimeError("database is locked")
+
+    died = await _run_for(
+        store, _FailOnceThenSucceed(), settings, refund=locked_refund
+    )
+
+    assert not died
+    assert store.get(first).status == JobStatus.failed
+    assert store.get(second).status == JobStatus.succeeded
+
+
+async def test_a_failing_owner_lookup_does_not_kill_the_worker(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="p", user_id="u1"))
+
+    def broken_lookup(_user_id):
+        raise RuntimeError("database is locked")
+
+    died = await _run_for(
+        store, StubPipeline(), settings, user_exists=broken_lookup
+    )
+
+    assert not died
+    assert store.get(job_id).status == JobStatus.succeeded
+
+
+async def test_a_failing_settle_does_not_fail_the_job(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="p", reservation_id="r1"))
+
+    def broken_settle(_reservation_id):
+        raise RuntimeError("database is locked")
+
+    await _run_for(store, StubPipeline(), settings, settle=broken_settle)
+
+    assert store.get(job_id).status == JobStatus.succeeded
+
+
+async def test_success_settles_the_reservation(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    store.create(Job(id="", prompt="p", reservation_id="r1"))
+    settled: list = []
+
+    await _run_for(store, StubPipeline(), settings, settle=settled.append)
+
+    assert settled == ["r1"]

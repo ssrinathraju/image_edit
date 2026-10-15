@@ -24,6 +24,19 @@ def test_auth_defaults():
     assert s.LOGIN_LOCKOUT_MINUTES == 15
 
 
+def test_plan_and_referral_defaults():
+    s = Settings()
+    assert s.FREE_DAILY_LIMIT == 3
+    assert s.PREMIUM_DAILY_LIMIT == 30
+    assert s.REFERRAL_BONUS == 5
+    assert s.REFERRAL_MAX_REWARDS == 10
+
+
+def test_plan_env_override(monkeypatch):
+    monkeypatch.setenv("IMAGE_EDIT_PREMIUM_DAILY_LIMIT", "100")
+    assert Settings().PREMIUM_DAILY_LIMIT == 100
+
+
 def test_auth_env_override(monkeypatch):
     monkeypatch.setenv("IMAGE_EDIT_LOGIN_MAX_FAILURES", "3")
     assert Settings().LOGIN_MAX_FAILURES == 3

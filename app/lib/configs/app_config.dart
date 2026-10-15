@@ -11,6 +11,7 @@ class AppConfig {
   static String? get privacyUrl => _optional('PRIVACY_URL');
   static String? get termsUrl => _optional('TERMS_URL');
   static String? get supportEmail => _optional('SUPPORT_EMAIL');
+  static String? get inviteUrl => _optional('INVITE_URL');
 
   static String? _optional(String key) {
     final value = dotenv.env[key]?.trim();

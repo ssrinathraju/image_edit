@@ -22,6 +22,15 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **Manual device pass not recorded** — the full manual simulator checklist for trending templates (add-trending-templates 9.2) and auth/profile (add-auth-and-profile 11.2) was not recorded. Only registration and sign-in against the real server were confirmed. Both tasks are left unchecked in the archived `tasks.md`.
 
+## From PR #4 review (plans and referrals)
+
+- [ ] **Referral farming** — without email verification a tree of throwaway accounts can mint credits. Before any public launch, pay the referrer only after the friend's first successful generation.
+- [ ] **Hide the Upgrade entry in release builds** until billing exists (the screen is a "payments not available" placeholder).
+- [ ] **Unknown plan returns 500** — `daily_limit` raises for a plan value outside `free`/`premium` (only reachable through a corrupted DB). Fall back to Free and log.
+- [ ] **Uploads are read before the quota check** — an over-limit user still makes the server read up to 40 MB before the 429.
+- [ ] **Duplicate `/me` fetch at startup** — session restore and `AccountNotifier` each call it.
+- [ ] **Failed settle gives a free generation** — if settling fails after a success, the reservation is refunded at the next restart. Rare and logged; accepted.
+
 ## Decided, no change
 
 - Multi-face removal: intentional. The spec's REMOVED requirement and the PR notes cover it.

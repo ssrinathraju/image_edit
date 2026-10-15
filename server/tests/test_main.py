@@ -45,3 +45,29 @@ def test_auth_db_path_setting_overrides_the_default_location(tmp_path, templates
 
     assert db_path.exists()
     assert not (tmp_path / "s" / "app.db").exists()
+
+
+def test_generations_lost_to_a_restart_are_refunded_at_startup(tmp_path, templates_dir):
+    from datetime import datetime, timezone
+
+    from fastapi.testclient import TestClient
+
+    from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
+    from tests.helpers import register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    with TestClient(create_app(settings)) as first:
+        headers = register_headers(first, "ana@example.com")
+        user_id = first.get("/me", headers=headers).json()["id"]
+
+    # Two jobs that were accepted and then died with the process.
+    ledger = SqliteUserStore(auth_db_path(settings))
+    for _ in range(2):
+        ledger.reserve_generation(user_id, 3, datetime.now(timezone.utc))
+    ledger.close()
+
+    with TestClient(create_app(settings)) as second:
+        usage = second.get("/me", headers=headers).json()["usage"]
+
+    assert usage["used_today"] == 0
+    assert usage["remaining"] == 3

@@ -9,6 +9,8 @@ import 'features/auth/splash_screen.dart';
 import 'features/custom_generation/custom_generation_screen.dart';
 import 'features/generation_status/generation_status_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/plans/invite_screen.dart';
+import 'features/plans/upgrade_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/template_detail/template_screen.dart';
 import 'schemas/template.dart';
@@ -47,6 +49,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: _register, builder: (_, _) => const RegisterScreen()),
       GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+      GoRoute(path: '/upgrade', builder: (_, _) => const UpgradeScreen()),
+      GoRoute(path: '/invite', builder: (_, _) => const InviteScreen()),
       GoRoute(
         path: '/template/:id',
         builder: (_, state) {

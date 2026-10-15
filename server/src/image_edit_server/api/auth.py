@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Response, status
 
-from image_edit_server.api.deps import AuthDep, AuthServiceDep, TokenDep
+from image_edit_server.api.deps import (
+    AuthDep,
+    AuthServiceDep,
+    QuotaDep,
+    ReferralDep,
+    TokenDep,
+)
 from image_edit_server.schemas.user import (
     AuthResponse,
     Credentials,
@@ -17,7 +23,7 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED, response_model=AuthResponse)
 def register(body: Credentials, auth: AuthServiceDep) -> AuthResponse:
-    token, user = auth.register(body.email, body.password)
+    token, user = auth.register(body.email, body.password, body.referral_code)
     return AuthResponse(token=token, id=user.id, email=user.email)
 
 
@@ -34,8 +40,15 @@ def logout(token: TokenDep, _user: AuthDep, auth: AuthServiceDep) -> Response:
 
 
 @router.get("/me", response_model=MeResponse)
-def get_me(user: AuthDep) -> MeResponse:
-    return MeResponse(id=user.id, email=user.email, created_at=user.created_at)
+def get_me(user: AuthDep, quota: QuotaDep, referrals: ReferralDep) -> MeResponse:
+    return MeResponse(
+        id=user.id,
+        email=user.email,
+        created_at=user.created_at,
+        plan=user.plan,
+        usage=quota.summary(user),
+        referral=referrals.summary(user),
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

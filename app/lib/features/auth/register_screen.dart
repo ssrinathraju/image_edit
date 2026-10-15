@@ -27,9 +27,14 @@ class RegisterScreen extends ConsumerWidget {
                       password.length < AppConfig.minPasswordChars
                           ? 'At least ${AppConfig.minPasswordChars} characters'
                           : null,
-                  onSubmit: (email, password) => ref
+                  withReferralCode: true,
+                  onSubmit: (email, password, referralCode) => ref
                       .read(sessionProvider.notifier)
-                      .register(email: email, password: password),
+                      .register(
+                        email: email,
+                        password: password,
+                        referralCode: referralCode.isEmpty ? null : referralCode,
+                      ),
                 ),
                 const SizedBox(height: 12),
                 TextButton(

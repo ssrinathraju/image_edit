@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
-from image_edit_server.api.deps import AuthDep
+from image_edit_server.api.deps import AuthDep, QuotaDep
 from image_edit_server.api.templates import CatalogDep
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
@@ -27,6 +27,7 @@ StoreDep = Annotated[JobStore, Depends(get_store)]
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=JobSubmission)
 async def submit_generation(
     user: AuthDep,
+    quota: QuotaDep,
     store: StoreDep,
     catalog: CatalogDep,
     prompt: Annotated[Optional[str], Form()] = None,
@@ -34,7 +35,7 @@ async def submit_generation(
     faces: list[UploadFile] = [],
 ) -> JobSubmission:
     job_id = await generation_service.submit(
-        faces, prompt, template_id, store, catalog, user.id
+        faces, prompt, template_id, store, catalog, user, quota
     )
     return JobSubmission(job_id=job_id)
 

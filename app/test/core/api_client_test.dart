@@ -228,4 +228,83 @@ void main() {
       expect(adapter.last!.data, {'password': 'password-1'});
     });
   });
+
+  group('account details', () {
+    test('fetchMe parses plan, usage and referral', () async {
+      final adapter = _FakeAdapter({
+        'id': 'u',
+        'email': 'a@b.co',
+        'plan': 'free',
+        'usage': {
+          'daily_limit': 3,
+          'used_today': 1,
+          'bonus_credits': 5,
+          'remaining': 7,
+          'resets_at': '2026-10-17T00:00:00+00:00',
+          'plan_limits': {'free': 3, 'premium': 30},
+        },
+        'referral': {
+          'code': 'ABCD2345',
+          'rewards': 0,
+          'max_rewards': 10,
+          'bonus_per_referral': 5,
+        },
+      });
+
+      final me = await _client(adapter).fetchMe();
+
+      expect(me.usage!.remaining, 7);
+      expect(me.referral!.code, 'ABCD2345');
+    });
+
+    test('fetchMe tolerates a minimal payload', () async {
+      final adapter = _FakeAdapter({'id': 'u', 'email': 'a@b.co'});
+
+      final me = await _client(adapter).fetchMe();
+
+      expect(me.usage, isNull);
+      expect(me.referral, isNull);
+    });
+
+    test('register sends the referral code when given, trimmed', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+
+      await _client(adapter).register(
+        email: 'a@b.co',
+        password: 'password-1',
+        referralCode: ' k7m2qx9p ',
+      );
+
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'password': 'password-1',
+        'referral_code': 'k7m2qx9p',
+      });
+    });
+
+    test('register omits a blank or missing referral code', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+      final client = _client(adapter);
+
+      await client.register(email: 'a@b.co', password: 'password-1');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+
+      await client.register(
+        email: 'a@b.co',
+        password: 'password-1',
+        referralCode: '   ',
+      );
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+    });
+  });
+
+  test('the real client has connect and receive timeouts', () {
+    final options = apiBaseOptions('http://api.test');
+
+    expect(options.baseUrl, 'http://api.test');
+    expect(options.connectTimeout, connectTimeout);
+    expect(options.receiveTimeout, receiveTimeout);
+    expect(connectTimeout, greaterThan(Duration.zero));
+    expect(receiveTimeout, greaterThan(Duration.zero));
+  });
 }

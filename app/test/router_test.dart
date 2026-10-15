@@ -109,4 +109,21 @@ void main() {
 
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
   });
+
+  testWidgets('Upgrade and Invite friends are reachable from the profile', (tester) async {
+    client.onFetchMe = () async => fakeProfile(usedToday: 1);
+    await pumpApp(tester, client: client, storage: FakeSessionStorage(savedSession));
+
+    await tester.tap(find.byTooltip('Profile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Upgrade'));
+    await tester.pumpAndSettle();
+    expect(find.text('Payments are not available yet'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invite friends'));
+    await tester.pumpAndSettle();
+    expect(find.text('K7M2QX9P'), findsOneWidget);
+  });
 }
