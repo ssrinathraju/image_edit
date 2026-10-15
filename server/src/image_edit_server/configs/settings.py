@@ -17,6 +17,13 @@ class Settings(BaseSettings):
 
     TEMPLATES_DIR: str = "./seed/templates"
 
+    AUTH_DB_PATH: str = ""  # empty means <STORAGE_ROOT>/app.db
+    SESSION_TTL_DAYS: int = 30
+    PASSWORD_MIN_CHARS: int = 8
+    PASSWORD_MAX_CHARS: int = 128
+    LOGIN_MAX_FAILURES: int = 5
+    LOGIN_LOCKOUT_MINUTES: int = 15
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"

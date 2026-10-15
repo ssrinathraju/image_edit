@@ -13,6 +13,13 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **`assert` stripped in release builds** — low value, the server already returns a clean 400. Replace with an explicit check if we touch that code.
 - [ ] **Image format sniffing helper** (`app/lib/services/image_actions.dart`) — builds a list and `asMap()` per check. Simplify with a plain byte comparison.
 
+## From PR #2 review (auth and profile)
+
+- [ ] **Authenticated or signed image URLs** — `/images/<job_id>.png` is public to anyone holding the URL. Job ids are unguessable but time-ordered. Needed before any public deployment.
+- [ ] **Deep links lost on the login redirect** — the router sends a signed-out user to `/login` and forgets the target. Polish for when the app has real deep links.
+
 ## Decided, no change
 
 - Multi-face removal: intentional. The spec's REMOVED requirement and the PR notes cover it.
+- Per-email lockout can be abused and the throttle is per process: accepted trade-offs in the auth design (Decision 4).
+- Stale state on a fresh sign-in: unreachable, the router redirects signed-in users away from `/login`.

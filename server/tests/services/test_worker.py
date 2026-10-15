@@ -63,3 +63,85 @@ async def test_failed_job_cleans_up_inputs(tmp_path):
     assert result.status == JobStatus.failed
     assert result.error == "pipeline_failed"
     assert not (tmp_path / "inputs" / job_id).exists()
+
+
+class _DeletingPipeline:
+    """Writes an output, and the job's owner deletes the account mid-run."""
+
+    def __init__(self, store, job_id_holder):
+        self._store = store
+        self._holder = job_id_holder
+
+    async def run(self, faces, prompt, output_path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        self._store.delete(self._holder["id"])
+
+
+async def test_job_deleted_mid_run_leaves_no_output(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    holder = {}
+    holder["id"] = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _DeletingPipeline(store, holder))
+
+    assert store.get(holder["id"]) is None
+    assert not (tmp_path / "outputs" / f"{holder['id']}.png").exists()
+
+
+class _PartialThenFailPipeline:
+    """Writes a partial output, then the owner deletes the account, then it fails."""
+
+    def __init__(self, store, holder):
+        self._store = store
+        self._holder = holder
+
+    async def run(self, faces, prompt, output_path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"partial")
+        self._store.delete(self._holder["id"])
+        raise RuntimeError("intentional failure")
+
+
+async def test_failed_job_deleted_mid_run_leaves_no_output(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    holder = {}
+    holder["id"] = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _PartialThenFailPipeline(store, holder))
+
+    assert not (tmp_path / "outputs" / f"{holder['id']}.png").exists()
+
+
+class _CountingPipeline:
+    def __init__(self):
+        self.runs = 0
+
+    async def run(self, faces, prompt, output_path):
+        self.runs += 1
+
+
+async def test_job_whose_owner_is_gone_is_dropped_without_running(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    orphan = store.create(Job(id="", prompt="p", user_id="gone"))
+    kept = store.create(Job(id="", prompt="p", user_id="here"))
+    file_storage.save_upload(orphan, 0, b"face", str(tmp_path))
+    pipeline = _CountingPipeline()
+
+    task = asyncio.create_task(
+        run_worker(store, pipeline, settings, lambda user_id: user_id == "here")
+    )
+    await asyncio.sleep(0.3)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert store.get(orphan) is None
+    assert not (tmp_path / "inputs" / orphan).exists()
+    assert store.get(kept).status == JobStatus.succeeded
+    assert pipeline.runs == 1

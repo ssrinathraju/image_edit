@@ -24,6 +24,7 @@ async def submit(
     template_id: Optional[str],
     store: JobStore,
     catalog: TemplateCatalog,
+    user_id: str,
     settings: Settings = _SETTINGS,
 ) -> str:
     """Validate inputs, persist uploads, create a queued job. Return job_id."""
@@ -31,7 +32,7 @@ async def submit(
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
 
-    job = Job(id="", prompt=resolved_prompt, template_id=template_id)
+    job = Job(id="", prompt=resolved_prompt, template_id=template_id, user_id=user_id)
     job_id = store.create(job)
 
     for i, data in enumerate(face_data):
@@ -42,10 +43,10 @@ async def submit(
     return job_id
 
 
-def get_status(job_id: str, store: JobStore) -> Optional[JobStatusResponse]:
-    """Return status response or None if job_id is unknown."""
+def get_status(job_id: str, user_id: str, store: JobStore) -> Optional[JobStatusResponse]:
+    """Return the status, or None when the job is unknown or owned by someone else."""
     job = store.get(job_id)
-    if job is None:
+    if job is None or job.user_id != user_id:
         return None
     return JobStatusResponse(
         job_id=job.id,

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../configs/app_config.dart';
 import '../features/common/generation_request.dart';
 import '../schemas/job.dart';
+import '../schemas/session.dart';
 import '../schemas/template.dart';
 
 abstract class GenerationApiClient {
@@ -14,12 +15,46 @@ abstract class GenerationApiClient {
   Future<GenerationJob> getJobStatus(String jobId);
   Future<Uint8List> fetchImageBytes(String url);
   String resolveUrl(String path);
+
+  Future<Session> register({required String email, required String password});
+  Future<Session> login({required String email, required String password});
+  Future<void> logout();
+  Future<UserProfile> fetchMe();
+  Future<void> deleteAccount({required String password});
 }
 
+const String _loginPath = '/auth/login';
+const String _registerPath = '/auth/register';
+
 class DioApiClient implements GenerationApiClient {
-  DioApiClient({Dio? dio, String? baseUrl})
-      : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl,
-        _dio = dio ?? Dio(BaseOptions(baseUrl: baseUrl ?? AppConfig.apiBaseUrl));
+  /// [tokenProvider] supplies the bearer token for every request;
+  /// [onUnauthorized] fires on a 401 from anywhere except the credential
+  /// endpoints, where 401 only means a wrong password.
+  DioApiClient({
+    Dio? dio,
+    String? baseUrl,
+    String? Function()? tokenProvider,
+    void Function()? onUnauthorized,
+  })  : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl,
+        _dio = dio ?? Dio(BaseOptions(baseUrl: baseUrl ?? AppConfig.apiBaseUrl)) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final token = tokenProvider?.call();
+          if (token != null) options.headers['Authorization'] = 'Bearer $token';
+          handler.next(options);
+        },
+        onError: (error, handler) {
+          final path = error.requestOptions.path;
+          final isCredentialCall = path == _loginPath || path == _registerPath;
+          if (error.response?.statusCode == 401 && !isCredentialCall) {
+            onUnauthorized?.call();
+          }
+          handler.next(error);
+        },
+      ),
+    );
+  }
 
   final Dio _dio;
   final String _baseUrl;
@@ -87,6 +122,36 @@ class DioApiClient implements GenerationApiClient {
 
   @override
   String resolveUrl(String path) => '$_baseUrl$path';
+
+  @override
+  Future<Session> register({required String email, required String password}) =>
+      _authenticate(_registerPath, email, password);
+
+  @override
+  Future<Session> login({required String email, required String password}) =>
+      _authenticate(_loginPath, email, password);
+
+  @override
+  Future<void> logout() => _dio.post<void>('/auth/logout');
+
+  @override
+  Future<UserProfile> fetchMe() async {
+    final response = await _dio.get<Map<String, dynamic>>('/me');
+    final data = response.data!;
+    return UserProfile(id: data['id'] as String, email: data['email'] as String);
+  }
+
+  @override
+  Future<void> deleteAccount({required String password}) =>
+      _dio.delete<void>('/me', data: {'password': password});
+
+  Future<Session> _authenticate(String path, String email, String password) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      path,
+      data: {'email': email, 'password': password},
+    );
+    return Session.fromJson(response.data!);
+  }
 }
 
 String _imageMimeType(XFile photo) {

@@ -28,5 +28,11 @@ class InMemoryJobStore:
         for key, value in fields.items():
             setattr(job, key, value)
 
+    def list_for_user(self, user_id: str) -> Iterable[Job]:
+        return [j for j in list(self._store.values()) if j.user_id == user_id]
+
+    def delete(self, job_id: str) -> None:
+        self._store.pop(job_id, None)
+
     def list_queued(self) -> Iterable[Job]:
         return [j for j in self._store.values() if j.status == JobStatus.queued]

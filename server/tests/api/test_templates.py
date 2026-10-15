@@ -44,3 +44,7 @@ def test_preview_url_serves_the_image(templates_dir, tmp_path):
     resp = http.get(preview_url)
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/webp"
+
+
+def test_templates_stay_public(anon_client):
+    assert anon_client.get("/templates").status_code == 200

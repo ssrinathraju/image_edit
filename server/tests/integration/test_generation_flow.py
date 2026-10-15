@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
+from tests.helpers import register_headers
 
 SMALL_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -20,6 +21,7 @@ def app_client(tmp_path, templates_dir):
     settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
     app = create_app(settings=settings)
     with TestClient(app) as client:
+        client.headers.update(register_headers(client, "ana@example.com"))
         yield client
 
 

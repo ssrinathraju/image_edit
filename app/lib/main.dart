@@ -10,18 +10,18 @@ Future<void> main() async {
   runApp(const ProviderScope(child: ImageEditApp()));
 }
 
-class ImageEditApp extends StatelessWidget {
+class ImageEditApp extends ConsumerWidget {
   const ImageEditApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'image edit',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      routerConfig: appRouter,
+      routerConfig: ref.watch(routerProvider),
     );
   }
 }

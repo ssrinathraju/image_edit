@@ -36,7 +36,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final templates = ref.watch(homeNotifierProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Trending')),
+      appBar: AppBar(
+        title: const Text('Trending'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profile',
+            onPressed: () => context.push('/profile'),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(

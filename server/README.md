@@ -16,10 +16,56 @@ uv run uvicorn image_edit_server.main:app --reload --port 8000
 
 OpenAPI schema: http://localhost:8000/openapi.json
 
+## Accounts and authentication
+
+Generation endpoints require a session. Register (or log in) to get a bearer token, then send it as
+`Authorization: Bearer <token>`. `GET /templates` and the template previews stay public.
+
+```bash
+# Register → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ana@example.com", "password": "correct horse battery"}'
+
+# Log in → 200 with a new token; the same error for a wrong password and an unknown email
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ana@example.com", "password": "correct horse battery"}'
+
+TOKEN=<token from the response>
+
+curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
+# → {"id": "...", "email": "ana@example.com", "created_at": "..."}
+
+# Log out: revokes this token only → 204
+curl -X POST http://localhost:8000/auth/logout -H "Authorization: Bearer $TOKEN"
+
+# Delete the account, its sessions, jobs and generated images → 204 (403 on a wrong password)
+curl -X DELETE http://localhost:8000/me \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"password": "correct horse battery"}'
+```
+
+Errors: `401 unauthorized` (missing, unknown, expired or revoked token), `409 email_taken`,
+`400 invalid_credentials_format` (malformed email or a password outside 8-128 characters),
+`401 invalid_credentials`, `429 too_many_attempts` (5 failed logins for one email locks it for
+15 minutes; wrong passwords on account deletion count toward the same limit),
+`403 invalid_password` (account deletion), `422` (email over 254 or password over 128 characters).
+
+Notes:
+
+- Users and sessions live in a SQLite file, `app.db` inside `IMAGE_EDIT_STORAGE_ROOT`
+  (override with `IMAGE_EDIT_AUTH_DB_PATH`). Jobs are still in memory and are lost on restart.
+- Passwords travel as plain JSON, so outside local development the API **must** be served over
+  HTTPS.
+- Generated images at `/images/<job_id>.png` are not authenticated; job ids are unguessable and
+  only the owner can look them up, but treat the URLs as secrets.
+
 ## Submit a generation job
 
 ```bash
 curl -X POST http://localhost:8000/generations \
+  -H "Authorization: Bearer $TOKEN" \
   -F "prompt=a family hiking in the Alps at sunset" \
   -F "faces=@/path/to/face1.jpg" \
   -F "faces=@/path/to/face2.jpg"
@@ -37,6 +83,7 @@ curl "http://localhost:8000/templates?q=beach"
 #     "preview_url": "/template-previews/golden-hour-beach.webp"}]
 
 curl -X POST http://localhost:8000/generations \
+  -H "Authorization: Bearer $TOKEN" \
   -F "template_id=golden-hour-beach" \
   -F "faces=@/path/to/face.jpg"
 # → {"job_id": "01HE..."}
@@ -48,7 +95,7 @@ Template prompts stay on the server. Sending both `prompt` and `template_id`, or
 ## Poll for status
 
 ```bash
-curl http://localhost:8000/generations/<job_id>
+curl http://localhost:8000/generations/<job_id> -H "Authorization: Bearer $TOKEN"
 # → {"job_id": "...", "status": "queued"|"running"|"succeeded"|"failed",
 #    "result_url": "/images/<job_id>.png"}
 ```
@@ -79,6 +126,12 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_SANA_OUTPUT_WIDTH` | `1024` | Output image width in pixels |
 | `IMAGE_EDIT_SANA_OUTPUT_HEIGHT` | `1024` | Output image height in pixels |
 | `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Folder holding `catalog.json` and `previews/` |
+| `IMAGE_EDIT_AUTH_DB_PATH` | _(empty)_ | SQLite file for users and sessions; empty means `<STORAGE_ROOT>/app.db` |
+| `IMAGE_EDIT_SESSION_TTL_DAYS` | `30` | Session lifetime, fixed from login |
+| `IMAGE_EDIT_PASSWORD_MIN_CHARS` | `8` | Minimum password length |
+| `IMAGE_EDIT_PASSWORD_MAX_CHARS` | `128` | Maximum password length |
+| `IMAGE_EDIT_LOGIN_MAX_FAILURES` | `5` | Consecutive failed logins per email before lockout |
+| `IMAGE_EDIT_LOGIN_LOCKOUT_MINUTES` | `15` | Lockout length, counted from the latest failure |
 
 ## Running with Sana
 

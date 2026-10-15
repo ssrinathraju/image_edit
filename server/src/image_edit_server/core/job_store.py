@@ -21,3 +21,11 @@ class JobStore(Protocol):
     def list_queued(self) -> Iterable[Job]:
         """Return all jobs whose status is queued."""
         ...
+
+    def list_for_user(self, user_id: str) -> Iterable[Job]:
+        """Return all jobs owned by the user."""
+        ...
+
+    def delete(self, job_id: str) -> None:
+        """Remove the job; unknown ids are ignored."""
+        ...
