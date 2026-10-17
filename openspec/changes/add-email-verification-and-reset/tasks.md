@@ -98,8 +98,8 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 6. Server: generation gate
 
-- [ ] 6.1 Add a test helper in `tests/helpers.py` that registers and verifies an account, by calling `mark_email_verified` on the store or by using the captured code. Switch every existing test that generates to use it. Verify the full suite passes again before 6.2.
-- [ ] 6.2 Raise 403 `email_not_verified` as the first statement of `generation_service.submit`, following Decision 8. Verify `tests/api/test_generations_verified.py` covers:
+- [x] 6.1 Add a test helper in `tests/helpers.py` that registers and verifies an account, by calling `mark_email_verified` on the store or by using the captured code. Switch every existing test that generates to use it. Verify the full suite passes again before 6.2.
+- [x] 6.2 Raise 403 `email_not_verified` as the first statement of `generation_service.submit`, following Decision 8. Verify `tests/api/test_generations_verified.py` covers:
   - an unverified valid request getting 403 with no job and unchanged remaining generations;
   - an unverified empty request getting 403 rather than 400;
   - success after verifying;

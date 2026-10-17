@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import register_headers
+from tests.helpers import RecordingSender, register_and_verify_through_api
 
 SMALL_PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -19,9 +19,10 @@ SMALL_PNG = (
 @pytest.fixture
 def app_client(tmp_path, templates_dir):
     settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
-    app = create_app(settings=settings)
+    sender = RecordingSender()
+    app = create_app(settings=settings, sender=sender)
     with TestClient(app) as client:
-        client.headers.update(register_headers(client, "ana@example.com"))
+        client.headers.update(register_and_verify_through_api(client, sender, "ana@example.com"))
         yield client
 
 
@@ -99,8 +100,9 @@ def test_a_full_flow_leaves_the_default_storage_untouched(tmp_path, templates_di
 
     before = names()
     settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
-    with TestClient(create_app(settings=settings)) as client:
-        client.headers.update(register_headers(client, "ana@example.com"))
+    sender = RecordingSender()
+    with TestClient(create_app(settings=settings, sender=sender)) as client:
+        client.headers.update(register_and_verify_through_api(client, sender, "ana@example.com"))
         job_id = client.post(
             "/generations",
             data={"prompt": "a family at sunset"},

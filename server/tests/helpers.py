@@ -66,6 +66,18 @@ class FakeClock:
         self.now += timedelta(**kwargs)
 
 
+def register_and_verify_through_api(
+    client, sender: RecordingSender, email: str, password: str = DEFAULT_PASSWORD
+) -> dict:
+    """Register, then submit the emailed code, as a real client would."""
+    headers = register_headers(client, email, password)
+    resp = client.post(
+        "/auth/verify-email", json={"code": sender.last_code(email)}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+    return headers
+
+
 def forget_recent_sends(client) -> None:
     """Stand in for a minute passing on a real-clock app, so the next code email is not limited."""
     from image_edit_server.api.deps import get_user_store
