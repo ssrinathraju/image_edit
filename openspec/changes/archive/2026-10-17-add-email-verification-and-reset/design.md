@@ -34,7 +34,7 @@ See `proposal.md` for the motivation and `specs/` for the behaviour contract. Th
 ### 1. Email sender: an interface with SMTP and log implementations
 `core/email_sender.py` defines `EmailSender.send(to, subject, body)`. There are two implementations:
 - `services/email/smtp_sender.py` uses the standard library `smtplib`. The `SMTP_SECURITY` setting selects `starttls`, `ssl` or `none`, and the connection timeout is 10 seconds.
-- `services/email/log_sender.py` writes the message at INFO level.
+- `services/email/log_sender.py` writes the message at WARNING level, because uvicorn's default logging hides application INFO logs.
 
 `main.py` picks the SMTP sender when `IMAGE_EDIT_SMTP_HOST` is set and the log sender otherwise, and logs a startup warning when it picks the log sender. Both implementations exist from day one, so the interface meets the `CLAUDE.md` rule. This mirrors the `GenerationPipeline` layout (`core/` for the interface, `services/` for the implementations).
 
@@ -68,7 +68,7 @@ Endpoints that issue a code do the following:
 1. Decide synchronously whether to send, by checking the limits and storing the new code.
 2. Schedule the send with FastAPI `BackgroundTasks`. Because the endpoints are sync, this runs after the response in the thread pool.
 
-A wrapper, `email_code_service.deliver`, catches every exception from the sender and logs the user id, the purpose and the exception type. It never logs the code. Nothing else depends on the send completing.
+A wrapper, `email_code_service.deliver(sender, user_id, to, purpose, code, ttl_minutes)`, catches every exception from the sender and logs the user id, the purpose and the exception type. It never logs the code. Nothing else depends on the send completing.
 
 - **Alternative rejected: sending inline.** A slow SMTP server would block the request. More importantly, an SMTP failure would turn `password-reset/request` into a 5xx only for registered emails, which reveals whether an account exists. The cost of the background approach is that a crash between the response and the send loses the email. The user taps Resend.
 
@@ -86,7 +86,7 @@ A wrapper, `email_code_service.deliver`, catches every exception from the sender
 - **Hashing.** The stored value is `sha256(f"{user_id}:{purpose}:{code}")`, and comparison uses `hmac.compare_digest`.
 - **What the hash protects.** It keeps codes out of casual reads of the database and out of backups. It does not stop someone holding the database from brute-forcing 10⁶ values. That person already has the account data, the codes expire in 15 minutes, and a slow hash would cost more than it protects.
 
-**Checking a code** is one store method, `consume_code(user_id, purpose, code, now)`, which runs under the lock in one transaction. It returns `ok`, `wrong` or `expired`:
+**Checking a code** is one store method, `consume_code(user_id, purpose, code, now, max_attempts)`, which runs under the lock in one transaction. It returns `ok`, `wrong` or `expired`:
 - **`expired`:** there is no row, `expires_at` has passed, or `attempts` has reached the maximum.
 - **`wrong`:** the code does not match. This increments `attempts`.
 - **`ok`:** the code matches. This deletes the row.
@@ -94,7 +94,7 @@ A wrapper, `email_code_service.deliver`, catches every exception from the sender
 **Issuing a code** is `issue_code(user_id, purpose, code_hash, now, limits)`. In one transaction it checks the last-60-seconds and last-hour counts in `email_sends`. If both allow a send, it upserts the code and inserts a send row. It returns either `issued`, or `limited(retry_after_seconds)` with `retry_after` taken from whichever limit frees up later.
 
 ### 5. Referral reward on the first verification
-`register_user` stops paying rewards. It stores `referred_by` as today, sets `referral_bonus_pending = 1`, and inserts `bonus_credits = 0`.
+`register_user(email, password_hash, referral_code)` no longer takes `bonus` or `max_rewards` and stops paying rewards. It stores `referred_by` as today, sets `referral_bonus_pending = 1`, and inserts `bonus_credits = 0`.
 
 A new store method, `mark_email_verified(user_id, bonus, max_rewards)`, runs one transaction:
 1. It sets `email_verified = 1` only if it was 0. If it was already 1, it stops: no rewards are paid.
@@ -110,7 +110,7 @@ Both verification paths call this method: `verify-email`, and `password-reset/co
 1. Normalise the email and validate the new password's length. A bad length gives 400 `invalid_credentials_format`, and no attempt is consumed.
 2. Hash the new password, outside the store lock.
 3. Look up the user. If the email is unknown, return `invalid_code`.
-4. Call the store method `reset_password(user_id, code, new_hash, now, bonus, max_rewards)`. In one transaction it does the following:
+4. Call the store method `reset_password(user_id, code, new_hash, now, max_attempts, bonus, max_rewards)`. In one transaction it does the following:
    - Runs the `consume_code` logic.
    - On `ok`, updates `password_hash` and deletes all of the user's sessions.
    - Performs the `mark_email_verified` logic from Decision 5.
