@@ -165,4 +165,4 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - A Google sign-in whose email matches an existing password account links to it, and the profile shows "Signed in with Google".
 
   This box stays unticked until someone runs every step. Name any skipped step in the PR.
-- [ ] 10.3 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.
+- [x] 10.3 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.
