@@ -68,4 +68,32 @@ void main() {
     expect(Plan.parse('gold'), Plan.free);
     expect(Plan.parse(null), Plan.free);
   });
+
+  test('providers and has_password are parsed', () {
+    final profile = UserProfile.fromJson({
+      'id': 'u1',
+      'email': 'ana@example.com',
+      'providers': ['apple', 'google'],
+      'has_password': false,
+    });
+
+    expect(profile.providers, ['apple', 'google']);
+    expect(profile.hasPassword, isFalse);
+  });
+
+  test('providers default to empty and has_password to true when absent', () {
+    final profile = UserProfile.fromJson({'id': 'u1', 'email': 'ana@example.com'});
+
+    expect(profile.providers, isEmpty);
+    expect(profile.hasPassword, isTrue);
+  });
+
+  test('a provider sign-in response parses created and defaults it to false', () {
+    final base = {'token': 't', 'id': 'u1', 'email': 'ana@example.com'};
+
+    expect(ProviderSession.fromJson({...base, 'created': true}).created, isTrue);
+    expect(ProviderSession.fromJson({...base, 'created': false}).created, isFalse);
+    expect(ProviderSession.fromJson(base).created, isFalse);
+    expect(ProviderSession.fromJson(base).session.token, 't');
+  });
 }

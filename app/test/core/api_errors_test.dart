@@ -63,4 +63,21 @@ void main() {
     expect(retryAfterSecondsOf(withHeader('0')), isNull);
     expect(retryAfterSecondsOf(StateError('boom')), isNull);
   });
+
+  test('each provider sign-in and referral error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 400);
+
+    expect(isInvalidProviderToken(coded('invalid_provider_token')), isTrue);
+    expect(isProviderEmailUnverified(coded('provider_email_unverified')), isTrue);
+    expect(isProviderEmailMissing(coded('provider_email_missing')), isTrue);
+    expect(isProviderNotConfigured(coded('provider_not_configured')), isTrue);
+    expect(isProviderUnavailable(coded('provider_unavailable')), isTrue);
+    expect(isProviderAlreadyLinked(coded('provider_already_linked')), isTrue);
+    expect(isReferralNotAllowed(coded('referral_not_allowed')), isTrue);
+    expect(isInvalidReferralCode(coded('invalid_referral_code')), isTrue);
+    expect(isInvalidProviderToken(coded('provider_unavailable')), isFalse);
+    expect(isReferralNotAllowed(StateError('boom')), isFalse);
+  });
 }

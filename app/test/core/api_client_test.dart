@@ -276,6 +276,108 @@ void main() {
     });
   });
 
+  group('provider sign-in', () {
+    final sessionBody = {
+      'token': 'tok',
+      'id': 'u1',
+      'email': 'gina@example.com',
+      'email_verified': true,
+      'created': true,
+    };
+
+    test('signInWithGoogle posts the id token and parses created', () async {
+      final adapter = _FakeAdapter(sessionBody);
+
+      final result = await _client(adapter).signInWithGoogle(idToken: 'g-id');
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/auth/oauth/google');
+      expect(adapter.last!.data, {'id_token': 'g-id'});
+      expect(result.created, isTrue);
+      expect(result.session.token, 'tok');
+    });
+
+    test('signInWithApple posts the token, raw nonce and code', () async {
+      final adapter = _FakeAdapter({...sessionBody, 'created': false});
+
+      final result = await _client(adapter).signInWithApple(
+        identityToken: 'a-id',
+        nonce: 'raw',
+        authorizationCode: 'code',
+      );
+
+      expect(adapter.last!.path, '/auth/oauth/apple');
+      expect(adapter.last!.data, {
+        'identity_token': 'a-id',
+        'nonce': 'raw',
+        'authorization_code': 'code',
+      });
+      expect(result.created, isFalse);
+    });
+
+    test('a 401 from a provider endpoint does not expire the session', () async {
+      var expired = false;
+      final adapter = _FakeAdapter({
+        'detail': {'error': 'invalid_provider_token', 'detail': 'x'},
+      }, status: 401);
+      final client = _client(adapter, onUnauthorized: () => expired = true);
+
+      await expectLater(client.signInWithGoogle(idToken: 'bad'), throwsA(isA<DioException>()));
+      await expectLater(
+        client.signInWithApple(identityToken: 'bad', nonce: 'n', authorizationCode: 'c'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(expired, isFalse);
+    });
+
+    test('redeemReferral posts the code', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).redeemReferral(code: 'K7M2QX9P');
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/referral');
+      expect(adapter.last!.data, {'code': 'K7M2QX9P'});
+    });
+
+    test('deleteAccount sends the provider form without a password', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).deleteAccount(
+        provider: 'apple',
+        token: 'fresh',
+        nonce: 'raw',
+      );
+
+      expect(adapter.last!.method, 'DELETE');
+      expect(adapter.last!.path, '/me');
+      expect(adapter.last!.data, {'provider': 'apple', 'token': 'fresh', 'nonce': 'raw'});
+    });
+
+    test('deleteAccount with google sends no nonce', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).deleteAccount(provider: 'google', token: 'fresh');
+
+      expect(adapter.last!.data, {'provider': 'google', 'token': 'fresh'});
+    });
+
+    test('fetchMe parses providers and hasPassword', () async {
+      final adapter = _FakeAdapter({
+        'id': 'u',
+        'email': 'a@b.co',
+        'providers': ['google'],
+        'has_password': false,
+      });
+
+      final me = await _client(adapter).fetchMe();
+
+      expect(me.providers, ['google']);
+      expect(me.hasPassword, isFalse);
+    });
+  });
+
   group('account details', () {
     test('fetchMe parses plan, usage and referral', () async {
       final adapter = _FakeAdapter({

@@ -112,9 +112,9 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 7. App: config, client, errors and provider sign-in
 
-- [ ] 7.1 Add `GOOGLE_IOS_CLIENT_ID=`, `GOOGLE_SERVER_CLIENT_ID=` and `APPLE_SIGN_IN=` to `.env.example` and `.env`. Add the matching getters and the button-visibility rules from Decision 9 to `AppConfig`. Verify that `test/configs/app_config_test.dart` covers blank and set values and each visibility rule, with the platform injected.
-- [ ] 7.2 Add `signInWithGoogle`, `signInWithApple`, `redeemReferral`, and the provider form of `deleteAccount` to `core/api_client.dart`. Parse `created`, `providers` and `hasPassword` (defaulting to `[]`, and to `true` when absent). Add the seven error codes to `core/api_errors.dart`. Verify that `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart` cover each request's path and body and each parsed field.
-- [ ] 7.3 Add the packages (`flutter pub add google_sign_in sign_in_with_apple crypto`), `core/provider_sign_in.dart` with the Google and Apple implementations and Riverpod providers (Decision 9), and the iOS native setup:
+- [x] 7.1 Add `GOOGLE_IOS_CLIENT_ID=`, `GOOGLE_SERVER_CLIENT_ID=` and `APPLE_SIGN_IN=` to `.env.example` and `.env`. Add the matching getters and the button-visibility rules from Decision 9 to `AppConfig`. Verify that `test/configs/app_config_test.dart` covers blank and set values and each visibility rule, with the platform injected.
+- [x] 7.2 Add `signInWithGoogle`, `signInWithApple`, `redeemReferral`, and the provider form of `deleteAccount` to `core/api_client.dart`. Parse `created`, `providers` and `hasPassword` (defaulting to `[]`, and to `true` when absent). Add the seven error codes to `core/api_errors.dart`. Verify that `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart` cover each request's path and body and each parsed field.
+- [x] 7.3 Add the packages (`flutter pub add google_sign_in sign_in_with_apple crypto`), `core/provider_sign_in.dart` with the Google and Apple implementations and Riverpod providers (Decision 9), and the iOS native setup:
   - `Runner.entitlements` with Sign in with Apple, referenced from the project;
   - a `CFBundleURLTypes` entry using `$(GOOGLE_REVERSED_CLIENT_ID)`;
   - `ios/Flutter/GoogleSignIn.xcconfig.example`, plus a `.gitignore` entry for the real file, included from the Debug and Release xcconfigs.
