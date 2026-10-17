@@ -24,7 +24,9 @@ from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from tests.helpers import (
+    FakeAppleClient,
     FakeClock,
+    FakeVerifier,
     RecordingSender,
     build_templates_dir,
     register_headers,
@@ -64,6 +66,27 @@ def clock() -> FakeClock:
 
 
 @pytest.fixture
+def google_verifier(clock) -> FakeVerifier:
+    return FakeVerifier("google", clock)
+
+
+@pytest.fixture
+def apple_verifier(clock) -> FakeVerifier:
+    return FakeVerifier("apple", clock)
+
+
+@pytest.fixture
+def apple_client() -> FakeAppleClient:
+    return FakeAppleClient()
+
+
+@pytest.fixture
+def verifiers(google_verifier, apple_verifier) -> dict:
+    """The configured providers; a test removes an entry to make it unconfigured."""
+    return {"google": google_verifier, "apple": apple_verifier}
+
+
+@pytest.fixture
 def user_store() -> SqliteUserStore:
     return SqliteUserStore(":memory:")
 
@@ -77,7 +100,9 @@ def settings(tmp_path, templates_dir) -> Settings:
 
 
 @pytest.fixture
-def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
+def app(
+    store, catalog, user_store, settings, sender, clock, verifiers, apple_client
+) -> FastAPI:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
@@ -88,6 +113,8 @@ def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
         lambda user_id: [store.delete(j.id) for j in store.list_for_user(user_id)],
         sender,
         clock,
+        verifiers=verifiers,
+        apple_client=apple_client,
     )
     app = FastAPI()
     quota_service = QuotaService(user_store, settings)
@@ -100,7 +127,7 @@ def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
-    app.dependency_overrides[get_referral_service] = lambda: ReferralService(settings)
+    app.dependency_overrides[get_referral_service] = lambda: ReferralService(settings, user_store, clock)
     return app
 
 

@@ -112,9 +112,10 @@ def test_me_returns_identity_without_password_material(client):
     assert resp.status_code == 200
     body = resp.json()
     assert set(body) == {
-        "id", "email", "created_at", "email_verified", "plan", "usage", "referral"
+        "id", "email", "created_at", "email_verified", "plan", "usage", "referral",
+        "providers", "has_password",
     }
-    assert "password" not in resp.text
+    assert "hash" not in resp.text
 
 
 def test_logout_revokes_the_token_but_not_other_sessions(anon_client):
@@ -275,3 +276,67 @@ def test_login_reports_the_verification_status(anon_client, user_store):
 
     assert unverified.json()["email_verified"] is False
     assert verified.json()["email_verified"] is True
+
+
+# ── accounts without a password ──
+
+
+def _google_account(client, google_verifier, email="gina@example.com"):
+    google_verifier.add("g-tok", "g-1", email=email)
+    return client.post("/auth/oauth/google", json={"id_token": "g-tok"})
+
+
+def test_password_login_on_a_google_account_fails_like_a_wrong_password(
+    anon_client, google_verifier
+):
+    _google_account(anon_client, google_verifier)
+    _register(anon_client, email="other@example.com")
+
+    on_google = anon_client.post(
+        "/auth/login", json={"email": "gina@example.com", "password": "any password"}
+    )
+    wrong = anon_client.post(
+        "/auth/login", json={"email": "other@example.com", "password": "any password"}
+    )
+
+    assert on_google.status_code == 401
+    assert on_google.json() == wrong.json()
+    assert on_google.json()["detail"]["error"] == "invalid_credentials"
+
+
+def test_the_timing_stand_in_password_cannot_log_in_to_a_google_account(
+    anon_client, google_verifier
+):
+    _google_account(anon_client, google_verifier)
+
+    resp = anon_client.post(
+        "/auth/login",
+        json={"email": "gina@example.com", "password": "not-a-real-password"},
+    )
+
+    assert resp.status_code == 401
+
+
+def test_password_reset_gives_a_google_account_a_password(
+    anon_client, google_verifier, sender, clock
+):
+    google_id = _google_account(anon_client, google_verifier).json()["id"]
+    anon_client.post("/auth/password-reset/request", json={"email": "gina@example.com"})
+    code = sender.last_code("gina@example.com")
+
+    confirm = anon_client.post(
+        "/auth/password-reset/confirm",
+        json={"email": "gina@example.com", "code": code, "new_password": "a brand new password"},
+    )
+    login = anon_client.post(
+        "/auth/login",
+        json={"email": "gina@example.com", "password": "a brand new password"},
+    )
+    again = anon_client.post("/auth/oauth/google", json={"id_token": "g-tok"})
+
+    assert confirm.status_code == 200
+    assert login.status_code == 200
+    assert login.json()["id"] == google_id
+    assert (again.status_code, again.json()["id"]) == (200, google_id)
+    me = anon_client.get("/me", headers={"Authorization": f"Bearer {login.json()['token']}"})
+    assert me.json()["has_password"] is True

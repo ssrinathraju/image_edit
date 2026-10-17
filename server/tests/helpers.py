@@ -4,11 +4,16 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
+from typing import Callable, Optional
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from PIL import Image
+
+from image_edit_server.core.identity_verifier import (
+    InvalidProviderToken,
+    ProviderIdentity,
+)
 
 TEST_TEMPLATES = [
     {"id": "sunset-beach", "title": "Sunset Beach", "tags": ["beach", "summer"],
@@ -178,3 +183,59 @@ def apple_claims(
         claims["nonce"] = hashlib.sha256(raw_nonce.encode()).hexdigest()
     claims.update(overrides)
     return claims
+
+
+class FakeVerifier:
+    """An IdentityVerifier whose tokens are registered up front; unknown tokens are rejected."""
+
+    def __init__(self, provider: str, clock: Callable[[], datetime]) -> None:
+        self.provider = provider
+        self._clock = clock
+        self._outcomes: dict[str, object] = {}
+        self.calls: list[tuple[str, Optional[str]]] = []
+
+    def add(
+        self,
+        token: str,
+        subject: str,
+        email: Optional[str] = "ana@example.com",
+        verified: bool = True,
+        issued_at: Optional[datetime] = None,
+    ) -> str:
+        identity = ProviderIdentity(
+            self.provider, subject, email, verified, issued_at or self._clock()
+        )
+        self._outcomes[token] = identity
+        return token
+
+    def fail_with(self, token: str, error: Exception) -> str:
+        self._outcomes[token] = error
+        return token
+
+    def verify(self, token: str, *, nonce: Optional[str] = None) -> ProviderIdentity:
+        self.calls.append((token, nonce))
+        outcome = self._outcomes.get(token)
+        if outcome is None:
+            raise InvalidProviderToken("unknown token")
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class FakeAppleClient:
+    """Stands in for AppleRevocationClient, recording what would be sent to Apple."""
+
+    def __init__(self) -> None:
+        self.refresh_token: Optional[str] = "apple-refresh-1"
+        self.revoke_error: Optional[Exception] = None
+        self.exchanged: list[str] = []
+        self.revoked: list[str] = []
+
+    def exchange_code(self, code: str) -> Optional[str]:
+        self.exchanged.append(code)
+        return self.refresh_token
+
+    def revoke(self, token: str) -> None:
+        self.revoked.append(token)
+        if self.revoke_error:
+            raise self.revoke_error

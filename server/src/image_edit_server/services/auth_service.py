@@ -12,18 +12,30 @@ from image_edit_server.core.email_codes import CodePurpose, ConsumeResult
 from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.passwords import hash_password, verify_password
+from image_edit_server.core.identity_verifier import (
+    IdentityVerifier,
+    InvalidProviderToken,
+    ProviderIdentity,
+    ProviderUnavailable,
+)
 from image_edit_server.core.user_store import (
     EmailTakenError,
     InvalidReferralCode,
+    ProviderAlreadyLinked,
+    ProviderEmailMissing,
+    ProviderEmailUnverified,
     UserStore,
 )
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
 from image_edit_server.services import email_code_service
+from image_edit_server.services.apple_revocation import AppleRevocationClient
 
 logger = logging.getLogger(__name__)
 
 MAX_EMAIL_CHARS = 254
+PROVIDER_TOKEN_MAX_AGE = timedelta(minutes=5)
+APPLE = "apple"
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Verified against when the email is unknown so both failures cost the same time.
@@ -59,6 +71,8 @@ class AuthService:
         purge_user_jobs: Callable[[str], None],
         sender: EmailSender,
         clock: Callable[[], datetime] = _utc_now,
+        verifiers: Optional[dict[str, IdentityVerifier]] = None,
+        apple_client: Optional[AppleRevocationClient] = None,
     ) -> None:
         self._users = users
         self._throttle = throttle
@@ -66,6 +80,8 @@ class AuthService:
         self._purge_user_jobs = purge_user_jobs
         self._sender = sender
         self._clock = clock
+        self._verifiers = verifiers if verifiers is not None else {}
+        self._apple_client = apple_client
 
     def register(
         self,
@@ -161,7 +177,10 @@ class AuthService:
         self._reject_if_locked(normalized)
         user = self._users.get_by_email(normalized)
         stored = self._users.get_password_hash(user.id) if user else None
-        if not verify_password(password, stored or _DUMMY_HASH) or user is None:
+        # An account without a password has an empty hash; it must fail even for the
+        # dummy hash's own password, so the dummy only stands in for timing.
+        matches = verify_password(password, stored or _DUMMY_HASH)
+        if not (matches and stored and user is not None):
             self._throttle.record_failure(normalized)
             raise _error(401, "invalid_credentials", "email or password is incorrect")
         self._throttle.reset(normalized)
@@ -170,19 +189,129 @@ class AuthService:
     def logout(self, token: str) -> None:
         self._users.delete_session(token)
 
-    def delete_account(self, user: User, password: str) -> None:
+    def sign_in_with_provider(
+        self,
+        provider: str,
+        token: str,
+        *,
+        nonce: Optional[str] = None,
+        authorization_code: Optional[str] = None,
+    ) -> tuple[str, User, bool]:
+        """Sign in to the account for a provider token, linking or creating it; returns (session, user, created)."""
+        identity = self._verify_provider_token(provider, token, nonce, 401)
+        try:
+            user, created = self._users.sign_in_with_identity(
+                identity,
+                self._clock(),
+                self._settings.REFERRAL_BONUS,
+                self._settings.REFERRAL_MAX_REWARDS,
+            )
+        except ProviderEmailUnverified:
+            raise _error(
+                400, "provider_email_unverified", f"the {provider} email is not verified"
+            )
+        except ProviderEmailMissing:
+            raise _error(
+                400,
+                "provider_email_missing",
+                f"{provider} did not share an email address for this sign-in",
+            )
+        except ProviderAlreadyLinked:
+            raise _error(
+                409,
+                "provider_already_linked",
+                f"this account is already linked to another {provider} account",
+            )
+        if provider == APPLE:
+            self._store_apple_refresh_token(user, authorization_code)
+        logger.info("Provider sign-in: user %s via %s created=%s", user.id, provider, created)
+        return self._start_session(user), user, created
+
+    def delete_account(
+        self,
+        user: User,
+        password: Optional[str] = None,
+        *,
+        provider: Optional[str] = None,
+        token: Optional[str] = None,
+        nonce: Optional[str] = None,
+        background: Optional[BackgroundTasks] = None,
+    ) -> None:
+        if provider is not None and token is not None:
+            self._confirm_deletion_with_provider(user, provider, token, nonce)
+        else:
+            self._confirm_deletion_with_password(user, password or "")
+        apple_token = self._users.get_apple_refresh_token(user.id)
+        # The user goes first so a submit that was already in flight cannot
+        # attach a job to an account that is about to disappear; the worker
+        # drops any job whose owner is gone.
+        self._users.delete_user(user.id)
+        self._purge_user_jobs(user.id)
+        self._schedule_apple_revocation(apple_token, background)
+        logger.info("Deleted account %s", user.id)
+
+    def _confirm_deletion_with_password(self, user: User, password: str) -> None:
         self._reject_if_locked(user.email)
         stored = self._users.get_password_hash(user.id)
         if stored is None or not verify_password(password, stored):
             self._throttle.record_failure(user.email)
             raise _error(403, "invalid_password", "password is incorrect")
         self._throttle.reset(user.email)
-        # The user goes first so a submit that was already in flight cannot
-        # attach a job to an account that is about to disappear; the worker
-        # drops any job whose owner is gone.
-        self._users.delete_user(user.id)
-        self._purge_user_jobs(user.id)
-        logger.info("Deleted account %s", user.id)
+
+    def _confirm_deletion_with_provider(
+        self, user: User, provider: str, token: str, nonce: Optional[str]
+    ) -> None:
+        identity = self._verify_provider_token(provider, token, nonce, 403)
+        fresh = self._clock() - identity.issued_at <= PROVIDER_TOKEN_MAX_AGE
+        if not fresh or not self._users.has_identity(user.id, provider, identity.subject):
+            raise _error(
+                403,
+                "invalid_provider_token",
+                f"sign in with {provider} again to confirm; the token is old or belongs"
+                " to another account",
+            )
+
+    def _verify_provider_token(
+        self, provider: str, token: str, nonce: Optional[str], rejection_status: int
+    ) -> ProviderIdentity:
+        verifier = self._verifiers.get(provider)
+        if verifier is None:
+            raise _error(
+                503, "provider_not_configured", f"sign-in with {provider} is not configured"
+            )
+        try:
+            return verifier.verify(token, nonce=nonce)
+        except InvalidProviderToken:
+            raise _error(
+                rejection_status,
+                "invalid_provider_token",
+                f"the {provider} token was rejected; sign in with {provider} again",
+            )
+        except ProviderUnavailable:
+            raise _error(
+                503,
+                "provider_unavailable",
+                f"{provider} could not be reached; try again shortly",
+            )
+
+    def _store_apple_refresh_token(self, user: User, code: Optional[str]) -> None:
+        if self._apple_client is None or not code:
+            return
+        if self._users.get_apple_refresh_token(user.id):
+            return
+        refresh_token = self._apple_client.exchange_code(code)
+        if refresh_token:
+            self._users.set_apple_refresh_token(user.id, refresh_token)
+
+    def _schedule_apple_revocation(
+        self, apple_token: Optional[str], background: Optional[BackgroundTasks]
+    ) -> None:
+        if not apple_token or self._apple_client is None:
+            return
+        if background is None:
+            self._apple_client.revoke(apple_token)
+        else:
+            background.add_task(self._apple_client.revoke, apple_token)
 
     def _reject_if_locked(self, email: str) -> None:
         if self._throttle.is_locked(email):

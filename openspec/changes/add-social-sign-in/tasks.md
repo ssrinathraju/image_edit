@@ -58,7 +58,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 4. Server: sign-in endpoints
 
-- [ ] 4.1 Add the `POST /auth/oauth/google` and `POST /auth/oauth/apple` handlers and the `AuthService.sign_in_with_provider(...)` service method, following Decisions 3, 4 and 8. Wire the verifiers and the revocation client in `main.py` with injection points for tests, and log the startup warning when the Apple key settings are absent. Verify that `tests/api/test_social_sign_in.py` covers, through HTTP with fake verifiers and fake `post`, every scenario in `specs/social-sign-in/spec.md` for:
+- [x] 4.1 Add the `POST /auth/oauth/google` and `POST /auth/oauth/apple` handlers and the `AuthService.sign_in_with_provider(...)` service method, following Decisions 3, 4 and 8. Wire the verifiers and the revocation client in `main.py` with injection points for tests, and log the startup warning when the Apple key settings are absent. Verify that `tests/api/test_social_sign_in.py` covers, through HTTP with fake verifiers and fake `post`, every scenario in `specs/social-sign-in/spec.md` for:
   - Sign in with Google;
   - Sign in with Apple;
   - Find, link, or create the account;
@@ -70,8 +70,8 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - Keep provider tokens secret.
 
   It must also check that an Apple sign-in stores the refresh token from a successful exchange and retries the exchange on the next sign-in after a failed one.
-- [ ] 4.2 Extend `MeResponse` and `GET /me` with `providers` and `has_password`. Verify that `tests/api/test_me.py` covers a password account, a Google-created account, and a password account linked to Google.
-- [ ] 4.3 Verify the "Accounts without a password" requirement in `tests/api/test_auth.py`:
+- [x] 4.2 Extend `MeResponse` and `GET /me` with `providers` and `has_password`. Verify that `tests/api/test_me.py` covers a password account, a Google-created account, and a password account linked to Google.
+- [x] 4.3 Verify the "Accounts without a password" requirement in `tests/api/test_auth.py`:
   - password login on a Google-created account gives a 401 identical to a wrong password;
   - a password reset on it then allows password login;
   - Google sign-in still reaches the same account.

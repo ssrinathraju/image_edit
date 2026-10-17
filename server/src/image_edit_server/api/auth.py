@@ -8,14 +8,19 @@ from image_edit_server.api.deps import (
     QuotaDep,
     ReferralDep,
     TokenDep,
+    UserStoreDep,
 )
 from image_edit_server.schemas.user import (
+    AppleSignInRequest,
     AuthResponse,
     Credentials,
     DeleteAccountRequest,
+    GoogleSignInRequest,
     MeResponse,
+    ReferralRedeemRequest,
     ResetConfirm,
     ResetRequest,
+    SocialAuthResponse,
     User,
     VerifyEmailRequest,
     VerifyEmailResponse,
@@ -26,6 +31,16 @@ router = APIRouter(tags=["auth"])
 def _auth_response(token: str, user: User) -> AuthResponse:
     return AuthResponse(
         token=token, id=user.id, email=user.email, email_verified=user.email_verified
+    )
+
+
+def _social_response(token: str, user: User, created: bool) -> SocialAuthResponse:
+    return SocialAuthResponse(
+        token=token,
+        id=user.id,
+        email=user.email,
+        email_verified=user.email_verified,
+        created=created,
     )
 
 
@@ -44,6 +59,23 @@ def register(
 def login(body: Credentials, auth: AuthServiceDep) -> AuthResponse:
     token, user = auth.login(body.email, body.password)
     return _auth_response(token, user)
+
+
+@router.post("/auth/oauth/google", response_model=SocialAuthResponse)
+def sign_in_with_google(body: GoogleSignInRequest, auth: AuthServiceDep) -> SocialAuthResponse:
+    token, user, created = auth.sign_in_with_provider("google", body.id_token)
+    return _social_response(token, user, created)
+
+
+@router.post("/auth/oauth/apple", response_model=SocialAuthResponse)
+def sign_in_with_apple(body: AppleSignInRequest, auth: AuthServiceDep) -> SocialAuthResponse:
+    token, user, created = auth.sign_in_with_provider(
+        "apple",
+        body.identity_token,
+        nonce=body.nonce,
+        authorization_code=body.authorization_code,
+    )
+    return _social_response(token, user, created)
 
 
 @router.post("/auth/verify-email", response_model=VerifyEmailResponse)
@@ -83,7 +115,9 @@ def logout(token: TokenDep, _user: AuthDep, auth: AuthServiceDep) -> Response:
 
 
 @router.get("/me", response_model=MeResponse)
-def get_me(user: AuthDep, quota: QuotaDep, referrals: ReferralDep) -> MeResponse:
+def get_me(
+    user: AuthDep, quota: QuotaDep, referrals: ReferralDep, users: UserStoreDep
+) -> MeResponse:
     return MeResponse(
         id=user.id,
         email=user.email,
@@ -92,10 +126,32 @@ def get_me(user: AuthDep, quota: QuotaDep, referrals: ReferralDep) -> MeResponse
         plan=user.plan,
         usage=quota.summary(user),
         referral=referrals.summary(user),
+        providers=users.list_providers(user.id),
+        has_password=user.has_password,
     )
 
 
+@router.post("/me/referral")
+def redeem_referral(
+    body: ReferralRedeemRequest, user: AuthDep, referrals: ReferralDep
+) -> dict:
+    referrals.redeem(user, body.code)
+    return {}
+
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-def delete_me(body: DeleteAccountRequest, user: AuthDep, auth: AuthServiceDep) -> Response:
-    auth.delete_account(user, body.password)
+def delete_me(
+    body: DeleteAccountRequest,
+    user: AuthDep,
+    auth: AuthServiceDep,
+    background: BackgroundTasks,
+) -> Response:
+    auth.delete_account(
+        user,
+        body.password,
+        provider=body.provider,
+        token=body.token,
+        nonce=body.nonce,
+        background=background,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
