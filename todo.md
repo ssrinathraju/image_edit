@@ -32,7 +32,7 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From PR #4 review (plans and referrals)
 
-- [ ] **Referral farming** — without email verification a tree of throwaway accounts can mint credits. Before any public launch, pay the referrer only after the friend's first successful generation.
+- [ ] **Referral farming (remaining risk)** — verification now gates the referral reward, but disposable email addresses still pass and there are no per-IP limits on registration. Add disposable-domain screening or per-IP limits before any public launch.
 - [ ] **Hide the Upgrade entry in release builds** until billing exists (the screen is a "payments not available" placeholder).
 - [ ] **Unknown plan returns 500** — `daily_limit` raises for a plan value outside `free`/`premium` (only reachable through a corrupted DB). Fall back to Free and log.
 - [ ] **Uploads are read before the quota check** — an over-limit user still makes the server read up to 40 MB before the 429.
@@ -44,3 +44,10 @@ Items deferred from PR #1 review. None block the merge.
 - Multi-face removal: intentional. The spec's REMOVED requirement and the PR notes cover it.
 - Per-email lockout can be abused and the throttle is per process: accepted trade-offs in the auth design (Decision 4).
 - Stale state on a fresh sign-in: unreachable, the router redirects signed-in users away from `/login`.
+
+## From PR review of add-email-verification-and-reset (round 2)
+
+- [ ] **design.md drift** — `openspec/changes/add-email-verification-and-reset/design.md` no longer matches the code: Decision 1 says the log sender writes at INFO (shipped: WARNING); Decisions 4-6 give old signatures (`consume_code` and `reset_password` now take `max_attempts`; `register_user` dropped `bonus` and `max_rewards`; `deliver` takes `user_id` and `ttl_minutes`). Engineers may not edit openspec/; update at archive time.
+- [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
+- [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
+- [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).

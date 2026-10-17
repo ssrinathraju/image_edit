@@ -10,6 +10,8 @@ MAX_REFERRAL_CODE_CHARS = 32
 
 MAX_EMAIL_CHARS = 254
 MAX_PASSWORD_CHARS = 128
+# Looser transport cap so the service answers 400 invalid_credentials_format for a too-long new password.
+MAX_NEW_PASSWORD_TRANSPORT_CHARS = 1024
 MAX_CODE_CHARS = 16
 
 
@@ -64,7 +66,7 @@ class ResetRequest(BaseModel):
 class ResetConfirm(BaseModel):
     email: str = Field(max_length=MAX_EMAIL_CHARS)
     code: str = Field(max_length=MAX_CODE_CHARS)
-    new_password: str = Field(max_length=MAX_PASSWORD_CHARS)
+    new_password: str = Field(max_length=MAX_NEW_PASSWORD_TRANSPORT_CHARS)
 
 
 class UsageResponse(BaseModel):

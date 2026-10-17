@@ -162,3 +162,12 @@ def test_a_code_cannot_be_used_twice(anon_client, sender, registered):
 
     assert again.status_code == 400
     assert again.json()["detail"]["error"] == "invalid_code"
+
+
+def test_over_long_new_password_is_400_invalid_credentials_format(anon_client, sender, registered):
+    _request(anon_client, "ana@example.com")
+    code = sender.last_code("ana@example.com")
+    resp = _confirm(anon_client, "ana@example.com", code, "p" * 129)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_credentials_format"
