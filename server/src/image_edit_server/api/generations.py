@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
-from image_edit_server.api.deps import AuthDep, QuotaDep
+from image_edit_server.api.deps import AuthDep, QuotaDep, SettingsDep
 from image_edit_server.api.templates import CatalogDep
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
@@ -28,6 +28,7 @@ StoreDep = Annotated[JobStore, Depends(get_store)]
 async def submit_generation(
     user: AuthDep,
     quota: QuotaDep,
+    settings: SettingsDep,
     store: StoreDep,
     catalog: CatalogDep,
     prompt: Annotated[Optional[str], Form()] = None,
@@ -35,7 +36,7 @@ async def submit_generation(
     faces: list[UploadFile] = [],
 ) -> JobSubmission:
     job_id = await generation_service.submit(
-        faces, prompt, template_id, store, catalog, user, quota
+        faces, prompt, template_id, store, catalog, user, quota, settings
     )
     return JobSubmission(job_id=job_id)
 

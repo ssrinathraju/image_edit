@@ -86,3 +86,32 @@ def test_template_generation_flow(app_client):
 
     assert body["status"] == "succeeded"
     assert app_client.get(body["result_url"]).status_code == 200
+
+
+def test_a_full_flow_leaves_the_default_storage_untouched(tmp_path, templates_dir):
+    """Guards the bug where uploads ignored the app's STORAGE_ROOT and polluted ./storage."""
+    from pathlib import Path
+
+    default_inputs = Path(Settings().STORAGE_ROOT) / "inputs"
+
+    def names() -> set:
+        return {p.name for p in default_inputs.iterdir()} if default_inputs.is_dir() else set()
+
+    before = names()
+    settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
+    with TestClient(create_app(settings=settings)) as client:
+        client.headers.update(register_headers(client, "ana@example.com"))
+        job_id = client.post(
+            "/generations",
+            data={"prompt": "a family at sunset"},
+            files=[("faces", ("face.png", io.BytesIO(SMALL_PNG), "image/png"))],
+        ).json()["job_id"]
+        for _ in range(50):
+            if client.get(f"/generations/{job_id}").json()["status"] == "succeeded":
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("job did not finish")
+
+    assert names() == before
+    assert not (tmp_path / "inputs" / job_id).exists()  # the worker cleaned up under the root

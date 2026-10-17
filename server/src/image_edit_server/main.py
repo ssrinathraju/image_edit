@@ -15,6 +15,7 @@ from image_edit_server.api.deps import (
     get_auth_service,
     get_quota_service,
     get_referral_service,
+    get_settings,
     get_user_store,
 )
 from image_edit_server.api.generations import get_store, router as generations_router
@@ -113,6 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.dependency_overrides[get_settings] = lambda: cfg
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[get_user_store] = lambda: user_store

@@ -10,6 +10,7 @@ from image_edit_server.api.deps import (
     get_auth_service,
     get_quota_service,
     get_referral_service,
+    get_settings,
     get_user_store,
 )
 from image_edit_server.api.generations import get_store, router
@@ -52,8 +53,15 @@ def user_store() -> SqliteUserStore:
 
 
 @pytest.fixture
-def app(store, catalog, user_store) -> FastAPI:
-    settings = Settings()
+def settings(tmp_path, templates_dir) -> Settings:
+    """The app's configuration, rooted in the test's temp dir so nothing lands in ./storage."""
+    return Settings(
+        STORAGE_ROOT=str(tmp_path / "storage"), TEMPLATES_DIR=str(templates_dir)
+    )
+
+
+@pytest.fixture
+def app(store, catalog, user_store, settings) -> FastAPI:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
@@ -68,6 +76,7 @@ def app(store, catalog, user_store) -> FastAPI:
     app.include_router(router)
     app.include_router(templates_router)
     app.include_router(auth_router)
+    app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[get_user_store] = lambda: user_store

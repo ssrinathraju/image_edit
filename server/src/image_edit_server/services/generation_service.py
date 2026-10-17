@@ -19,8 +19,6 @@ from image_edit_server.services.quota_service import QuotaService
 
 logger = logging.getLogger(__name__)
 
-_SETTINGS = Settings()
-
 
 async def submit(
     faces: list[UploadFile],
@@ -30,7 +28,7 @@ async def submit(
     catalog: TemplateCatalog,
     user: User,
     quota: QuotaService,
-    settings: Settings = _SETTINGS,
+    settings: Settings,
 ) -> str:
     """Validate inputs, reserve a generation, persist uploads, queue a job."""
     _validate_face_count(faces, settings)
