@@ -22,11 +22,11 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 2. Server: storage
 
-- [ ] 2.1 In `repos/user_store.py` add the `identities` table, the `created_via` and `referral_redeemed` columns and `SCHEMA_VERSION = 4`, following Decision 2. Expose `has_password` on `User` (from `password_hash != ''`) and add `list_providers(user_id)`. Verify that `tests/repos/test_user_store_migration.py` covers:
+- [x] 2.1 In `repos/user_store.py` add the `identities` table, the `created_via` and `referral_redeemed` columns and `SCHEMA_VERSION = 4`, following Decision 2. Expose `has_password` on `User` (from `password_hash != ''`) and add `list_providers(user_id)`. Verify that `tests/repos/test_user_store_migration.py` covers:
   - a fresh database;
   - a version-3 database with verified users, sessions, email codes and a paid referral: all data is kept, `created_via` is `password`, and there are no identities;
   - running the migration twice changing nothing.
-- [ ] 2.2 Add `sign_in_with_identity(...)` with `ProviderEmailMissing`, `ProviderEmailUnverified` and `ProviderAlreadyLinked` in `core/user_store.py`, following Decision 3. Verify that `tests/repos/test_user_store_identities.py` covers each of the following:
+- [x] 2.2 Add `sign_in_with_identity(...)` with `ProviderEmailMissing`, `ProviderEmailUnverified` and `ProviderAlreadyLinked` in `core/user_store.py`, following Decision 3. Verify that `tests/repos/test_user_store_identities.py` covers each of the following:
   - a linked identity returning its user with an unchanged email;
   - linking by mixed-case email to a password account, with the password kept;
   - linking verifying an unverified account and paying its pending referral once;
@@ -37,7 +37,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - a second Google identity for the same account raising `ProviderAlreadyLinked`;
   - two threads signing in the same new identity, which creates exactly one account;
   - identities being deleted with their user.
-- [ ] 2.3 Add `redeem_referral(...)` with `ReferralNotAllowed`, following Decision 6. Verify that `tests/repos/test_user_store_referrals.py` covers:
+- [x] 2.3 Add `redeem_referral(...)` with `ReferralNotAllowed`, following Decision 6. Verify that `tests/repos/test_user_store_referrals.py` covers:
   - success paying both accounts;
   - lowercase codes with spaces;
   - a second redemption being refused;
@@ -45,7 +45,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - 23 hours being accepted and 25 hours refused (with an injected clock);
   - the account's own code and an unknown code changing nothing;
   - the referrer cap.
-- [ ] 2.4 Add `set_apple_refresh_token(user_id, token)` and `get_apple_refresh_token(user_id)`. Verify with a test in `test_user_store_identities.py` that the token is stored for the Apple identity only and is gone after the user is deleted.
+- [x] 2.4 Add `set_apple_refresh_token(user_id, token)` and `get_apple_refresh_token(user_id)`. Verify with a test in `test_user_store_identities.py` that the token is stored for the Apple identity only and is gone after the user is deleted.
 
 ## 3. Server: Apple code exchange and revocation
 

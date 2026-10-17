@@ -20,18 +20,23 @@ from image_edit_server.core.email_codes import (
     IssueResult,
     hash_code,
 )
+from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.core.plans import ALL_PLANS, FREE
 from image_edit_server.core.referral_codes import generate_code, normalize_code
 from image_edit_server.core.user_store import (
     EmailTakenError,
     InvalidReferralCode,
+    ProviderAlreadyLinked,
+    ProviderEmailMissing,
+    ProviderEmailUnverified,
     QuotaExceeded,
+    ReferralNotAllowed,
     UserNotFound,
 )
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 SESSION_TOKEN_BYTES = 32
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 CODE_ATTEMPTS = 5
 SOURCE_DAILY = "daily"
 SOURCE_BONUS = "bonus"
@@ -61,7 +66,28 @@ _ADDED_USER_COLUMNS = {
     "referral_rewards": "INTEGER NOT NULL DEFAULT 0",
     "email_verified": "INTEGER NOT NULL DEFAULT 0",
     "referral_bonus_pending": "INTEGER NOT NULL DEFAULT 0",
+    "created_via": "TEXT NOT NULL DEFAULT 'password'",
+    "referral_redeemed": "INTEGER NOT NULL DEFAULT 0",
 }
+
+# An account made through a provider stores this instead of a password hash;
+# verify_password rejects it, so password login fails like a wrong password.
+NO_PASSWORD_HASH = ""
+PASSWORD_ORIGIN = "password"
+APPLE_PROVIDER = "apple"
+
+_IDENTITY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS identities (
+    provider TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT,
+    apple_refresh_token TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (provider, subject),
+    UNIQUE (user_id, provider)
+);
+"""
 
 _USAGE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS generation_usage (
@@ -94,10 +120,10 @@ CREATE INDEX IF NOT EXISTS idx_email_sends_user ON email_sends(user_id, sent_at)
 """
 
 _USER_COLUMNS = (
-    "id, email, created_at, plan, bonus_credits, referral_code, referral_rewards,"
-    " email_verified"
+    "u.id, u.email, u.created_at, u.plan, u.bonus_credits, u.referral_code,"
+    " u.referral_rewards, u.email_verified, u.password_hash <> ''"
 )
-_USER_COLUMN_COUNT = 8
+_USER_COLUMN_COUNT = 9
 SEND_WINDOW = timedelta(hours=1)
 
 
@@ -119,6 +145,7 @@ def _to_user(row: tuple) -> User:
         referral_code=row[5] or "",
         referral_rewards=row[6],
         email_verified=bool(row[7]),
+        has_password=bool(row[8]),
     )
 
 
@@ -168,7 +195,7 @@ class SqliteUserStore:
                 if "email_verified" not in existing:
                     # Accounts that exist before verification shipped are trusted.
                     self._conn.execute("UPDATE users SET email_verified = 1")
-                for statement in _USAGE_SCHEMA.strip().split(";"):
+                for statement in (_USAGE_SCHEMA + _IDENTITY_SCHEMA).strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
                 usage_columns = {
@@ -297,10 +324,10 @@ class SqliteUserStore:
         )
 
     def get_by_email(self, email: str) -> Optional[User]:
-        return self._fetch_user(f"SELECT {_USER_COLUMNS} FROM users WHERE email = ?", email)
+        return self._fetch_user(f"SELECT {_USER_COLUMNS} FROM users u WHERE u.email = ?", email)
 
     def get_by_id(self, user_id: str) -> Optional[User]:
-        return self._fetch_user(f"SELECT {_USER_COLUMNS} FROM users WHERE id = ?", user_id)
+        return self._fetch_user(f"SELECT {_USER_COLUMNS} FROM users u WHERE u.id = ?", user_id)
 
     def get_password_hash(self, user_id: str) -> Optional[str]:
         with self._lock:
@@ -465,10 +492,9 @@ class SqliteUserStore:
         return token
 
     def get_user_by_session(self, token: str) -> Optional[User]:
-        columns = ", ".join(f"u.{c.strip()}" for c in _USER_COLUMNS.split(","))
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {columns}, s.expires_at"
+                f"SELECT {_USER_COLUMNS}, s.expires_at"
                 " FROM sessions s JOIN users u ON u.id = s.user_id"
                 " WHERE s.token_hash = ?",
                 (_hash_token(token),),
@@ -484,6 +510,162 @@ class SqliteUserStore:
             self._conn.execute(
                 "DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),)
             )
+
+    # ── provider identities ──────────────────────────────────────────────
+
+    def sign_in_with_identity(
+        self, identity: ProviderIdentity, now: datetime, bonus: int, max_rewards: int
+    ) -> tuple[User, bool]:
+        with self._lock, self._conn:
+            linked = self._conn.execute(
+                "SELECT user_id FROM identities WHERE provider = ? AND subject = ?",
+                (identity.provider, identity.subject),
+            ).fetchone()
+            if linked:
+                return self._load_user(linked[0]), False
+            email = self._require_usable_email(identity)
+            existing = self._conn.execute(
+                "SELECT id FROM users WHERE email = ?", (email,)
+            ).fetchone()
+            if existing:
+                self._link_identity(existing[0], identity, email, now, bonus, max_rewards)
+                return self._load_user(existing[0]), False
+            user_id = self._insert_provider_user(identity, email, now)
+            return self._load_user(user_id), True
+
+    @staticmethod
+    def _require_usable_email(identity: ProviderIdentity) -> str:
+        if not identity.email:
+            raise ProviderEmailMissing(identity.provider)
+        if not identity.email_verified:
+            raise ProviderEmailUnverified(identity.provider)
+        return identity.email.strip().lower()
+
+    def _link_identity(
+        self,
+        user_id: str,
+        identity: ProviderIdentity,
+        email: str,
+        now: datetime,
+        bonus: int,
+        max_rewards: int,
+    ) -> None:
+        same_provider = self._conn.execute(
+            "SELECT 1 FROM identities WHERE user_id = ? AND provider = ?",
+            (user_id, identity.provider),
+        ).fetchone()
+        if same_provider:
+            raise ProviderAlreadyLinked(identity.provider)
+        self._insert_identity(user_id, identity, email, now)
+        self._verify_and_reward(user_id, bonus, max_rewards)
+
+    def _insert_provider_user(
+        self, identity: ProviderIdentity, email: str, now: datetime
+    ) -> str:
+        user_id = str(ULID())
+        self._conn.execute(
+            "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+            " referral_code, email_verified, created_via)"
+            " VALUES (?, ?, ?, ?, 0, ?, 1, ?)",
+            (
+                user_id,
+                email,
+                NO_PASSWORD_HASH,
+                now.isoformat(),
+                self._unused_code(),
+                identity.provider,
+            ),
+        )
+        self._insert_identity(user_id, identity, email, now)
+        return user_id
+
+    def _insert_identity(
+        self, user_id: str, identity: ProviderIdentity, email: str, now: datetime
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO identities (provider, subject, user_id, email, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (identity.provider, identity.subject, user_id, email, now.isoformat()),
+        )
+
+    def _load_user(self, user_id: str) -> User:
+        row = self._conn.execute(
+            f"SELECT {_USER_COLUMNS} FROM users u WHERE u.id = ?", (user_id,)
+        ).fetchone()
+        return _to_user(row)
+
+    def has_identity(self, user_id: str, provider: str, subject: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM identities"
+                " WHERE user_id = ? AND provider = ? AND subject = ?",
+                (user_id, provider, subject),
+            ).fetchone()
+        return row is not None
+
+    def list_providers(self, user_id: str) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT provider FROM identities WHERE user_id = ? ORDER BY provider",
+                (user_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def set_apple_refresh_token(self, user_id: str, token: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE identities SET apple_refresh_token = ?"
+                " WHERE user_id = ? AND provider = ?",
+                (token, user_id, APPLE_PROVIDER),
+            )
+
+    def get_apple_refresh_token(self, user_id: str) -> Optional[str]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT apple_refresh_token FROM identities"
+                " WHERE user_id = ? AND provider = ?",
+                (user_id, APPLE_PROVIDER),
+            ).fetchone()
+        return row[0] if row else None
+
+    # ── referral redemption ──────────────────────────────────────────────
+
+    def redeem_referral(
+        self,
+        user_id: str,
+        code: str,
+        now: datetime,
+        window: timedelta,
+        bonus: int,
+        max_rewards: int,
+    ) -> None:
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT created_via, created_at, referral_redeemed, referred_by,"
+                " referral_code FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if row is None:
+                raise UserNotFound(user_id)
+            created_via, created_at, redeemed, referred_by, own_code = row
+            allowed = (
+                created_via != PASSWORD_ORIGIN
+                and datetime.fromisoformat(created_at) > now - window
+                and not redeemed
+                and referred_by is None
+            )
+            if not allowed:
+                raise ReferralNotAllowed(user_id)
+            wanted = normalize_code(code)
+            referrer = self._find_referrer(wanted)
+            if referrer is None or wanted == own_code:
+                raise InvalidReferralCode(wanted)
+            self._conn.execute(
+                "UPDATE users SET referred_by = ?, referral_redeemed = 1,"
+                " bonus_credits = bonus_credits + ? WHERE id = ?",
+                (referrer, bonus, user_id),
+            )
+            self._reward_referrer(referrer, bonus, max_rewards)
 
     # ── usage ────────────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ class User:
     referral_code: str = ""
     referral_rewards: int = 0
     email_verified: bool = False
+    has_password: bool = True
 
 
 @dataclass(frozen=True)

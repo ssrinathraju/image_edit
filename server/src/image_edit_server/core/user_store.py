@@ -9,6 +9,7 @@ from image_edit_server.core.email_codes import (
     ConsumeResult,
     IssueResult,
 )
+from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 
@@ -26,6 +27,22 @@ class InvalidReferralCode(Exception):
 
 class UserNotFound(Exception):
     """Raised when an operation targets an account that no longer exists."""
+
+
+class ProviderEmailMissing(Exception):
+    """Raised when an unlinked provider identity arrives without an email."""
+
+
+class ProviderEmailUnverified(Exception):
+    """Raised when the provider does not vouch for the email of an unlinked identity."""
+
+
+class ProviderAlreadyLinked(Exception):
+    """Raised when linking would give an account a second identity of one provider."""
+
+
+class ReferralNotAllowed(Exception):
+    """Raised when an account may not redeem a referral code (late, repeated or password-made)."""
 
 
 class UserStore(Protocol):
@@ -134,3 +151,39 @@ class UserStore(Protocol):
         ...
 
     def delete_session(self, token: str) -> None: ...
+
+    def sign_in_with_identity(
+        self, identity: ProviderIdentity, now: datetime, bonus: int, max_rewards: int
+    ) -> tuple[User, bool]:
+        """Find the linked account, link by email, or create one; returns (user, created).
+
+        Raises ProviderEmailMissing, ProviderEmailUnverified or ProviderAlreadyLinked
+        before writing anything.
+        """
+        ...
+
+    def has_identity(self, user_id: str, provider: str, subject: str) -> bool: ...
+
+    def list_providers(self, user_id: str) -> list[str]:
+        """The provider names linked to the account, sorted."""
+        ...
+
+    def set_apple_refresh_token(self, user_id: str, token: str) -> None: ...
+
+    def get_apple_refresh_token(self, user_id: str) -> Optional[str]: ...
+
+    def redeem_referral(
+        self,
+        user_id: str,
+        code: str,
+        now: datetime,
+        window: timedelta,
+        bonus: int,
+        max_rewards: int,
+    ) -> None:
+        """Link a provider-made account to a referrer and pay both at once.
+
+        Raises ReferralNotAllowed, InvalidReferralCode or UserNotFound; nothing is
+        written then.
+        """
+        ...

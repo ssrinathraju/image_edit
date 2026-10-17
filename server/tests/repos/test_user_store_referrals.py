@@ -1,6 +1,15 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
-from image_edit_server.core.user_store import EmailTakenError, InvalidReferralCode
+from image_edit_server.core.identity_verifier import ProviderIdentity
+from image_edit_server.core.referral_codes import REDEEM_WINDOW
+from image_edit_server.core.user_store import (
+    EmailTakenError,
+    InvalidReferralCode,
+    ReferralNotAllowed,
+    UserNotFound,
+)
 from image_edit_server.repos.user_store import SqliteUserStore
 
 BONUS = 5
@@ -161,3 +170,122 @@ def test_a_referral_code_collision_is_not_reported_as_a_taken_email(users, monke
         _register(users, "b@example.com")
 
     assert users.get_by_email("b@example.com") is None
+
+
+# ── redeeming a code after a provider sign-up ──
+
+CREATED = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+def _provider_user(users, subject="g-1", email="new@example.com"):
+    identity = ProviderIdentity("google", subject, email, True, CREATED)
+    return users.sign_in_with_identity(identity, CREATED, BONUS, MAX)[0]
+
+
+def _redeem_after(users, user, code, hours=1):
+    users.redeem_referral(
+        user.id, code, CREATED + timedelta(hours=hours), REDEEM_WINDOW, BONUS, MAX
+    )
+
+
+def test_success_pays_both_accounts(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    user = _provider_user(users)
+
+    _redeem_after(users, user, friend.referral_code)
+
+    assert _bonus(users, user) == BONUS
+    after = users.get_by_id(friend.id)
+    assert (after.bonus_credits, after.referral_rewards) == (BONUS, 1)
+
+
+def test_a_lowercase_code_with_spaces_is_accepted(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    user = _provider_user(users)
+
+    _redeem_after(users, user, f"  {friend.referral_code.lower()} ")
+
+    assert _bonus(users, user) == BONUS
+
+
+def test_a_second_redemption_is_refused(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    other = users.register_user("other@example.com", "hash", None)
+    user = _provider_user(users)
+    _redeem_after(users, user, friend.referral_code)
+
+    with pytest.raises(ReferralNotAllowed):
+        _redeem_after(users, user, other.referral_code)
+
+    assert _bonus(users, other) == 0
+    assert _bonus(users, user) == BONUS
+
+
+def test_a_password_created_account_is_refused(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    mine = users.register_user("mine@example.com", "hash", None)
+
+    with pytest.raises(ReferralNotAllowed):
+        users.redeem_referral(
+            mine.id, friend.referral_code, datetime.now(timezone.utc), REDEEM_WINDOW, BONUS, MAX
+        )
+
+    assert _bonus(users, mine) == 0
+
+
+def test_an_account_already_linked_to_a_referrer_is_refused(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    other = users.register_user("other@example.com", "hash", None)
+    user = _provider_user(users)
+    users._conn.execute("UPDATE users SET referred_by = ? WHERE id = ?", (friend.id, user.id))
+
+    with pytest.raises(ReferralNotAllowed):
+        _redeem_after(users, user, other.referral_code)
+
+    assert _bonus(users, user) == 0
+
+
+def test_twenty_three_hours_is_accepted_and_twenty_five_refused(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    early = _provider_user(users, "g-1", "early@example.com")
+    late = _provider_user(users, "g-2", "late@example.com")
+
+    _redeem_after(users, early, friend.referral_code, hours=23)
+    with pytest.raises(ReferralNotAllowed):
+        _redeem_after(users, late, friend.referral_code, hours=25)
+
+    assert _bonus(users, early) == BONUS
+    assert _bonus(users, late) == 0
+
+
+def test_the_accounts_own_code_and_an_unknown_code_change_nothing(users):
+    user = _provider_user(users)
+    own = users.get_by_id(user.id).referral_code
+
+    for code in (own, "ZZZZZZZZ", ""):
+        with pytest.raises(InvalidReferralCode):
+            _redeem_after(users, user, code)
+
+    after = users.get_by_id(user.id)
+    assert (after.bonus_credits, after.referral_rewards) == (0, 0)
+    friend = users.register_user("friend@example.com", "hash", None)
+    _redeem_after(users, user, friend.referral_code)
+    assert _bonus(users, user) == BONUS
+
+
+def test_the_referrer_cap_stops_rewarding_the_referrer_only(users):
+    friend = users.register_user("friend@example.com", "hash", None)
+    users._conn.execute(
+        "UPDATE users SET referral_rewards = ?, bonus_credits = 0 WHERE id = ?",
+        (MAX, friend.id),
+    )
+    user = _provider_user(users)
+
+    _redeem_after(users, user, friend.referral_code)
+
+    after = users.get_by_id(friend.id)
+    assert (after.bonus_credits, after.referral_rewards) == (0, MAX)
+    assert _bonus(users, user) == BONUS
+
+
+def test_a_missing_user_is_reported(users):
+    with pytest.raises(UserNotFound):
+        users.redeem_referral("nobody", "AAAAAAAA", CREATED, REDEEM_WINDOW, BONUS, MAX)
