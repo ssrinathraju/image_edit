@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import Field
+from typing import Literal
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +33,17 @@ class Settings(BaseSettings):
     REFERRAL_BONUS: int = 5
     REFERRAL_MAX_REWARDS: int = 10
 
+    SMTP_HOST: str = ""  # empty means codes are written to the log instead of emailed
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_SECURITY: Literal["starttls", "ssl", "none"] = "starttls"
+    EMAIL_CODE_TTL_MINUTES: int = Field(default=15, ge=1)
+    EMAIL_CODE_MAX_ATTEMPTS: int = Field(default=5, ge=1)
+    EMAIL_RESEND_SECONDS: int = Field(default=60, ge=1)
+    EMAIL_MAX_PER_HOUR: int = Field(default=5, ge=1)
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"
@@ -40,6 +53,12 @@ class Settings(BaseSettings):
     SANA_NUM_INFERENCE_STEPS: int = 20
     SANA_OUTPUT_WIDTH: int = 1024
     SANA_OUTPUT_HEIGHT: int = 1024
+
+    @model_validator(mode="after")
+    def _require_sender_address_with_smtp(self) -> "Settings":
+        if self.SMTP_HOST and not self.SMTP_FROM:
+            raise ValueError("SMTP_FROM must be set when SMTP_HOST is set")
+        return self
 
     def accepted_image_types_set(self) -> frozenset[str]:
         return frozenset(t.strip() for t in self.ACCEPTED_IMAGE_TYPES.split(","))

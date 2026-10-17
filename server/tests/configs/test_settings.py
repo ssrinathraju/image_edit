@@ -77,3 +77,45 @@ def test_accepted_image_types_set():
     assert "image/jpeg" in types
     assert "image/png" in types
     assert "image/webp" in types
+
+
+def test_email_defaults():
+    s = Settings()
+    assert s.SMTP_HOST == ""
+    assert s.SMTP_PORT == 587
+    assert s.SMTP_USERNAME == ""
+    assert s.SMTP_PASSWORD == ""
+    assert s.SMTP_FROM == ""
+    assert s.SMTP_SECURITY == "starttls"
+    assert s.EMAIL_CODE_TTL_MINUTES == 15
+    assert s.EMAIL_CODE_MAX_ATTEMPTS == 5
+    assert s.EMAIL_RESEND_SECONDS == 60
+    assert s.EMAIL_MAX_PER_HOUR == 5
+
+
+def test_email_env_override(monkeypatch):
+    monkeypatch.setenv("IMAGE_EDIT_EMAIL_MAX_PER_HOUR", "9")
+    monkeypatch.setenv("IMAGE_EDIT_SMTP_SECURITY", "ssl")
+    s = Settings()
+    assert s.EMAIL_MAX_PER_HOUR == 9
+    assert s.SMTP_SECURITY == "ssl"
+
+
+def test_smtp_host_without_sender_address_is_rejected():
+    with pytest.raises(ValidationError, match="SMTP_FROM"):
+        Settings(SMTP_HOST="smtp.example.com")
+    assert Settings(SMTP_HOST="smtp.example.com", SMTP_FROM="a@example.com")
+
+
+def test_unknown_smtp_security_is_rejected():
+    with pytest.raises(ValidationError, match="SMTP_SECURITY"):
+        Settings(SMTP_SECURITY="tls13")
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["EMAIL_CODE_TTL_MINUTES", "EMAIL_CODE_MAX_ATTEMPTS", "EMAIL_RESEND_SECONDS", "EMAIL_MAX_PER_HOUR"],
+)
+def test_email_numeric_settings_below_one_are_rejected_by_name(field):
+    with pytest.raises(ValidationError, match=field):
+        Settings(**{field: 0})

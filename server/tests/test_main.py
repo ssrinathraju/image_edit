@@ -143,3 +143,35 @@ def test_invalid_retention_settings_stop_the_server_from_starting():
 
     with pytest.raises(ValidationError, match="OUTPUT_RETENTION_HOURS"):
         Settings(OUTPUT_RETENTION_HOURS=0)
+
+
+def test_log_sender_is_chosen_without_smtp_host_and_warns(tmp_path, templates_dir, caplog):
+    from image_edit_server.services.email.log_sender import LogSender
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    from image_edit_server.main import _make_email_sender
+
+    with caplog.at_level("WARNING"):
+        sender = _make_email_sender(settings)
+
+    assert isinstance(sender, LogSender)
+    assert "NOT delivered" in caplog.text
+
+
+def test_smtp_sender_is_chosen_with_smtp_host_and_does_not_warn(tmp_path, templates_dir, caplog):
+    from image_edit_server.main import _make_email_sender
+    from image_edit_server.services.email.smtp_sender import SmtpSender
+
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir),
+        STORAGE_ROOT=str(tmp_path / "s"),
+        SMTP_HOST="smtp.example.com",
+        SMTP_FROM="noreply@example.com",
+    )
+
+    with caplog.at_level("WARNING"):
+        sender = _make_email_sender(settings)
+
+    assert isinstance(sender, SmtpSender)
+    assert "NOT delivered" not in caplog.text

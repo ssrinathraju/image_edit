@@ -4,8 +4,8 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 1. Server: settings and email senders
 
-- [ ] 1.1 Add the SMTP and email-code settings from Decision 1 to `configs/settings.py`, with startup validation for three cases: `SMTP_HOST` set with an empty `SMTP_FROM`, an unknown `SMTP_SECURITY`, and any numeric email setting below 1. Verify that `tests/configs/test_settings.py` asserts every default, one environment override, and each refusal.
-- [ ] 1.2 Add `core/email_sender.py` (the `EmailSender` protocol), `services/email/log_sender.py` and `services/email/smtp_sender.py` (stdlib `smtplib`, `starttls`/`ssl`/`none`, 10-second timeout, login only when a username is set). Verify:
+- [x] 1.1 Add the SMTP and email-code settings from Decision 1 to `configs/settings.py`, with startup validation for three cases: `SMTP_HOST` set with an empty `SMTP_FROM`, an unknown `SMTP_SECURITY`, and any numeric email setting below 1. Verify that `tests/configs/test_settings.py` asserts every default, one environment override, and each refusal.
+- [x] 1.2 Add `core/email_sender.py` (the `EmailSender` protocol), `services/email/log_sender.py` and `services/email/smtp_sender.py` (stdlib `smtplib`, `starttls`/`ssl`/`none`, 10-second timeout, login only when a username is set). Verify:
   - `tests/services/email/test_log_sender.py` checks with `caplog` that recipient, subject and body are logged.
   - `tests/services/email/test_smtp_sender.py` replaces `smtplib.SMTP`/`SMTP_SSL` with a fake and checks host, port, STARTTLS use, login, and the sent message's `From`/`To`/`Subject`/body for each security mode.
 - [ ] 1.3 Make the sender injectable in the app factory in `main.py`. Choose the SMTP sender when `SMTP_HOST` is set, otherwise the log sender, and log a startup warning when the log sender is chosen. Verify `tests/test_main.py` covers both choices, the warning, and an injected sender being used.
