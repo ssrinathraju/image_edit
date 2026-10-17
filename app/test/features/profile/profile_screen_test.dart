@@ -4,6 +4,7 @@ import 'package:image_edit/features/profile/profile_providers.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fake_api_client.dart';
+import '../../support/fake_provider_sign_in.dart';
 import '../../support/fake_session_storage.dart';
 
 late FakeApiClient client;
@@ -12,6 +13,9 @@ late FakeSessionStorage storage;
 Future<FakeLinkLauncher> _openProfile(
   WidgetTester tester, {
   ProfileLinks links = const ProfileLinks(),
+  FakeProviderSignIn? google,
+  FakeProviderSignIn? apple,
+  TargetPlatform platform = TargetPlatform.android,
 }) async {
   final launcher = FakeLinkLauncher();
   await pumpApp(
@@ -20,6 +24,9 @@ Future<FakeLinkLauncher> _openProfile(
     storage: storage,
     links: links,
     launcher: launcher,
+    google: google,
+    apple: apple,
+    platform: platform,
   );
   await tester.tap(find.byTooltip('Profile'));
   await tester.pumpAndSettle();
@@ -182,5 +189,151 @@ void main() {
 
       expect(client.deletedWith, isEmpty);
     });
+  });
+
+  group('sign-in providers', () {
+    testWidgets('a Google-linked account shows Signed in with Google', (tester) async {
+      client.onFetchMe = () async => fakeProfile(providers: ['google']);
+      await _openProfile(tester);
+
+      expect(find.text('Signed in with Google'), findsOneWidget);
+      expect(find.text('Signed in with Apple'), findsNothing);
+    });
+
+    testWidgets('both providers are shown when both are linked', (tester) async {
+      client.onFetchMe = () async => fakeProfile(providers: ['apple', 'google']);
+      await _openProfile(tester);
+
+      expect(find.text('Signed in with Google'), findsOneWidget);
+      expect(find.text('Signed in with Apple'), findsOneWidget);
+    });
+
+    testWidgets('a password-only account has no provider line', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      await _openProfile(tester);
+
+      expect(find.textContaining('Signed in with'), findsNothing);
+    });
+
+    testWidgets('no provider line is shown when the account failed to load', (tester) async {
+      await _openProfile(tester);
+
+      expect(find.textContaining('Signed in with'), findsNothing);
+    });
+  });
+
+  group('delete account without a password', () {
+    setUp(() {
+      client.onFetchMe = () async =>
+          fakeProfile(providers: ['google'], hasPassword: false);
+    });
+
+    Future<void> confirmDialog(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(ListTile, 'Delete account'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('sign in with Google again'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('signs in with Google, deletes with the token and returns to sign-in', (
+      tester,
+    ) async {
+      final google = FakeProviderSignIn.google('fresh-google-token');
+      await _openProfile(tester, google: google);
+
+      await confirmDialog(tester);
+
+      expect(google.calls, 1);
+      expect(client.deletedViaProvider, [
+        ['google', 'fresh-google-token', null],
+      ]);
+      expect(client.deletedWith, isEmpty);
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+      expect(storage.saved, isNull);
+    });
+
+    testWidgets('an Apple-linked account on iOS confirms with Apple and its nonce', (
+      tester,
+    ) async {
+      client.onFetchMe = () async =>
+          fakeProfile(providers: ['apple', 'google'], hasPassword: false);
+      final apple = FakeProviderSignIn.apple('fresh-apple-token');
+      final google = FakeProviderSignIn.google();
+      await _openProfile(tester, google: google, apple: apple, platform: TargetPlatform.iOS);
+
+      await tester.tap(find.widgetWithText(ListTile, 'Delete account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+      await tester.pumpAndSettle();
+
+      expect(apple.calls, 1);
+      expect(google.calls, 0);
+      expect(client.deletedViaProvider, [
+        ['apple', 'fresh-apple-token', 'raw-nonce'],
+      ]);
+    });
+
+    testWidgets('cancelling the provider sheet stays on the profile without an error', (
+      tester,
+    ) async {
+      final google = FakeProviderSignIn(null);
+      await _openProfile(tester, google: google);
+
+      await confirmDialog(tester);
+
+      expect(google.calls, 1);
+      expect(client.deletedViaProvider, isEmpty);
+      expect(find.text('Profile'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(storage.saved, savedSession);
+    });
+
+    testWidgets('a rejected provider token shows the message and keeps the account', (
+      tester,
+    ) async {
+      client.onDeleteWithProvider = (_, _, _) async =>
+          throw apiError(403, 'invalid_provider_token', 'server wording');
+      await _openProfile(tester, google: FakeProviderSignIn.google());
+
+      await confirmDialog(tester);
+
+      expect(find.text("Couldn't confirm with Google"), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+      expect(storage.saved, savedSession);
+    });
+
+    testWidgets('cancelling the dialog does not open the provider sheet', (tester) async {
+      final google = FakeProviderSignIn.google();
+      await _openProfile(tester, google: google);
+
+      await tester.tap(find.widgetWithText(ListTile, 'Delete account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(google.calls, 0);
+      expect(client.deletedViaProvider, isEmpty);
+    });
+  });
+
+  testWidgets('an account with a password still confirms with the password dialog', (
+    tester,
+  ) async {
+    client.onFetchMe = () async => fakeProfile(providers: ['google']);
+    final google = FakeProviderSignIn.google();
+    await _openProfile(tester, google: google);
+
+    await tester.tap(find.widgetWithText(ListTile, 'Delete account'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'password-1');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+    await tester.pumpAndSettle();
+
+    expect(client.deletedWith, ['password-1']);
+    expect(google.calls, 0);
   });
 }

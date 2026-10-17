@@ -144,7 +144,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 9. App: profile
 
-- [ ] 9.1 Add the provider line to `profile_screen.dart`, and change Delete account to use the provider sign-in when `hasPassword` is false (Decision 9). Verify that `test/features/profile/profile_screen_test.dart` covers:
+- [x] 9.1 Add the provider line to `profile_screen.dart`, and change Delete account to use the provider sign-in when `hasPassword` is false (Decision 9). Verify that `test/features/profile/profile_screen_test.dart` covers:
   - "Signed in with Google" shown, and no line for a password-only account;
   - a provider-only delete running the overridden Google sign-in and calling `deleteAccount` with the token, then the sign-in screen;
   - a cancelled provider sign-in staying on the profile with no error;
