@@ -86,3 +86,6 @@ cache/
 *.log
 tmp/
 server/storage/
+
+# ---- Claude Code: personal, machine-specific settings ----
+.claude/settings.local.json
