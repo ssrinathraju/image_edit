@@ -47,7 +47,7 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From PR review of add-email-verification-and-reset (round 2)
 
-- [ ] **design.md drift** — `openspec/changes/add-email-verification-and-reset/design.md` no longer matches the code: Decision 1 says the log sender writes at INFO (shipped: WARNING); Decisions 4-6 give old signatures (`consume_code` and `reset_password` now take `max_attempts`; `register_user` dropped `bonus` and `max_rewards`; `deliver` takes `user_id` and `ttl_minutes`). Engineers may not edit openspec/; update at archive time.
 - [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
 - [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
+- [ ] **Manual passes never recorded for add-email-verification-and-reset** — tasks 11.2 (iOS simulator pass) and 11.3 (optional real SMTP send) were not run.
