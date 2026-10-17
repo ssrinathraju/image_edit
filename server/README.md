@@ -22,7 +22,7 @@ Generation endpoints require a session. Register (or log in) to get a bearer tok
 `Authorization: Bearer <token>`. `GET /templates` and the template previews stay public.
 
 ```bash
-# Register → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+# Register → 201 {"token": "...", "id": "...", "email": "ana@example.com", "email_verified": false}
 # `referral_code` is optional; an unknown code is a 400 invalid_referral_code
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
@@ -36,7 +36,7 @@ curl -X POST http://localhost:8000/auth/login \
 TOKEN=<token from the response>
 
 curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
-# → {"id": "...", "email": "ana@example.com", "created_at": "...", "plan": "free",
+# → {"id": "...", "email": "ana@example.com", "created_at": "...", "email_verified": false, "plan": "free",
 #    "usage": {"daily_limit": 3, "used_today": 0, "bonus_credits": 0, "remaining": 3,
 #              "resets_at": "2026-10-17T00:00:00+00:00", "plan_limits": {"free": 3, "premium": 30}},
 #    "referral": {"code": "K7M2QX9P", "rewards": 0, "max_rewards": 10, "bonus_per_referral": 5}}
@@ -55,6 +55,7 @@ Errors: `401 unauthorized` (missing, unknown, expired or revoked token), `409 em
 `401 invalid_credentials`, `429 too_many_attempts` (5 failed logins for one email locks it for
 15 minutes; wrong passwords on account deletion count toward the same limit),
 `403 invalid_password` (account deletion), `422` (email over 254 or password over 128 characters).
+The email codes section below lists the verification and reset errors.
 
 Notes:
 
@@ -77,8 +78,10 @@ server answers:
 ```
 
 Bonus credits are one-time and are spent only after the daily allowance. Each account has a
-referral code (`referral.code` in `/me`). Registering with someone's code gives both accounts
-`REFERRAL_BONUS` credits; a referrer is rewarded for at most `REFERRAL_MAX_REWARDS` friends.
+referral code (`referral.code` in `/me`). Registering with someone's code does not pay anyone yet: both accounts receive
+`REFERRAL_BONUS` credits when the new account **verifies its email** (or completes a password
+reset, which also verifies it), once. A referrer is rewarded for at most
+`REFERRAL_MAX_REWARDS` friends. An account that never verifies earns nothing for either side.
 
 ```bash
 # Register with a friend's code (case and surrounding spaces are ignored)
@@ -105,6 +108,52 @@ second instance on the same `app.db` would refund the first one's in-flight jobs
 
 The first start after upgrading migrates an existing `app.db` in place: users keep their data,
 become `free` with no bonus credits, and receive referral codes. The migration is idempotent.
+Accounts that exist when email verification first ships are marked **verified** by that same
+first start, so nobody is locked out of generating.
+
+## Email verification and password reset
+
+New accounts start with an unverified email and are emailed a 6-digit code. Until the email is
+verified, `POST /generations` answers `403 email_not_verified`; reading existing jobs still works.
+A code is valid for 15 minutes, is invalidated after 5 wrong tries, and is stored hashed. At most one
+code email per account is sent every 60 seconds and 5 per hour (both purposes together).
+
+```bash
+# Verify with the emailed code → 200 {"email_verified": true}
+curl -X POST http://localhost:8000/auth/verify-email \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+
+# Send a new code → 202 {}  (429 with a Retry-After header when sent too recently or too often)
+curl -X POST http://localhost:8000/auth/verify-email/resend -H "Authorization: Bearer $TOKEN"
+
+# Forgot password: always 202 {}, whether or not the email has an account
+curl -X POST http://localhost:8000/auth/password-reset/request \
+  -H "Content-Type: application/json" -d '{"email": "ana@example.com"}'
+
+# Set a new password with the code → 200, same body as login with a fresh token.
+# Revokes every other session and verifies the email.
+curl -X POST http://localhost:8000/auth/password-reset/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ana@example.com", "code": "123456", "new_password": "a new long password"}'
+```
+
+Errors: `400 invalid_code` (wrong code; on reset also an unknown email or an expired code, all with
+the same message), `400 code_expired` (verification code expired, used, invalidated or never
+issued), `409 already_verified`, `429 too_many_requests` (resend only; see `Retry-After`),
+`403 email_not_verified` (generation), and `400 invalid_credentials_format` as before.
+
+**Sending email.** Set `IMAGE_EDIT_SMTP_HOST` and `IMAGE_EDIT_SMTP_FROM` (plus username and
+password if the server needs them) to send plain-text email over SMTP. `IMAGE_EDIT_SMTP_SECURITY` is
+`starttls` (port 587, the default), `ssl` (port 465) or `none`. The server refuses to start with a
+host but no `FROM` address. A delivery failure is logged (without the code) and never changes the
+response of the request that asked for the email; the user taps Resend.
+
+**Log mode.** With no `IMAGE_EDIT_SMTP_HOST` the server delivers nothing: it logs a startup warning
+and writes each email, code included, to the log at WARNING level (so uvicorn shows it), so development needs no mail
+account. To find a code, look for the line `Email not delivered, logged instead. To: <address>`
+in the server output. **Never use log mode for a deployment with real users:** anyone who can read
+the logs can take over any account.
 
 ## Submit a generation job
 
@@ -182,6 +231,16 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_PREMIUM_DAILY_LIMIT` | `30` | Generations per UTC day on the `premium` plan |
 | `IMAGE_EDIT_REFERRAL_BONUS` | `5` | Bonus credits given to each side of a referral |
 | `IMAGE_EDIT_REFERRAL_MAX_REWARDS` | `10` | Friends a single account is rewarded for |
+| `IMAGE_EDIT_SMTP_HOST` | _(empty)_ | SMTP server; empty means emails are logged, not delivered |
+| `IMAGE_EDIT_SMTP_PORT` | `587` | SMTP port |
+| `IMAGE_EDIT_SMTP_USERNAME` | _(empty)_ | SMTP login; no login when empty |
+| `IMAGE_EDIT_SMTP_PASSWORD` | _(empty)_ | SMTP password |
+| `IMAGE_EDIT_SMTP_FROM` | _(empty)_ | Sender address; required when `SMTP_HOST` is set |
+| `IMAGE_EDIT_SMTP_SECURITY` | `starttls` | `starttls`, `ssl` or `none` |
+| `IMAGE_EDIT_EMAIL_CODE_TTL_MINUTES` | `15` | How long an emailed code is valid (minimum 1) |
+| `IMAGE_EDIT_EMAIL_CODE_MAX_ATTEMPTS` | `5` | Wrong tries before a code is invalidated (minimum 1) |
+| `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one account (minimum 1) |
+| `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per account per hour (minimum 1) |
 
 ## Retention
 

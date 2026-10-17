@@ -143,3 +143,63 @@ def test_invalid_retention_settings_stop_the_server_from_starting():
 
     with pytest.raises(ValidationError, match="OUTPUT_RETENTION_HOURS"):
         Settings(OUTPUT_RETENTION_HOURS=0)
+
+
+def test_log_sender_is_chosen_without_smtp_host_and_warns(tmp_path, templates_dir, caplog):
+    from image_edit_server.services.email.log_sender import LogSender
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    from image_edit_server.main import _make_email_sender
+
+    with caplog.at_level("WARNING"):
+        sender = _make_email_sender(settings)
+
+    assert isinstance(sender, LogSender)
+    assert "NOT delivered" in caplog.text
+
+
+def test_smtp_sender_is_chosen_with_smtp_host_and_does_not_warn(tmp_path, templates_dir, caplog):
+    from image_edit_server.main import _make_email_sender
+    from image_edit_server.services.email.smtp_sender import SmtpSender
+
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir),
+        STORAGE_ROOT=str(tmp_path / "s"),
+        SMTP_HOST="smtp.example.com",
+        SMTP_FROM="noreply@example.com",
+    )
+
+    with caplog.at_level("WARNING"):
+        sender = _make_email_sender(settings)
+
+    assert isinstance(sender, SmtpSender)
+    assert "NOT delivered" not in caplog.text
+
+
+def test_an_injected_sender_receives_the_registration_email(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    sender = RecordingSender()
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with TestClient(create_app(settings, sender=sender)) as client:
+        register_headers(client, "ana@example.com")
+
+    assert sender.count_for("ana@example.com") == 1
+
+
+def test_without_smtp_the_code_is_in_the_server_log(tmp_path, templates_dir, caplog):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with caplog.at_level("INFO"), TestClient(create_app(settings)) as client:
+        register_headers(client, "ana@example.com")
+
+    assert "ana@example.com" in caplog.text
+    assert "verification code is" in caplog.text

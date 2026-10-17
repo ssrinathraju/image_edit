@@ -101,14 +101,16 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('registration signs the user in and shows home', (tester) async {
+    testWidgets('registration signs the user in and shows the Verify email screen', (tester) async {
       await openRegister(tester);
 
       await _enter(tester, 'new@example.com', 'password-1');
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Trending'), findsOneWidget);
+      expect(find.text('Verify email'), findsOneWidget);
+      expect(find.textContaining('new@example.com'), findsOneWidget);
+      expect(find.text('Trending'), findsNothing);
       expect(client.registered, ['new@example.com']);
       expect(storage.saved?.email, 'new@example.com');
     });

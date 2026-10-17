@@ -3,6 +3,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class AppConfig {
   static const int maxPromptChars = 500;
   static const int minPasswordChars = 8;
+  static const int emailCodeLength = 6;
+  static const int resendCooldownSeconds = 60;
 
   static String get apiBaseUrl =>
       dotenv.env['API_BASE_URL'] ?? 'http://localhost:8000';

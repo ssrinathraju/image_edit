@@ -106,3 +106,95 @@ def test_a_half_migrated_file_heals(old_db):
 def test_auth_db_path_defaults_to_the_storage_root_and_honours_an_override(tmp_path):
     assert auth_db_path(Settings(STORAGE_ROOT=str(tmp_path))) == str(tmp_path / "app.db")
     assert auth_db_path(Settings(STORAGE_ROOT=str(tmp_path), AUTH_DB_PATH="/x/y.db")) == "/x/y.db"
+
+
+V2_SCHEMA = OLD_SCHEMA + """
+ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN bonus_credits INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN referral_code TEXT;
+ALTER TABLE users ADD COLUMN referred_by TEXT;
+ALTER TABLE users ADD COLUMN referral_rewards INTEGER NOT NULL DEFAULT 0;
+"""
+
+
+@pytest.fixture
+def v2_db(tmp_path) -> str:
+    """A schema-version-2 file: users, a session, and one paid referral."""
+    path = str(tmp_path / "v2.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(V2_SCHEMA)
+    conn.execute("PRAGMA user_version = 2")
+    conn.execute(
+        "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+        " referral_code, referral_rewards) VALUES ('u0', 'a@example.com', 'h0',"
+        " '2026-01-01T00:00:00+00:00', 5, 'AAAAAAAA', 1)"
+    )
+    conn.execute(
+        "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+        " referral_code, referred_by) VALUES ('u1', 'b@example.com', 'h1',"
+        " '2026-01-01T00:00:00+00:00', 5, 'BBBBBBBB', 'u0')"
+    )
+    conn.execute(
+        "INSERT INTO sessions VALUES (?, 'u0', '2026-01-01T00:00:00+00:00',"
+        " '2099-01-01T00:00:00+00:00')",
+        (hashlib.sha256(b"v2-token").hexdigest(),),
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _user_version(path) -> int:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_fresh_database_has_the_verification_schema(tmp_path):
+    path = str(tmp_path / "fresh.db")
+    store = SqliteUserStore(path)
+
+    assert {"email_verified", "referral_bonus_pending"} <= _columns(path, "users")
+    assert _columns(path, "email_codes") >= {
+        "user_id", "purpose", "code_hash", "expires_at", "attempts", "created_at"
+    }
+    assert _columns(path, "email_sends") >= {"id", "user_id", "purpose", "sent_at"}
+    assert _user_version(path) == 3
+    assert store.create_user("ana@example.com", "hash").email_verified is False
+
+
+def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db):
+    store = SqliteUserStore(v2_db)
+
+    a, b = store.get_by_id("u0"), store.get_by_id("u1")
+
+    assert (a.email_verified, b.email_verified) == (True, True)
+    assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
+    assert store.get_user_by_session("v2-token").id == "u0"
+    pending = store._conn.execute(
+        "SELECT SUM(referral_bonus_pending) FROM users"
+    ).fetchone()[0]
+    assert pending == 0
+    assert _user_version(v2_db) == 3
+
+
+def test_upgraded_users_are_not_paid_again_when_marked_verified(v2_db):
+    store = SqliteUserStore(v2_db)
+
+    assert store.mark_email_verified("u1", 5, 10) is False
+
+    assert store.get_by_id("u1").bonus_credits == 5
+    assert store.get_by_id("u0").bonus_credits == 5
+
+
+def test_running_the_verification_migration_twice_changes_nothing(v2_db):
+    first = SqliteUserStore(v2_db)
+    first.create_user("new@example.com", "hash")
+    first.close()
+
+    second = SqliteUserStore(v2_db)
+
+    assert second.get_by_email("new@example.com").email_verified is False
+    assert second.get_by_id("u0").email_verified is True

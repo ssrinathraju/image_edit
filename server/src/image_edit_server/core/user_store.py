@@ -3,6 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional, Protocol
 
+from image_edit_server.core.email_codes import (
+    CodeLimits,
+    CodePurpose,
+    ConsumeResult,
+    IssueResult,
+)
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 
@@ -32,13 +38,54 @@ class UserStore(Protocol):
         email: str,
         password_hash: str,
         referral_code: Optional[str],
-        bonus: int,
-        max_rewards: int,
     ) -> User:
-        """Create a user and apply a referral reward in one transaction.
+        """Create an unverified user; a valid referral code is paid out on verification.
 
         Raises EmailTakenError or InvalidReferralCode; nothing is written then.
         """
+        ...
+
+    def mark_email_verified(self, user_id: str, bonus: int, max_rewards: int) -> bool:
+        """Verify the email and pay any pending referral reward, once.
+
+        Returns False when the account was already verified or does not exist.
+        """
+        ...
+
+    def issue_code(
+        self,
+        user_id: str,
+        purpose: CodePurpose,
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> IssueResult:
+        """Store a new code in place of any earlier one, unless a sending limit applies."""
+        ...
+
+    def consume_code(
+        self,
+        user_id: str,
+        purpose: CodePurpose,
+        code: str,
+        now: datetime,
+        max_attempts: int,
+    ) -> ConsumeResult:
+        """Check a code; a wrong one counts an attempt, a correct one is used up."""
+        ...
+
+    def reset_password(
+        self,
+        user_id: str,
+        code: str,
+        new_hash: str,
+        now: datetime,
+        max_attempts: int,
+        bonus: int,
+        max_rewards: int,
+    ) -> ConsumeResult:
+        """Consume a reset code and, on ok, change the password, drop every
+        session and verify the email, all in one transaction."""
         ...
 
     def reserve_generation(self, user_id: str, daily_limit: int, now: datetime) -> str:

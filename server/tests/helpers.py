@@ -1,4 +1,6 @@
 import json
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from PIL import Image
@@ -32,6 +34,72 @@ def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> di
     resp = client.post("/auth/register", json={"email": email, "password": password})
     assert resp.status_code == 201, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+class RecordingSender:
+    """An EmailSender that keeps what it was asked to send."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        self.sent.append((to, subject, body))
+
+    def last_code(self, to: str) -> str:
+        bodies = [body for recipient, _, body in self.sent if recipient == to]
+        return re.search(r"\b(\d{6})\b", bodies[-1]).group(1)
+
+    def count_for(self, to: str) -> int:
+        return sum(1 for recipient, _, _ in self.sent if recipient == to)
+
+
+class FakeClock:
+    """A settable clock for the code limits."""
+
+    def __init__(self) -> None:
+        self.now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, **kwargs) -> None:
+        self.now += timedelta(**kwargs)
+
+
+def register_and_verify_through_api(
+    client, sender: RecordingSender, email: str, password: str = DEFAULT_PASSWORD
+) -> dict:
+    """Register, then submit the emailed code, as a real client would."""
+    headers = register_headers(client, email, password)
+    resp = client.post(
+        "/auth/verify-email", json={"code": sender.last_code(email)}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+    return headers
+
+
+def forget_recent_sends(client) -> None:
+    """Stand in for a minute passing on a real-clock app, so the next code email is not limited."""
+    from image_edit_server.api.deps import get_user_store
+
+    users = client.app.dependency_overrides[get_user_store]()
+    users._conn.execute("DELETE FROM email_sends")
+    users._conn.commit()
+
+
+def verify_account(user_store, email: str) -> None:
+    """Mark an account's email verified directly in the store."""
+    user = user_store.get_by_email(email)
+    user_store.mark_email_verified(user.id, 0, 0)
+
+
+def register_verified_headers(
+    client, user_store, email: str, password: str = DEFAULT_PASSWORD
+) -> dict:
+    """Register an account, verify it through the store, and return its bearer headers."""
+    headers = register_headers(client, email, password)
+    verify_account(user_store, email)
+    return headers
 
 
 def grant_bonus(user_store, user_id: str, credits: int) -> None:

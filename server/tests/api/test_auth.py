@@ -16,7 +16,8 @@ def test_register_returns_201_and_a_working_token(anon_client):
 
     assert resp.status_code == 201
     body = resp.json()
-    assert set(body) == {"token", "id", "email"}
+    assert set(body) == {"token", "id", "email", "email_verified"}
+    assert body["email_verified"] is False
     assert body["email"] == "ana@example.com"
     me = anon_client.get("/me", headers=_bearer(body["token"]))
     assert me.status_code == 200
@@ -110,7 +111,9 @@ def test_me_returns_identity_without_password_material(client):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"id", "email", "created_at", "plan", "usage", "referral"}
+    assert set(body) == {
+        "id", "email", "created_at", "email_verified", "plan", "usage", "referral"
+    }
     assert "password" not in resp.text
 
 
@@ -186,7 +189,7 @@ def _me(client, token):
     return client.get("/me", headers=_bearer(token)).json()
 
 
-def test_register_with_a_lowercase_referral_code_rewards_both(anon_client):
+def test_register_with_a_lowercase_referral_code_rewards_both(anon_client, user_store):
     referrer = _register(anon_client).json()
     code = _me(anon_client, referrer["token"])["referral"]["code"]
 
@@ -196,6 +199,8 @@ def test_register_with_a_lowercase_referral_code_rewards_both(anon_client):
     )
 
     assert resp.status_code == 201
+    assert _me(anon_client, resp.json()["token"])["usage"]["bonus_credits"] == 0
+    user_store.mark_email_verified(resp.json()["id"], 5, 10)
     assert _me(anon_client, resp.json()["token"])["usage"]["bonus_credits"] == 5
     assert _me(anon_client, referrer["token"])["usage"]["bonus_credits"] == 5
     assert _me(anon_client, referrer["token"])["referral"]["rewards"] == 1
@@ -237,3 +242,36 @@ def test_overlong_referral_code_is_422(anon_client):
     )
 
     assert resp.status_code == 422
+
+
+def test_register_sends_one_verification_email_with_a_six_digit_code(anon_client, sender):
+    resp = _register(anon_client)
+
+    assert resp.status_code == 201
+    assert resp.json()["email_verified"] is False
+    assert sender.count_for("ana@example.com") == 1
+    code = sender.last_code("ana@example.com")
+    assert len(code) == 6 and code.isdigit()
+
+
+def test_register_response_does_not_contain_the_code(anon_client, sender):
+    resp = _register(anon_client)
+
+    code = sender.last_code("ana@example.com")
+    assert code not in resp.text
+    assert all(code not in value for value in resp.headers.values())
+
+
+def test_login_reports_the_verification_status(anon_client, user_store):
+    _register(anon_client)
+
+    unverified = anon_client.post(
+        "/auth/login", json={"email": "ana@example.com", "password": DEFAULT_PASSWORD}
+    )
+    user_store.mark_email_verified(unverified.json()["id"], 0, 0)
+    verified = anon_client.post(
+        "/auth/login", json={"email": "ana@example.com", "password": DEFAULT_PASSWORD}
+    )
+
+    assert unverified.json()["email_verified"] is False
+    assert verified.json()["email_verified"] is True

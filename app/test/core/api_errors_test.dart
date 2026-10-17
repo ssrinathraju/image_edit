@@ -30,4 +30,37 @@ void main() {
       isFalse,
     );
   });
+
+  test('each verification and reset error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 400);
+
+    expect(isEmailNotVerified(coded('email_not_verified')), isTrue);
+    expect(isInvalidCode(coded('invalid_code')), isTrue);
+    expect(isCodeExpired(coded('code_expired')), isTrue);
+    expect(isAlreadyVerified(coded('already_verified')), isTrue);
+    expect(isTooManyRequests(coded('too_many_requests')), isTrue);
+    expect(isInvalidCode(coded('code_expired')), isFalse);
+    expect(isTooManyRequests(StateError('boom')), isFalse);
+  });
+
+  test('Retry-After is read in seconds and ignored when missing or invalid', () {
+    DioException withHeader(String? value) => DioException(
+          requestOptions: RequestOptions(path: '/x'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/x'),
+            statusCode: 429,
+            headers: Headers.fromMap({
+              if (value != null) 'retry-after': [value],
+            }),
+          ),
+        );
+
+    expect(retryAfterSecondsOf(withHeader('40')), 40);
+    expect(retryAfterSecondsOf(withHeader(null)), isNull);
+    expect(retryAfterSecondsOf(withHeader('soon')), isNull);
+    expect(retryAfterSecondsOf(withHeader('0')), isNull);
+    expect(retryAfterSecondsOf(StateError('boom')), isNull);
+  });
 }

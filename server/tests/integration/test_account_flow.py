@@ -7,14 +7,19 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import DEFAULT_PASSWORD, register_headers
+from tests.helpers import DEFAULT_PASSWORD, RecordingSender, register_and_verify_through_api
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
 @pytest.fixture
-def app_client(tmp_path, templates_dir):
+def sender() -> RecordingSender:
+    return RecordingSender()
+
+
+@pytest.fixture
+def app_client(tmp_path, templates_dir, sender):
     settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
-    with TestClient(create_app(settings=settings)) as client:
+    with TestClient(create_app(settings=settings, sender=sender)) as client:
         yield client
 
 
@@ -34,8 +39,8 @@ def _generate(client, headers) -> dict:
     raise AssertionError("job did not finish")
 
 
-def test_deleting_the_account_removes_sessions_login_and_images(app_client, tmp_path):
-    headers = register_headers(app_client, "ana@example.com")
+def test_deleting_the_account_removes_sessions_login_and_images(app_client, sender, tmp_path):
+    headers = register_and_verify_through_api(app_client, sender, "ana@example.com")
     body = _generate(app_client, headers)
     assert body["status"] == "succeeded"
     assert app_client.get(body["result_url"]).status_code == 200

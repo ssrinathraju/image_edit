@@ -23,7 +23,13 @@ from image_edit_server.repos.user_store import SqliteUserStore
 from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
-from tests.helpers import build_templates_dir, register_headers
+from tests.helpers import (
+    FakeClock,
+    RecordingSender,
+    build_templates_dir,
+    register_headers,
+    register_verified_headers,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +54,16 @@ def store() -> InMemoryJobStore:
 
 
 @pytest.fixture
+def sender() -> RecordingSender:
+    return RecordingSender()
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
 def user_store() -> SqliteUserStore:
     return SqliteUserStore(":memory:")
 
@@ -61,7 +77,7 @@ def settings(tmp_path, templates_dir) -> Settings:
 
 
 @pytest.fixture
-def app(store, catalog, user_store, settings) -> FastAPI:
+def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
@@ -70,6 +86,8 @@ def app(store, catalog, user_store, settings) -> FastAPI:
         throttle,
         settings,
         lambda user_id: [store.delete(j.id) for j in store.list_for_user(user_id)],
+        sender,
+        clock,
     )
     app = FastAPI()
     quota_service = QuotaService(user_store, settings)
@@ -92,10 +110,20 @@ def anon_client(app) -> TestClient:
 
 
 @pytest.fixture
-def client(app) -> TestClient:
-    """A client already signed in as ana@example.com."""
+def client(app, user_store) -> TestClient:
+    """A client already signed in as ana@example.com, whose email is verified."""
     test_client = TestClient(app)
-    test_client.headers.update(register_headers(test_client, "ana@example.com"))
+    test_client.headers.update(
+        register_verified_headers(test_client, user_store, "ana@example.com")
+    )
+    return test_client
+
+
+@pytest.fixture
+def unverified_client(app) -> TestClient:
+    """A client signed in as una@example.com, whose email is not verified."""
+    test_client = TestClient(app)
+    test_client.headers.update(register_headers(test_client, "una@example.com"))
     return test_client
 
 
@@ -105,5 +133,5 @@ def user_id(client) -> str:
 
 
 @pytest.fixture
-def second_user_headers(anon_client) -> dict:
-    return register_headers(anon_client, "ben@example.com")
+def second_user_headers(anon_client, user_store) -> dict:
+    return register_verified_headers(anon_client, user_store, "ben@example.com")

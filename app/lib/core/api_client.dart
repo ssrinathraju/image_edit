@@ -25,6 +25,15 @@ abstract class GenerationApiClient {
   Future<void> logout();
   Future<UserProfile> fetchMe();
   Future<void> deleteAccount({required String password});
+
+  Future<void> verifyEmail({required String code});
+  Future<void> resendVerification();
+  Future<void> requestPasswordReset({required String email});
+  Future<Session> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  });
 }
 
 const String _loginPath = '/auth/login';
@@ -169,6 +178,31 @@ class DioApiClient implements GenerationApiClient {
   @override
   Future<void> deleteAccount({required String password}) =>
       _dio.delete<void>('/me', data: {'password': password});
+
+  @override
+  Future<void> verifyEmail({required String code}) =>
+      _dio.post<void>('/auth/verify-email', data: {'code': code});
+
+  @override
+  Future<void> resendVerification() =>
+      _dio.post<void>('/auth/verify-email/resend');
+
+  @override
+  Future<void> requestPasswordReset({required String email}) =>
+      _dio.post<void>('/auth/password-reset/request', data: {'email': email});
+
+  @override
+  Future<Session> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/auth/password-reset/confirm',
+      data: {'email': email, 'code': code, 'new_password': newPassword},
+    );
+    return Session.fromJson(response.data!);
+  }
 
   Future<Session> _authenticate(
     String path,

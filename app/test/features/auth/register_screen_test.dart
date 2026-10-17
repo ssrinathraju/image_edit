@@ -68,12 +68,16 @@ void main() {
     expect(textOf('Referral code (optional)'), 'NOSUCH22');
   });
 
-  testWidgets('a rewarded signup shows the bonus on the home screen', (tester) async {
+  testWidgets('a rewarded signup shows the bonus on the home screen after verifying', (tester) async {
     client.onFetchMe = () async => fakeProfile(bonusCredits: 5);
     await _openRegister(tester);
 
     await _fill(tester, code: 'K7M2QX9P');
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Code'), '123456');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
     await tester.pumpAndSettle();
 
     expect(find.text('8 generations left today'), findsOneWidget);

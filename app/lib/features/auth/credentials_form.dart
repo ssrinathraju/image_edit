@@ -11,8 +11,12 @@ class CredentialsForm extends StatefulWidget {
     required this.onSubmit,
     this.passwordError,
     this.withReferralCode = false,
+    this.emailController,
     super.key,
   });
+
+  /// Lets the parent read the typed email; the parent owns and disposes it.
+  final TextEditingController? emailController;
 
   final String submitLabel;
 
@@ -31,7 +35,8 @@ class CredentialsForm extends StatefulWidget {
 }
 
 class _CredentialsFormState extends State<CredentialsForm> {
-  final _email = TextEditingController();
+  late final TextEditingController _email =
+      widget.emailController ?? TextEditingController();
   final _password = TextEditingController();
   final _referral = TextEditingController();
   bool _submitting = false;
@@ -39,7 +44,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
 
   @override
   void dispose() {
-    _email.dispose();
+    if (widget.emailController == null) _email.dispose();
     _password.dispose();
     _referral.dispose();
     super.dispose();

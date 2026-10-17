@@ -26,6 +26,11 @@ Future<void> pumpScreen(
       GoRoute(path: '/upgrade', builder: (_, _) => const Text('upgrade-screen')),
       GoRoute(path: '/invite', builder: (_, _) => const Text('invite-screen')),
       GoRoute(
+        path: '/verify-email',
+        builder: (_, _) =>
+            Scaffold(appBar: AppBar(), body: const Text('verify-screen')),
+      ),
+      GoRoute(
         path: '/status/:jobId',
         builder: (_, state) => Text('status:${state.pathParameters['jobId']}'),
       ),

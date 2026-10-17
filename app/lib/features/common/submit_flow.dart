@@ -41,6 +41,11 @@ Future<void> submitAndOpenStatus(
       await showLimitReachedDialog(context, resetsAt: resetsAt);
       return;
     }
+    if (isEmailNotVerified(error)) {
+      // Pushed, not gone to, so the form underneath keeps the photo and prompt.
+      unawaited(router.push('/verify-email'));
+      return;
+    }
     messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
   }
 }
