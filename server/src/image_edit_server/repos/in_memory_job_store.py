@@ -35,4 +35,4 @@ class InMemoryJobStore:
         self._store.pop(job_id, None)
 
     def list_queued(self) -> Iterable[Job]:
-        return [j for j in self._store.values() if j.status == JobStatus.queued]
+        return [j for j in list(self._store.values()) if j.status == JobStatus.queued]

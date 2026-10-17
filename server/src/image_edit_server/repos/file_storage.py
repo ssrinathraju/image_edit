@@ -34,3 +34,36 @@ def delete_inputs(job_id: str, storage_root: str | None = None) -> None:
     target = input_dir(job_id, storage_root)
     if target.exists():
         shutil.rmtree(target)
+
+
+def _root(storage_root: str | None) -> Path:
+    return Path(storage_root or _settings().STORAGE_ROOT)
+
+
+def list_output_files(storage_root: str | None = None) -> list[Path]:
+    """Generated images: regular `*.png` files directly in outputs/, never symlinks."""
+    folder = _root(storage_root) / "outputs"
+    if not folder.is_dir():
+        return []
+    return [
+        entry
+        for entry in folder.iterdir()
+        if entry.suffix == ".png" and entry.is_file() and not entry.is_symlink()
+    ]
+
+
+def list_input_job_ids(storage_root: str | None = None) -> list[str]:
+    """Job ids that have a reference-face folder: real directories directly in inputs/."""
+    folder = _root(storage_root) / "inputs"
+    if not folder.is_dir():
+        return []
+    return [
+        entry.name
+        for entry in folder.iterdir()
+        if entry.is_dir() and not entry.is_symlink()
+    ]
+
+
+def delete_output(job_id: str, storage_root: str | None = None) -> None:
+    """Remove outputs/<job_id>.png if it exists."""
+    output_path(job_id, storage_root).unlink(missing_ok=True)

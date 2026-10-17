@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -29,6 +29,7 @@ from image_edit_server.services.account_cleanup import purge_user_jobs
 from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
+from image_edit_server.services.retention_service import run_retention, sweep
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
 
@@ -79,6 +80,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if interrupted:
             logger.info("Refunded %d interrupted generation(s)", interrupted)
 
+        # Deletes images past their retention and faces left by a lost run, so
+        # nothing stale is served. A failure must not stop the server starting;
+        # the periodic task retries.
+        try:
+            await sweep(store, cfg, datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Startup retention sweep failed")
+
         workers = [
             asyncio.create_task(run_worker(
                 store,
@@ -90,10 +99,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ))
             for _ in range(cfg.JOB_CONCURRENCY)
         ]
+        retention = asyncio.create_task(run_retention(store, cfg))
         yield
-        for w in workers:
+        for w in [*workers, retention]:
             w.cancel()
-        await asyncio.gather(*workers, return_exceptions=True)
+        await asyncio.gather(*workers, retention, return_exceptions=True)
         user_store.close()
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)

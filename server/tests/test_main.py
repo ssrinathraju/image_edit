@@ -71,3 +71,75 @@ def test_generations_lost_to_a_restart_are_refunded_at_startup(tmp_path, templat
 
     assert usage["used_today"] == 0
     assert usage["remaining"] == 3
+
+
+def _age(path, hours):
+    import os
+    import time
+
+    stamp = time.time() - hours * 3600
+    os.utime(path, (stamp, stamp))
+
+
+def test_startup_sweep_runs_before_the_first_request(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    root = tmp_path / "s"
+    (root / "outputs").mkdir(parents=True)
+    (root / "inputs" / "lost-job").mkdir(parents=True)
+    (root / "inputs" / "lost-job" / "face_0.jpg").write_bytes(b"face")
+    old, fresh = root / "outputs" / "old.png", root / "outputs" / "fresh.png"
+    old.write_bytes(b"x")
+    fresh.write_bytes(b"x")
+    _age(old, 48)
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(root))
+
+    with TestClient(create_app(settings)):
+        # Entering the context ran startup; no request has been made yet.
+        assert not old.exists()
+        assert fresh.exists()
+        assert not (root / "inputs" / "lost-job").exists()
+
+
+def test_a_failing_startup_sweep_does_not_stop_the_app(tmp_path, templates_dir, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    async def broken_sweep(*args, **kwargs):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr("image_edit_server.main.sweep", broken_sweep)
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/templates").status_code == 200
+
+
+def test_the_retention_task_is_cancelled_on_shutdown(tmp_path, templates_dir, monkeypatch):
+    import asyncio
+
+    from fastapi.testclient import TestClient
+
+    events = []
+
+    async def fake_retention(store, cfg):
+        events.append("started")
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            events.append("cancelled")
+            raise
+
+    monkeypatch.setattr("image_edit_server.main.run_retention", fake_retention)
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with TestClient(create_app(settings)):
+        pass
+
+    assert events == ["started", "cancelled"]
+
+
+def test_invalid_retention_settings_stop_the_server_from_starting():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="OUTPUT_RETENTION_HOURS"):
+        Settings(OUTPUT_RETENTION_HOURS=0)

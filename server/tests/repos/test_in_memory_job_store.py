@@ -62,3 +62,32 @@ def test_delete_removes_the_job_and_ignores_unknown_ids(store):
     store.delete("does-not-exist")
 
     assert store.get(job_id) is None
+
+
+def test_list_queued_survives_concurrent_creates_and_deletes(store):
+    import threading
+
+    stop = threading.Event()
+    errors: list = []
+
+    def churn():
+        while not stop.is_set():
+            job_id = store.create(Job(id="", prompt="x"))
+            store.delete(job_id)
+
+    def read():
+        try:
+            for _ in range(5000):
+                store.list_queued()
+        except Exception as error:  # pragma: no cover - the failure being guarded
+            errors.append(error)
+
+    writer = threading.Thread(target=churn)
+    writer.start()
+    try:
+        read()
+    finally:
+        stop.set()
+        writer.join()
+
+    assert errors == []

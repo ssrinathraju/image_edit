@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 from image_edit_server.configs.settings import Settings
 
 
@@ -22,6 +23,22 @@ def test_auth_defaults():
     assert s.PASSWORD_MAX_CHARS == 128
     assert s.LOGIN_MAX_FAILURES == 5
     assert s.LOGIN_LOCKOUT_MINUTES == 15
+
+
+def test_retention_defaults_and_override(monkeypatch):
+    s = Settings()
+    assert s.OUTPUT_RETENTION_HOURS == 24
+    assert s.RETENTION_SWEEP_MINUTES == 10
+    monkeypatch.setenv("IMAGE_EDIT_RETENTION_SWEEP_MINUTES", "30")
+    assert Settings().RETENTION_SWEEP_MINUTES == 30
+
+
+@pytest.mark.parametrize(
+    "field", ["OUTPUT_RETENTION_HOURS", "RETENTION_SWEEP_MINUTES"]
+)
+def test_retention_settings_below_one_are_rejected_by_name(field):
+    with pytest.raises(ValidationError, match=field):
+        Settings(**{field: 0})
 
 
 def test_plan_and_referral_defaults():

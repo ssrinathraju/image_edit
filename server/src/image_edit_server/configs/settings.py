@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +13,8 @@ class Settings(BaseSettings):
     MIN_FACES: int = 1
     MAX_PROMPT_CHARS: int = 500
     JOB_CONCURRENCY: int = 1
-    OUTPUT_RETENTION_HOURS: int = 24
+    OUTPUT_RETENTION_HOURS: int = Field(default=24, ge=1)
+    RETENTION_SWEEP_MINUTES: int = Field(default=10, ge=1)
     ACCEPTED_IMAGE_TYPES: str = "image/jpeg,image/png,image/webp"
 
     TEMPLATES_DIR: str = "./seed/templates"
