@@ -44,6 +44,7 @@ For `server/src/image_edit_server/services/foo.py`, tests live at `server/tests/
 - Spec changes go through OpenSpec. Flow: `propose → apply → archive`. Do not edit `openspec/specs/*.md` directly — write a change delta.
 - Do not install `torch`, `diffusers`, `transformers`, or any model weights except as part of a specific OpenSpec change that commits to a model pipeline.
 - Secrets never land in the repo. `.env` files are gitignored; `.env.example` is checked in.
+- Delivery swarm (one feature at a time, never in parallel): `/prod-pm <idea>` (Opus, interactive) writes the OpenSpec change; the user confirms it; `/swarm <change>` runs the `engineer` (Sonnet) and `reviewer` (Opus) agents, at most 3 rounds, and stops at the reviewer's approval; the user merges the PR; `/swarm-archive <change>` archives it on `archive/spec-<change>`, reviewed the same way, and the user merges that too. Agents never merge or push `main`. Definitions live in `.claude/agents/` and `.claude/commands/`.
 
 ## 5. When rules bite
 
