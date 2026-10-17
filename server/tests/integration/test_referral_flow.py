@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import DEFAULT_PASSWORD, RecordingSender
+from tests.helpers import DEFAULT_PASSWORD, RecordingSender, forget_recent_sends
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
@@ -75,24 +75,11 @@ def test_referral_pays_both_only_after_the_friend_verifies(app_client, sender):
     assert (usage["used_today"], usage["bonus_credits"]) == (3, 4)
 
 
-def _user_store(client):
-    from image_edit_server.api.deps import get_user_store
-
-    return client.app.dependency_overrides[get_user_store]()
-
-
-def _forget_recent_sends(client) -> None:
-    """Stand in for a minute passing, so the next code email is not rate limited."""
-    users = _user_store(client)
-    users._conn.execute("DELETE FROM email_sends")
-    users._conn.commit()
-
-
 def test_a_later_password_reset_pays_nothing_more(app_client, sender):
     a = _register_verified(app_client, sender, "a@example.com")
     code = _me(app_client, a)["referral"]["code"]
     _register_verified(app_client, sender, "b@example.com", code)
-    _forget_recent_sends(app_client)
+    forget_recent_sends(app_client)
 
     app_client.post("/auth/password-reset/request", json={"email": "b@example.com"})
     resp = app_client.post(

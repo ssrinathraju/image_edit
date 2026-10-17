@@ -81,12 +81,12 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 5. Server: password reset
 
-- [ ] 5.1 Add `POST /auth/password-reset/request`, following Decision 7: format check, then `issue_code` only for an existing account, a scheduled send, and always 202 `{}`. Verify `tests/api/test_password_reset.py` covers:
+- [x] 5.1 Add `POST /auth/password-reset/request`, following Decision 7: format check, then `issue_code` only for an existing account, a scheduled send, and always 202 `{}`. Verify `tests/api/test_password_reset.py` covers:
   - a registered email in mixed case receiving a code;
   - an unknown email getting a byte-identical response and no email;
   - a limited request getting a byte-identical response and no email;
   - a malformed email getting 400 `invalid_credentials_format`.
-- [ ] 5.2 Add `POST /auth/password-reset/confirm`, following Decision 6. Verify `tests/api/test_password_reset.py` covers:
+- [x] 5.2 Add `POST /auth/password-reset/confirm`, following Decision 6. Verify `tests/api/test_password_reset.py` covers:
   - success returning a working token;
   - the new password logging in and the old one getting 401;
   - both earlier sessions being revoked;
@@ -94,7 +94,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
   - a lockout being cleared;
   - unknown email, wrong code and expired code all giving the identical 400 `invalid_code`;
   - 5 weak-password requests followed by a valid one succeeding.
-- [ ] 5.3 Add `tests/integration/test_account_recovery_flow.py` using the real app with a recording sender: register, request a reset, read the code from the sender, confirm, log in with the new password, and confirm that the earlier token gets 401. Verify that the test passes.
+- [x] 5.3 Add `tests/integration/test_account_recovery_flow.py` using the real app with a recording sender: register, request a reset, read the code from the sender, confirm, log in with the new password, and confirm that the earlier token gets 401. Verify that the test passes.
 
 ## 6. Server: generation gate
 

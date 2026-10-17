@@ -66,6 +66,15 @@ class FakeClock:
         self.now += timedelta(**kwargs)
 
 
+def forget_recent_sends(client) -> None:
+    """Stand in for a minute passing on a real-clock app, so the next code email is not limited."""
+    from image_edit_server.api.deps import get_user_store
+
+    users = client.app.dependency_overrides[get_user_store]()
+    users._conn.execute("DELETE FROM email_sends")
+    users._conn.commit()
+
+
 def verify_account(user_store, email: str) -> None:
     """Mark an account's email verified directly in the store."""
     user = user_store.get_by_email(email)
