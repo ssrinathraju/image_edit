@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException
 
+from image_edit_server.configs.settings import Settings
 from image_edit_server.core.user_store import UserStore
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
@@ -12,6 +13,10 @@ from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 
 BEARER_PREFIX = "bearer "
+
+
+def get_settings() -> Settings:
+    raise RuntimeError("settings are not configured; override get_settings")
 
 
 def get_user_store() -> UserStore:
@@ -48,6 +53,7 @@ def get_bearer_token(authorization: Annotated[Optional[str], Header()] = None) -
 
 
 TokenDep = Annotated[str, Depends(get_bearer_token)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 UserStoreDep = Annotated[UserStore, Depends(get_user_store)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 QuotaDep = Annotated[QuotaService, Depends(get_quota_service)]
