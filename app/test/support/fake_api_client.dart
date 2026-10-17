@@ -26,12 +26,22 @@ class FakeApiClient implements GenerationApiClient {
   Future<UserProfile> Function() onFetchMe =
       () async => const UserProfile(id: 'user-1', email: 'ana@example.com');
   Future<void> Function(String password) onDeleteAccount = (_) async {};
+  Future<void> Function(String code) onVerifyEmail = (_) async {};
+  Future<void> Function() onResendVerification = () async {};
+  Future<void> Function(String email) onRequestPasswordReset = (_) async {};
+  Future<Session> Function(String email, String code, String newPassword)
+      onConfirmPasswordReset = (email, _, _) async =>
+          Session(token: 'token-reset', userId: 'user-1', email: email);
 
   final queries = <String?>[];
   final registered = <String>[];
   final loggedIn = <String>[];
   var logoutCalls = 0;
   final deletedWith = <String>[];
+  final verifiedWith = <String>[];
+  var resendCalls = 0;
+  final resetRequestedFor = <String>[];
+  final resetConfirmed = <List<String>>[];
   final submitted = <GenerationRequest>[];
   final statusCalls = <String>[];
 
@@ -90,6 +100,34 @@ class FakeApiClient implements GenerationApiClient {
     deletedWith.add(password);
     return onDeleteAccount(password);
   }
+
+  @override
+  Future<void> verifyEmail({required String code}) {
+    verifiedWith.add(code);
+    return onVerifyEmail(code);
+  }
+
+  @override
+  Future<void> resendVerification() {
+    resendCalls++;
+    return onResendVerification();
+  }
+
+  @override
+  Future<void> requestPasswordReset({required String email}) {
+    resetRequestedFor.add(email);
+    return onRequestPasswordReset(email);
+  }
+
+  @override
+  Future<Session> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) {
+    resetConfirmed.add([email, code, newPassword]);
+    return onConfirmPasswordReset(email, code, newPassword);
+  }
 }
 
 TemplateSummary fakeTemplate(String id, {String? title, List<String> tags = const []}) =>
@@ -109,10 +147,12 @@ UserProfile fakeProfile({
   int rewards = 0,
   String code = 'K7M2QX9P',
   DateTime? resetsAt,
+  bool emailVerified = true,
 }) =>
     UserProfile(
       id: 'user-1',
       email: 'ana@example.com',
+      emailVerified: emailVerified,
       plan: plan,
       usage: Usage(
         dailyLimit: dailyLimit,

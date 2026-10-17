@@ -209,6 +209,53 @@ void main() {
       expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
     });
 
+    test('verifyEmail and resendVerification post to the documented routes', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+      final client = _client(adapter);
+
+      await client.verifyEmail(code: '123456');
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/auth/verify-email');
+      expect(adapter.last!.data, {'code': '123456'});
+
+      await client.resendVerification();
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/auth/verify-email/resend');
+    });
+
+    test('requestPasswordReset posts the email', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).requestPasswordReset(email: 'a@b.co');
+
+      expect(adapter.last!.path, '/auth/password-reset/request');
+      expect(adapter.last!.data, {'email': 'a@b.co'});
+    });
+
+    test('confirmPasswordReset posts the code and parses the new session', () async {
+      final adapter = _FakeAdapter({
+        'token': 'fresh',
+        'id': 'u',
+        'email': 'a@b.co',
+        'email_verified': true,
+      });
+
+      final session = await _client(adapter).confirmPasswordReset(
+        email: 'a@b.co',
+        code: '123456',
+        newPassword: 'new password 1',
+      );
+
+      expect(adapter.last!.path, '/auth/password-reset/confirm');
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'code': '123456',
+        'new_password': 'new password 1',
+      });
+      expect(session.token, 'fresh');
+      expect(session.emailVerified, isTrue);
+    });
+
     test('logout, fetchMe and deleteAccount hit the documented routes', () async {
       final adapter = _FakeAdapter({'id': 'u', 'email': 'a@b.co'});
       final client = _client(adapter);

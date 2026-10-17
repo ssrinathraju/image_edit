@@ -123,7 +123,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 8. App: schemas, client, errors
 
-- [ ] 8.1 Add `emailVerified` to `Session`/`AuthResponse` parsing and to `UserProfile`, defaulting to `true` when absent. Add `verifyEmail`, `resendVerification`, `requestPasswordReset` and `confirmPasswordReset` to `core/api_client.dart`. Add the five error codes and the `Retry-After` parsing to `core/api_errors.dart`. Verify:
+- [x] 8.1 Add `emailVerified` to `Session`/`AuthResponse` parsing and to `UserProfile`, defaulting to `true` when absent. Add `verifyEmail`, `resendVerification`, `requestPasswordReset` and `confirmPasswordReset` to `core/api_client.dart`. Add the five error codes and the `Retry-After` parsing to `core/api_errors.dart`. Verify:
   - `test/schemas/account_test.dart` covers both the present and absent cases;
   - `test/core/api_client_test.dart` covers each request's path and body and the reset-confirm session parsing;
   - `test/core/api_errors_test.dart` covers each code and `Retry-After`.
