@@ -61,3 +61,17 @@ def test_a_client_cannot_choose_its_plan(anon_client, user_store):
     )
 
     assert anon_client.get("/me", headers=headers).json()["plan"] == "free"
+
+
+def test_me_reports_unverified_then_verified(unverified_client, user_store):
+    assert unverified_client.get("/me").json()["email_verified"] is False
+
+    user_store.mark_email_verified(unverified_client.get("/me").json()["id"], 0, 0)
+
+    assert unverified_client.get("/me").json()["email_verified"] is True
+
+
+def test_me_never_contains_a_code(unverified_client, sender):
+    code = sender.last_code("una@example.com")
+
+    assert code not in unverified_client.get("/me").text

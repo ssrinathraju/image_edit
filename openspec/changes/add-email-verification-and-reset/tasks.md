@@ -8,7 +8,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 - [x] 1.2 Add `core/email_sender.py` (the `EmailSender` protocol), `services/email/log_sender.py` and `services/email/smtp_sender.py` (stdlib `smtplib`, `starttls`/`ssl`/`none`, 10-second timeout, login only when a username is set). Verify:
   - `tests/services/email/test_log_sender.py` checks with `caplog` that recipient, subject and body are logged.
   - `tests/services/email/test_smtp_sender.py` replaces `smtplib.SMTP`/`SMTP_SSL` with a fake and checks host, port, STARTTLS use, login, and the sent message's `From`/`To`/`Subject`/body for each security mode.
-- [ ] 1.3 Make the sender injectable in the app factory in `main.py`. Choose the SMTP sender when `SMTP_HOST` is set, otherwise the log sender, and log a startup warning when the log sender is chosen. Verify `tests/test_main.py` covers both choices, the warning, and an injected sender being used.
+- [x] 1.3 Make the sender injectable in the app factory in `main.py`. Choose the SMTP sender when `SMTP_HOST` is set, otherwise the log sender, and log a startup warning when the log sender is chosen. Verify `tests/test_main.py` covers both choices, the warning, and an injected sender being used.
 
 ## 2. Server: schema migration and store operations
 
@@ -58,19 +58,19 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 4. Server: registration, verification and `/me`
 
-- [ ] 4.1 Wire registration to issue a verification code and schedule `deliver` with `BackgroundTasks`. Add `email_verified` to `AuthResponse` (register, login) and `MeResponse`. Verify `tests/api/test_auth.py` and `tests/api/test_me.py` cover:
+- [x] 4.1 Wire registration to issue a verification code and schedule `deliver` with `BackgroundTasks`. Add `email_verified` to `AuthResponse` (register, login) and `MeResponse`. Verify `tests/api/test_auth.py` and `tests/api/test_me.py` cover:
   - register returning `email_verified: false` and the injected recording sender receiving one email with a 6-digit code;
   - login reporting the status;
   - `/me` reporting false, then true after verification;
   - no response containing the code.
-- [ ] 4.2 Add `POST /auth/verify-email` and `POST /auth/verify-email/resend` to `api/auth.py` and `auth_service.py`, following the specs. Map:
+- [x] 4.2 Add `POST /auth/verify-email` and `POST /auth/verify-email/resend` to `api/auth.py` and `auth_service.py`, following the specs. Map:
   - `wrong` to 400 `invalid_code`;
   - `expired` to 400 `code_expired`;
   - an already verified account to 409 `already_verified`;
   - `limited` to 429 `too_many_requests` with `Retry-After`.
 
   Verify `tests/api/test_email_verification.py` covers every scenario in the `user-auth` delta for these two requirements, plus 401 without a session.
-- [ ] 4.3 Update `tests/integration/test_referral_flow.py`:
+- [x] 4.3 Update `tests/integration/test_referral_flow.py`:
   - A registers, and B registers with A's code and does not verify: both have 0 bonus.
   - B verifies with the code captured from the recording sender: both have 5.
   - B later resets the password: no further bonus.

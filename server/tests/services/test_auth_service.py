@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.repos.user_store import SqliteUserStore
 from image_edit_server.services.auth_service import AuthService
+from tests.helpers import RecordingSender
 
 PASSWORD = "correct horse battery"
 
@@ -17,6 +18,10 @@ class Clock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+def _register(auth, email, password, referral_code=None):
+    return auth.register(email, password, referral_code, BackgroundTasks())
 
 
 @pytest.fixture
@@ -35,7 +40,7 @@ def auth(users, purged) -> AuthService:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
-    return AuthService(users, throttle, settings, purged.append)
+    return AuthService(users, throttle, settings, purged.append, RecordingSender())
 
 
 def _error(excinfo) -> tuple[int, str]:
@@ -43,29 +48,29 @@ def _error(excinfo) -> tuple[int, str]:
 
 
 def test_register_returns_token_that_resolves_to_the_user(auth, users):
-    token, user = auth.register("ana@example.com", PASSWORD)
+    token, user = _register(auth, "ana@example.com", PASSWORD)
 
     assert users.get_user_by_session(token) == user
 
 
 def test_register_stores_email_lowercase_and_trimmed(auth):
-    _, user = auth.register("  Ana@Example.COM ", PASSWORD)
+    _, user = _register(auth, "  Ana@Example.COM ", PASSWORD)
 
     assert user.email == "ana@example.com"
 
 
 def test_register_duplicate_in_other_case_is_409(auth):
-    auth.register("ana@example.com", PASSWORD)
+    _register(auth, "ana@example.com", PASSWORD)
 
     with pytest.raises(HTTPException) as excinfo:
-        auth.register("ANA@example.com", PASSWORD)
+        _register(auth, "ANA@example.com", PASSWORD)
 
     assert _error(excinfo) == (409, "email_taken")
 
 
 def test_register_short_password_is_400_and_creates_nothing(auth, users):
     with pytest.raises(HTTPException) as excinfo:
-        auth.register("ana@example.com", "short")
+        _register(auth, "ana@example.com", "short")
 
     assert _error(excinfo) == (400, "invalid_credentials_format")
     assert users.get_by_email("ana@example.com") is None
@@ -74,20 +79,20 @@ def test_register_short_password_is_400_and_creates_nothing(auth, users):
 @pytest.mark.parametrize("email", ["not-an-email", "a@b", "a b@c.com", "", "a@" + "x" * 260 + ".com"])
 def test_register_malformed_email_is_400(auth, email):
     with pytest.raises(HTTPException) as excinfo:
-        auth.register(email, PASSWORD)
+        _register(auth, email, PASSWORD)
 
     assert _error(excinfo) == (400, "invalid_credentials_format")
 
 
 def test_register_overlong_password_is_400(auth):
     with pytest.raises(HTTPException) as excinfo:
-        auth.register("ana@example.com", "x" * 129)
+        _register(auth, "ana@example.com", "x" * 129)
 
     assert _error(excinfo) == (400, "invalid_credentials_format")
 
 
 def test_login_with_correct_password_returns_a_session(auth, users):
-    auth.register("ana@example.com", PASSWORD)
+    _register(auth, "ana@example.com", PASSWORD)
 
     token, user = auth.login("Ana@example.com", PASSWORD)
 
@@ -95,7 +100,7 @@ def test_login_with_correct_password_returns_a_session(auth, users):
 
 
 def test_wrong_password_and_unknown_email_are_indistinguishable(auth):
-    auth.register("ana@example.com", PASSWORD)
+    _register(auth, "ana@example.com", PASSWORD)
 
     with pytest.raises(HTTPException) as wrong_password:
         auth.login("ana@example.com", "wrong password")
@@ -108,7 +113,7 @@ def test_wrong_password_and_unknown_email_are_indistinguishable(auth):
 
 
 def test_sixth_attempt_is_throttled_even_with_the_right_password(auth):
-    auth.register("ana@example.com", PASSWORD)
+    _register(auth, "ana@example.com", PASSWORD)
     for _ in range(5):
         with pytest.raises(HTTPException):
             auth.login("ana@example.com", "wrong password")
@@ -120,7 +125,7 @@ def test_sixth_attempt_is_throttled_even_with_the_right_password(auth):
 
 
 def test_success_resets_the_failure_count(auth):
-    auth.register("ana@example.com", PASSWORD)
+    _register(auth, "ana@example.com", PASSWORD)
     for _ in range(2):
         with pytest.raises(HTTPException):
             auth.login("ana@example.com", "wrong password")
@@ -136,7 +141,7 @@ def test_success_resets_the_failure_count(auth):
 
 
 def test_logout_revokes_only_that_session(auth, users):
-    first, user = auth.register("ana@example.com", PASSWORD)
+    first, user = _register(auth, "ana@example.com", PASSWORD)
     second, _ = auth.login("ana@example.com", PASSWORD)
 
     auth.logout(first)
@@ -146,7 +151,7 @@ def test_logout_revokes_only_that_session(auth, users):
 
 
 def test_delete_with_wrong_password_deletes_nothing(auth, users, purged):
-    token, user = auth.register("ana@example.com", PASSWORD)
+    token, user = _register(auth, "ana@example.com", PASSWORD)
 
     with pytest.raises(HTTPException) as excinfo:
         auth.delete_account(user, "wrong password")
@@ -157,7 +162,7 @@ def test_delete_with_wrong_password_deletes_nothing(auth, users, purged):
 
 
 def test_delete_with_right_password_removes_user_sessions_and_jobs(auth, users, purged):
-    token, user = auth.register("ana@example.com", PASSWORD)
+    token, user = _register(auth, "ana@example.com", PASSWORD)
 
     auth.delete_account(user, PASSWORD)
 
@@ -175,8 +180,9 @@ def test_delete_removes_the_user_before_purging_their_jobs(users):
         throttle,
         settings,
         lambda user_id: seen.append(users.get_by_id(user_id)),
+        RecordingSender(),
     )
-    _, user = auth.register("ana@example.com", PASSWORD)
+    _, user = _register(auth, "ana@example.com", PASSWORD)
 
     auth.delete_account(user, PASSWORD)
 
@@ -184,7 +190,7 @@ def test_delete_removes_the_user_before_purging_their_jobs(users):
 
 
 def test_wrong_password_attempts_on_delete_are_throttled(auth, users, purged):
-    token, user = auth.register("ana@example.com", PASSWORD)
+    token, user = _register(auth, "ana@example.com", PASSWORD)
     for _ in range(5):
         with pytest.raises(HTTPException) as wrong:
             auth.delete_account(user, "wrong password")
@@ -199,7 +205,7 @@ def test_wrong_password_attempts_on_delete_are_throttled(auth, users, purged):
 
 
 def test_delete_and_login_share_the_same_failure_count(auth):
-    _, user = auth.register("ana@example.com", PASSWORD)
+    _, user = _register(auth, "ana@example.com", PASSWORD)
     for _ in range(3):
         with pytest.raises(HTTPException):
             auth.login("ana@example.com", "wrong password")

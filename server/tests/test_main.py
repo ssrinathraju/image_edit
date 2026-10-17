@@ -175,3 +175,31 @@ def test_smtp_sender_is_chosen_with_smtp_host_and_does_not_warn(tmp_path, templa
 
     assert isinstance(sender, SmtpSender)
     assert "NOT delivered" not in caplog.text
+
+
+def test_an_injected_sender_receives_the_registration_email(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    sender = RecordingSender()
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with TestClient(create_app(settings, sender=sender)) as client:
+        register_headers(client, "ana@example.com")
+
+    assert sender.count_for("ana@example.com") == 1
+
+
+def test_without_smtp_the_code_is_in_the_server_log(tmp_path, templates_dir, caplog):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with caplog.at_level("INFO"), TestClient(create_app(settings)) as client:
+        register_headers(client, "ana@example.com")
+
+    assert "ana@example.com" in caplog.text
+    assert "verification code is" in caplog.text

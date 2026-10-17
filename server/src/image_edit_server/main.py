@@ -80,6 +80,7 @@ def create_app(
         LoginThrottle(cfg.LOGIN_MAX_FAILURES, timedelta(minutes=cfg.LOGIN_LOCKOUT_MINUTES)),
         cfg,
         lambda user_id: purge_user_jobs(user_id, store, cfg.STORAGE_ROOT),
+        email_sender,
     )
 
     quota_service = QuotaService(user_store, cfg)
