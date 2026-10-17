@@ -32,4 +32,4 @@ Work on branch `feat/enforce-output-retention`. Do not push to `main`; open a PR
 
 - [x] 7.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/` (no app files should change); verify all pass, then run `openspec validate enforce-output-retention --strict`
 - [x] 7.2 Manual run against a copy of a real `storage/` folder that has old outputs: start the server and confirm the old images are removed at startup, a freshly generated image is served, `curl` on an expired URL gives 404, and the log line reports the counts. Leave this box unchecked if it could not be run and say so in the PR
-- [ ] 7.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 7.2 were exercised, including the first-start deletion warning
+- [x] 7.3 Push the branch and open a PR to `main` with a summary, the test plan, and which steps of 7.2 were exercised, including the first-start deletion warning
