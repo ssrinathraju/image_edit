@@ -153,7 +153,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 10. Integration and hand-off
 
-- [ ] 10.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
+- [x] 10.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
 - [ ] 10.2 **Manual. Needs the Google Cloud OAuth clients, the Apple Developer App ID and key, and final bundle IDs.** Configure the server settings, the app `.env` and the xcconfig, then check:
   - iOS simulator or device:
     - Continue with Google creates an account and shows the referral prompt.
