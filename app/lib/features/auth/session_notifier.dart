@@ -24,6 +24,18 @@ final sessionTokenHolderProvider =
 /// saved session is being checked, and an error means it could not be checked.
 class SessionNotifier extends AsyncNotifier<Session?> {
   bool _restoring = false;
+  bool _justRegistered = false;
+
+  /// True between registering and the Verify email screen opening, so the
+  /// router can send a new account there instead of home.
+  bool get justRegistered => _justRegistered;
+
+  /// Reads and clears [justRegistered]; the Verify screen calls it when it opens.
+  bool takeJustRegistered() {
+    final value = _justRegistered;
+    _justRegistered = false;
+    return value;
+  }
 
   @override
   Future<Session?> build() async {
@@ -64,6 +76,22 @@ class SessionNotifier extends AsyncNotifier<Session?> {
           email: email,
           password: password,
           referralCode: referralCode,
+        );
+    _justRegistered = true;
+    await _start(session);
+  }
+
+  /// Sets a new password with an emailed code and signs in with the fresh
+  /// session; a rejected code throws and leaves the user signed out.
+  Future<void> completePasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final session = await ref.read(apiClientProvider).confirmPasswordReset(
+          email: email,
+          code: code,
+          newPassword: newPassword,
         );
     await _start(session);
   }

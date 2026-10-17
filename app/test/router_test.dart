@@ -126,4 +126,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('K7M2QX9P'), findsOneWidget);
   });
+
+  testWidgets('registration lands on the Verify email screen', (tester) async {
+    await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    await tester.tap(find.text('Create an account'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Verify email'), findsOneWidget);
+    expect(find.text('Trending'), findsNothing);
+  });
+
+  testWidgets('signing in lands on home, not the Verify email screen', (tester) async {
+    await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'ana@example.com');
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trending'), findsOneWidget);
+    expect(find.text('Verify email'), findsNothing);
+  });
+
+  testWidgets('a signed-out user may open the forgot and reset password pages', (tester) async {
+    final container = await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    container.read(routerProvider).go('/forgot-password');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Send code'), findsOneWidget);
+
+    container.read(routerProvider).go('/reset-password?email=ana%40example.com');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Reset password'), findsOneWidget);
+    expect(find.textContaining('ana@example.com'), findsOneWidget);
+  });
+
+  testWidgets('a signed-out visit to Verify email redirects to sign-in', (tester) async {
+    final container = await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    container.read(routerProvider).go('/verify-email');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(find.text('Verify email'), findsNothing);
+  });
+
+  testWidgets('a signed-in user opening the reset page is sent home', (tester) async {
+    final container = await pumpApp(
+      tester,
+      client: client,
+      storage: FakeSessionStorage(savedSession),
+    );
+
+    container.read(routerProvider).go('/reset-password?email=ana%40example.com');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trending'), findsOneWidget);
+  });
 }

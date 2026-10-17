@@ -130,25 +130,25 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 9. App: verification flow
 
-- [ ] 9.1 Add `justRegistered` to `SessionNotifier`. Update `router.dart`: add the three routes, the signed-out allow-list, and the redirect to `/verify-email` after registration, following Decision 10. Verify `test/router_test.dart` covers:
+- [x] 9.1 Add `justRegistered` to `SessionNotifier`. Update `router.dart`: add the three routes, the signed-out allow-list, and the redirect to `/verify-email` after registration, following Decision 10. Verify `test/router_test.dart` covers:
   - registration landing on `/verify-email`;
   - login landing on `/`;
   - a signed-out visit to `/forgot-password` and `/reset-password` being allowed;
   - a signed-out visit to `/verify-email` redirecting to `/login`.
-- [ ] 9.2 Add `features/auth/verify_email_screen.dart` (code field, submit, Resend with countdown, Later) with the states in the Decision 10 table. Verify `test/features/auth/verify_email_screen_test.dart` covers:
+- [x] 9.2 Add `features/auth/verify_email_screen.dart` (code field, submit, Resend with countdown, Later) with the states in the Decision 10 table. Verify `test/features/auth/verify_email_screen_test.dart` covers:
   - submit disabled until 6 digits;
   - success refreshing the account and going home;
   - `invalid_code`, `code_expired` and 429 messages;
   - Resend disabled during the countdown and enabled after it, using a fake clock or `tester.pump(Duration)`;
   - Later going home.
-- [ ] 9.3 Add the verification banner to `home_screen.dart`, and handle `email_not_verified` in `features/common/submit_flow.dart` by pushing `/verify-email`. Verify:
+- [x] 9.3 Add the verification banner to `home_screen.dart`, and handle `email_not_verified` in `features/common/submit_flow.dart` by pushing `/verify-email`. Verify:
   - `test/features/home/home_screen_test.dart` covers the banner being shown when unverified, hidden when verified and hidden while loading, and the tap navigating.
   - `test/features/common/submit_flow_test.dart` covers the Verify screen opening on 403 and the photo and prompt being kept after returning.
 
 ## 10. App: password reset flow
 
-- [ ] 10.1 Add the Forgot password link to `login_screen.dart`, passing the typed email. Add `features/auth/forgot_password_screen.dart`. Verify `test/features/auth/forgot_password_screen_test.dart` covers the prefilled email, submit navigating to `/reset-password?email=…` with the "if an account exists" text, and the malformed-email error.
-- [ ] 10.2 Add `features/auth/reset_password_screen.dart`: code, new password, the short-password inline message, Resend with countdown, and storing the session on success. Verify `test/features/auth/reset_password_screen_test.dart` covers success storing the session, `invalid_code` keeping the values, a short password disabling submit, and Resend calling the request endpoint.
+- [x] 10.1 Add the Forgot password link to `login_screen.dart`, passing the typed email. Add `features/auth/forgot_password_screen.dart`. Verify `test/features/auth/forgot_password_screen_test.dart` covers the prefilled email, submit navigating to `/reset-password?email=…` with the "if an account exists" text, and the malformed-email error.
+- [x] 10.2 Add `features/auth/reset_password_screen.dart`: code, new password, the short-password inline message, Resend with countdown, and storing the session on success. Verify `test/features/auth/reset_password_screen_test.dart` covers success storing the session, `invalid_code` keeping the values, a short password disabling submit, and Resend calling the request endpoint.
 
 ## 11. Integration and hand-off
 
