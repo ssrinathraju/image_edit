@@ -100,7 +100,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 6. Server: documentation
 
-- [ ] 6.1 Update `server/README.md` with:
+- [x] 6.1 Update `server/README.md` with:
   - the new settings and which Google client ID goes where (iOS, Android, web/server);
   - the Apple key setup and the revocation warning;
   - the three endpoints with curl examples (the provider tokens shown as placeholders);

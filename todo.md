@@ -51,3 +51,7 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
 - [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
 - [ ] **Manual passes never recorded for add-email-verification-and-reset** — tasks 11.2 (iOS simulator pass) and 11.3 (optional real SMTP send) were not run.
+
+## From add-social-sign-in
+
+- [ ] **Encrypt the stored Apple refresh token** — `identities.apple_refresh_token` is plain text in `app.db`. Someone holding the database can use it only to get Apple tokens that identify the user to this app, but encrypting it needs a key-management design.

@@ -155,6 +155,91 @@ account. To find a code, look for the line `Email not delivered, logged instead.
 in the server output. **Never use log mode for a deployment with real users:** anyone who can read
 the logs can take over any account.
 
+## Sign in with Google and Apple
+
+`POST /auth/oauth/google` and `POST /auth/oauth/apple` take a token the app got from the provider.
+The server checks it itself (signature against the provider's published keys, issuer, audience,
+expiry, and for Apple the nonce); the app's word is never trusted. A provider that is not
+configured answers `503 provider_not_configured`.
+
+- A linked identity signs in to its account (the account email never changes).
+- Otherwise, an account with the same email (any letter case) is linked and signed in; an
+  unverified password account becomes verified.
+- Otherwise a new account is created: verified, **no password**, with a referral code. Password
+  login on it fails exactly like a wrong password until the owner completes a password reset.
+- An account has at most one identity per provider.
+
+```bash
+# → 200 {"token": "...", "id": "...", "email": "...", "email_verified": true, "created": true}
+curl -X POST http://localhost:8000/auth/oauth/google \
+  -H "Content-Type: application/json" -d '{"id_token": "<GOOGLE_ID_TOKEN>"}'
+
+# `nonce` is the raw value the app generated; the token carries its SHA-256 hex digest.
+# `authorization_code` is exchanged for the refresh token that is revoked on deletion.
+curl -X POST http://localhost:8000/auth/oauth/apple \
+  -H "Content-Type: application/json" \
+  -d '{"identity_token": "<APPLE_IDENTITY_TOKEN>", "nonce": "<RAW_NONCE>", "authorization_code": "<APPLE_CODE>"}'
+
+# New provider accounts can redeem one referral code, within 24 hours of creation → 200 {}
+curl -X POST http://localhost:8000/me/referral \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"code": "K7M2QX9P"}'
+
+# Delete a provider-only account: confirm with a provider token issued in the last 5 minutes → 204
+curl -X DELETE http://localhost:8000/me \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"provider": "google", "token": "<FRESH_GOOGLE_ID_TOKEN>"}'
+# For Apple add the raw nonce: {"provider": "apple", "token": "<FRESH_APPLE_IDENTITY_TOKEN>", "nonce": "<RAW_NONCE>"}
+```
+
+`DELETE /me` takes exactly one form, either `{"password": ...}` or `{"provider": "google"|"apple",
+"token": ..., "nonce": ...}`; anything else is `422`. A wrong password or a provider token that is
+rejected, older than 5 minutes, or for another identity is `403` (`invalid_password` or
+`invalid_provider_token`).
+
+`GET /me` also returns `providers` (for example `["google"]`, sorted) and `has_password`.
+
+New error codes: `401 invalid_provider_token` (sign-in), `403 invalid_provider_token` (deletion),
+`400 provider_email_unverified`, `400 provider_email_missing`, `409 provider_already_linked`,
+`409 referral_not_allowed`, `503 provider_not_configured`, `503 provider_unavailable` (the
+provider's keys could not be fetched).
+
+**Settings.** `IMAGE_EDIT_GOOGLE_CLIENT_IDS` is comma-separated and holds every audience the server
+accepts:
+
+- the **iOS** OAuth client ID: iOS tokens carry it as the audience;
+- the **web/server** OAuth client ID: Android tokens carry it as the audience when the app passes it
+  as `serverClientId`. The app's `GOOGLE_SERVER_CLIENT_ID` must be this same value;
+- the Android client ID is registered in the Google Cloud console (package name and SHA-1) but does
+  not appear in tokens, so it is not listed here.
+
+`IMAGE_EDIT_APPLE_BUNDLE_ID` is enough to accept Apple sign-in. Setting `APPLE_TEAM_ID`,
+`APPLE_KEY_ID` and `APPLE_PRIVATE_KEY_PATH` (the `.p8` file) as well turns on the authorization-code
+exchange and revocation. The server refuses to start if only some of the three key settings are
+set, if they are set without a bundle ID, or if the key file cannot be read.
+
+**Apple revocation warning.** App Store rules require revoking Apple's authorization when an account
+is deleted. Without the three key settings the server logs a startup warning, sign-in still works,
+and deletion cannot revoke anything. Revocation runs after the response and a failure is only
+logged. The Apple refresh token is stored in plain text in `app.db` (encrypting it is in `todo.md`).
+
+Provider tokens, authorization codes and refresh tokens are never logged or returned.
+
+**Console setup checklist.**
+
+Google Cloud:
+- [ ] Create a project and configure the OAuth consent screen.
+- [ ] Create an **iOS** OAuth client with the app's bundle ID; its reversed client ID goes in the
+      app's `GoogleSignIn.xcconfig`.
+- [ ] Create an **Android** OAuth client with the package name and the signing SHA-1 (debug and release).
+- [ ] Create a **Web** OAuth client; its ID is the app's `GOOGLE_SERVER_CLIENT_ID`.
+- [ ] Put the iOS and web client IDs in `IMAGE_EDIT_GOOGLE_CLIENT_IDS`.
+
+Apple Developer:
+- [ ] Enroll in the Apple Developer Program and create the App ID with the Sign in with Apple capability.
+- [ ] Create a Sign in with Apple key, download the `.p8` once, and note the Key ID and Team ID.
+- [ ] Set `IMAGE_EDIT_APPLE_BUNDLE_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_PATH`.
+- [ ] Set `APPLE_SIGN_IN=true` in the app's `.env`.
+
 ## Submit a generation job
 
 ```bash
@@ -241,6 +326,11 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_EMAIL_CODE_MAX_ATTEMPTS` | `5` | Wrong tries before a code is invalidated (minimum 1) |
 | `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one account (minimum 1) |
 | `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per account per hour (minimum 1) |
+| `IMAGE_EDIT_GOOGLE_CLIENT_IDS` | _(empty)_ | Comma-separated Google client IDs accepted as the token audience; empty disables Google sign-in |
+| `IMAGE_EDIT_APPLE_BUNDLE_ID` | _(empty)_ | App bundle ID, the Apple token audience; empty disables Apple sign-in |
+| `IMAGE_EDIT_APPLE_TEAM_ID` | _(empty)_ | Apple team ID; set with the next two or none |
+| `IMAGE_EDIT_APPLE_KEY_ID` | _(empty)_ | Key ID of the Sign in with Apple key |
+| `IMAGE_EDIT_APPLE_PRIVATE_KEY_PATH` | _(empty)_ | Path to the `.p8` key file; enables code exchange and revocation |
 
 ## Retention
 
