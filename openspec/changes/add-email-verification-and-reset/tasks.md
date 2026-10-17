@@ -152,7 +152,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 11. Integration and hand-off
 
-- [ ] 11.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and that the storage pollution check is unchanged. Then run `openspec validate add-email-verification-and-reset --strict`.
+- [x] 11.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and that the storage pollution check is unchanged. Then run `openspec validate add-email-verification-and-reset --strict`.
 - [ ] 11.2 **Manual.** On the iOS simulator, with a local server in log mode started on a copy of an existing `app.db`, check each of the following:
   - An old account is still verified and can generate.
   - Register a new account with a referral code: the app lands on Verify email, and the home banner shows after Later.
@@ -163,4 +163,4 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
   This box stays unticked until someone runs the whole list. Name any step that was not run in the PR.
 - [ ] 11.3 **Manual, optional.** Set `IMAGE_EDIT_SMTP_*` to a real or test SMTP account (for example Mailtrap or a Gmail app password), register, and confirm that the email arrives with the code. This box stays unticked unless it was actually run.
-- [ ] 11.4 Push `feat/add-email-verification-and-reset`. Verify with `git log origin/feat/add-email-verification-and-reset -1` that it matches the local HEAD.
+- [x] 11.4 Push `feat/add-email-verification-and-reset`. Verify with `git log origin/feat/add-email-verification-and-reset -1` that it matches the local HEAD.
