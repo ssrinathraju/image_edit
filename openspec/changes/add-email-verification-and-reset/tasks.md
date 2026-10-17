@@ -109,7 +109,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 7. Server: documentation
 
-- [ ] 7.1 Update `server/README.md` with:
+- [x] 7.1 Update `server/README.md` with:
   - the new settings and the SMTP setup;
   - log mode, with how to find a code in the log and the warning that it must not be used with real users;
   - the four endpoints with curl examples;
