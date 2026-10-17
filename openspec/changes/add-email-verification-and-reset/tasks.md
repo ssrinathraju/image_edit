@@ -50,7 +50,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 3. Server: email code service
 
-- [ ] 3.1 Add `services/email_code_service.py`: generate a code, hash it, call `issue_code`, and return the result. Add `deliver(sender, to, purpose, code)`, which composes the subject and body (Decision 9), sends, and catches and logs every exception without the code. Verify `tests/services/test_email_code_service.py` covers:
+- [x] 3.1 Add `services/email_code_service.py`: generate a code, hash it, call `issue_code`, and return the result. Add `deliver(sender, to, purpose, code)`, which composes the subject and body (Decision 9), sends, and catches and logs every exception without the code. Verify `tests/services/test_email_code_service.py` covers:
   - 6-digit output;
   - the body containing the code and the minutes;
   - `limited` being passed through with `retry_after`;
