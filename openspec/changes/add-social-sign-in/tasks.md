@@ -49,7 +49,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 3. Server: Apple code exchange and revocation
 
-- [ ] 3.1 Add `services/apple_revocation.py`, following Decision 4: build the client secret with ES256, `exchange_code(code) -> refresh_token | None`, and `revoke(token)`, all through an injectable `post(url, form) -> (status, body)` that uses `urllib.request` by default with a 10-second timeout. Every failure is logged without token or code text. Verify that `tests/services/test_apple_revocation.py`, using a generated EC P-256 key, covers:
+- [x] 3.1 Add `services/apple_revocation.py`, following Decision 4: build the client secret with ES256, `exchange_code(code) -> refresh_token | None`, and `revoke(token)`, all through an injectable `post(url, form) -> (status, body)` that uses `urllib.request` by default with a 10-second timeout. Every failure is logged without token or code text. Verify that `tests/services/test_apple_revocation.py`, using a generated EC P-256 key, covers:
   - the client-secret claims and header (`kid`, ES256);
   - a successful exchange returning the refresh token;
   - a non-200 or raising `post` returning None and logging without the code;
