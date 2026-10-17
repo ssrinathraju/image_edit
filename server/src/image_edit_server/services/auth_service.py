@@ -309,9 +309,16 @@ class AuthService:
         if not apple_token or self._apple_client is None:
             return
         if background is None:
-            self._apple_client.revoke(apple_token)
+            self._revoke_apple_token(apple_token)
         else:
-            background.add_task(self._apple_client.revoke, apple_token)
+            background.add_task(self._revoke_apple_token, apple_token)
+
+    def _revoke_apple_token(self, apple_token: str) -> None:
+        # Runs after the response; nothing may depend on it, so it never raises.
+        try:
+            self._apple_client.revoke(apple_token)
+        except Exception as error:
+            logger.warning("Apple revocation failed: %s", type(error).__name__)
 
     def _reject_if_locked(self, email: str) -> None:
         if self._throttle.is_locked(email):

@@ -78,7 +78,7 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 5. Server: deletion and referral redemption
 
-- [ ] 5.1 Change `DeleteAccountRequest` and `AuthService.delete_account` to accept the provider form, following Decision 5. Schedule Apple revocation after the delete. Verify that `tests/api/test_delete_account.py` (new, or extend the existing file) covers:
+- [x] 5.1 Change `DeleteAccountRequest` and `AuthService.delete_account` to accept the provider form, following Decision 5. Schedule Apple revocation after the delete. Verify that `tests/api/test_delete_account.py` (new, or extend the existing file) covers:
   - the existing password scenarios still passing;
   - a Google-only account deleting with a fresh token, after which a new Google sign-in creates a new account;
   - a 10-minute-old token getting 403;
@@ -87,8 +87,8 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - a request with neither form or with both forms getting 422;
   - an Apple-linked deletion calling `revoke` with the stored token;
   - a raising `revoke` still giving 204 with the account gone.
-- [ ] 5.2 Add `POST /me/referral` and `ReferralService.redeem(...)`. Verify that `tests/api/test_referral_redeem.py` covers every scenario of "Redeem a referral code after a provider sign-up".
-- [ ] 5.3 Add `tests/integration/test_social_flow.py` using the real app with fake verifiers. The flow:
+- [x] 5.2 Add `POST /me/referral` and `ReferralService.redeem(...)`. Verify that `tests/api/test_referral_redeem.py` covers every scenario of "Redeem a referral code after a provider sign-up".
+- [x] 5.3 Add `tests/integration/test_social_flow.py` using the real app with fake verifiers. The flow:
   1. A Google sign-in creates an account (`created` true).
   2. It redeems a friend's code, and both accounts have +5.
   3. It submits a generation, which is accepted.
