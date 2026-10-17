@@ -33,15 +33,28 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _scan(storage_root: str) -> tuple[list[tuple[str, float]], list[str]]:
-    """Read-only look at the disk; safe to run off the event loop."""
+def _scan_outputs(storage_root: str) -> list[tuple[str, float]]:
+    """Read-only look at outputs/; safe to run off the event loop."""
     outputs: list[tuple[str, float]] = []
     for path in file_storage.list_output_files(storage_root):
         try:
             outputs.append((path.stem, path.stat().st_mtime))
         except OSError:
             logger.warning("Could not stat %s; skipping it this pass", path)
-    return outputs, file_storage.list_input_job_ids(storage_root)
+    return outputs
+
+
+def _scan_inputs(storage_root: str) -> list[str]:
+    return file_storage.list_input_job_ids(storage_root)
+
+
+async def _scan_safely(scan: Callable[[str], _T], storage_root: str, what: str) -> tuple[_T | None, int]:
+    """Run one folder scan off-loop; a failure skips only that folder."""
+    try:
+        return await asyncio.to_thread(scan, storage_root), 0
+    except Exception:
+        logger.exception("Could not scan %s; skipping it this pass", what)
+        return None, 1
 
 
 def _batches(items: Sequence[_T]) -> Iterable[Sequence[_T]]:
@@ -55,13 +68,22 @@ async def sweep(store: JobStore, settings: Settings, now: datetime) -> SweepResu
     The scan runs in a thread; everything that touches the job store runs here
     on the event loop, in batches, because the store is not thread-safe.
     """
-    outputs, input_ids = await asyncio.to_thread(_scan, settings.STORAGE_ROOT)
+    # Scanned separately: an unreadable outputs/ must not disable the cleanup of
+    # reference faces, which is the privacy-relevant half.
+    outputs, outputs_scan_errors = await _scan_safely(
+        _scan_outputs, settings.STORAGE_ROOT, "outputs/"
+    )
+    input_ids, inputs_scan_errors = await _scan_safely(
+        _scan_inputs, settings.STORAGE_ROOT, "inputs/"
+    )
+    outputs, input_ids = outputs or [], input_ids or []
     cutoff_age = settings.OUTPUT_RETENTION_HOURS * SECONDS_PER_HOUR
     expired = [
         job_id for job_id, mtime in outputs if now.timestamp() - mtime >= cutoff_age
     ]
 
-    outputs_removed = job_records_removed = input_folders_removed = errors = 0
+    outputs_removed = job_records_removed = input_folders_removed = 0
+    errors = outputs_scan_errors + inputs_scan_errors
 
     for batch in _batches(expired):
         for job_id in batch:

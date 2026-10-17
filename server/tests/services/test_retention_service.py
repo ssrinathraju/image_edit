@@ -229,3 +229,48 @@ async def test_cancelling_the_loop_stops_it_cleanly(settings, store):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert task.cancelled()
+
+
+async def test_an_unreadable_outputs_folder_does_not_block_face_cleanup(
+    settings, store, monkeypatch
+):
+    file_storage.save_upload("lost-job", 0, b"face", settings.STORAGE_ROOT)
+
+    def unreadable(storage_root=None):
+        raise PermissionError("outputs/ is not readable")
+
+    monkeypatch.setattr(retention_service.file_storage, "list_output_files", unreadable)
+
+    result = await sweep(store, settings, NOW)
+
+    assert not file_storage.input_dir("lost-job", settings.STORAGE_ROOT).exists()
+    assert (result.input_folders_removed, result.errors) == (1, 1)
+
+
+async def test_an_unreadable_inputs_folder_does_not_block_image_expiry(
+    settings, store, monkeypatch
+):
+    old = _output(settings, "old", age_hours=30)
+
+    def unreadable(storage_root=None):
+        raise PermissionError("inputs/ is not readable")
+
+    monkeypatch.setattr(retention_service.file_storage, "list_input_job_ids", unreadable)
+
+    result = await sweep(store, settings, NOW)
+
+    assert not old.exists()
+    assert (result.outputs_removed, result.errors) == (1, 1)
+
+
+async def test_both_folders_unreadable_is_survivable(settings, store, monkeypatch):
+    def unreadable(storage_root=None):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(retention_service.file_storage, "list_output_files", unreadable)
+    monkeypatch.setattr(retention_service.file_storage, "list_input_job_ids", unreadable)
+
+    result = await sweep(store, settings, NOW)
+
+    assert result.errors == 2
+    assert result.outputs_removed == result.input_folders_removed == 0
