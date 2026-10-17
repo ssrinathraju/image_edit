@@ -161,7 +161,8 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_MAX_PROMPT_CHARS` | `500` | Maximum prompt length in characters |
 | `IMAGE_EDIT_MAX_UPLOAD_BYTES` | `10485760` | Maximum size per face upload (bytes) |
 | `IMAGE_EDIT_JOB_CONCURRENCY` | `1` | Number of parallel worker coroutines |
-| `IMAGE_EDIT_OUTPUT_RETENTION_HOURS` | `24` | How long outputs are kept (enforcement deferred) |
+| `IMAGE_EDIT_OUTPUT_RETENTION_HOURS` | `24` | How long generated images are kept, in hours (minimum 1) |
+| `IMAGE_EDIT_RETENTION_SWEEP_MINUTES` | `10` | How often expired images are removed, in minutes (minimum 1) |
 | `IMAGE_EDIT_ACCEPTED_IMAGE_TYPES` | `image/jpeg,image/png,image/webp` | Accepted MIME types for face uploads |
 | `IMAGE_EDIT_MODEL_BACKEND` | `stub` | Pipeline backend: `stub` or `sana` |
 | `IMAGE_EDIT_SANA_MODEL_ID` | `Efficient-Large-Model/Sana_1600M_1024px_diffusers` | HuggingFace model id for Sana |
@@ -181,6 +182,31 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_PREMIUM_DAILY_LIMIT` | `30` | Generations per UTC day on the `premium` plan |
 | `IMAGE_EDIT_REFERRAL_BONUS` | `5` | Bonus credits given to each side of a referral |
 | `IMAGE_EDIT_REFERRAL_MAX_REWARDS` | `10` | Friends a single account is rewarded for |
+
+## Retention
+
+Generated images are kept for `IMAGE_EDIT_OUTPUT_RETENTION_HOURS` (default 24) and then deleted
+together with the job that made them, so `GET /generations/{id}` and the image URL answer 404.
+
+- **What is swept:** regular `*.png` files directly in `outputs/`, and the reference-face folders
+  in `inputs/` whose job no longer exists. Nothing else is touched: other files in `outputs/`,
+  symlinks, templates, previews and `app.db` are left alone. Faces of queued or running jobs are
+  never removed.
+- **Age** is the file's modification time, which is when the result was written. Restoring or
+  copying the folder resets it, so such images live one more full period.
+- **When:** once at startup, before any request is served, and then every
+  `IMAGE_EDIT_RETENTION_SWEEP_MINUTES` (default 10). A failing pass is logged and retried.
+- **Reference faces** left behind by a restart during a job are removed at startup, so uploaded
+  photos never outlive the server run that received them.
+- **Invalid values** (retention under 1 hour, sweep interval under 1 minute) stop the server from
+  starting, and the error names the setting.
+- Like the rest of the server this assumes a single process: a second instance on the same
+  `IMAGE_EDIT_STORAGE_ROOT` would delete the first one's in-flight reference faces.
+
+> **Warning: the first start after upgrading deletes every generated image already older than the
+> retention period, including images from earlier runs that no job refers to. This cannot be
+> undone.** To keep old images, copy `storage/outputs/` somewhere first, or raise
+> `IMAGE_EDIT_OUTPUT_RETENTION_HOURS` for that first start.
 
 ## Running with Sana
 
