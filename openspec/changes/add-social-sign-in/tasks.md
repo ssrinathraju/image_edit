@@ -125,17 +125,17 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 8. App: sign-in buttons and referral prompt
 
-- [ ] 8.1 Add `signInWithProvider` and `justCreatedViaProvider` to `SessionNotifier`. Update `router.dart` with `/referral-prompt` and the redirect. Verify that `test/router_test.dart` covers:
+- [x] 8.1 Add `signInWithProvider` and `justCreatedViaProvider` to `SessionNotifier`. Update `router.dart` with `/referral-prompt` and the redirect. Verify that `test/router_test.dart` covers:
   - a new provider account landing on `/referral-prompt`;
   - an existing one landing on `/`;
   - email/password registration still landing on `/verify-email`.
-- [ ] 8.2 Add the Continue with Google and Continue with Apple buttons to `login_screen.dart` and `register_screen.dart` (a shared widget in `features/auth/provider_buttons.dart`) with the states in the Decision 9 table. Verify that `test/features/auth/provider_buttons_test.dart`, with overridden `ProviderSignIn` providers, covers:
+- [x] 8.2 Add the Continue with Google and Continue with Apple buttons to `login_screen.dart` and `register_screen.dart` (a shared widget in `features/auth/provider_buttons.dart`) with the states in the Decision 9 table. Verify that `test/features/auth/provider_buttons_test.dart`, with overridden `ProviderSignIn` providers, covers:
   - Google success going home;
   - the Apple button hidden on Android and when not configured;
   - Google hidden when not configured;
   - a cancel showing nothing;
   - each server error message.
-- [ ] 8.3 Add `features/auth/referral_prompt_screen.dart`. Verify that `test/features/auth/referral_prompt_screen_test.dart` covers:
+- [x] 8.3 Add `features/auth/referral_prompt_screen.dart`. Verify that `test/features/auth/referral_prompt_screen_test.dart` covers:
   - Apply success refreshing the account and going home;
   - `invalid_referral_code` keeping the value;
   - `referral_not_allowed` going home;

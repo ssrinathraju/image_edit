@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/schemas/session.dart';
 
 import 'support/app_harness.dart';
 import 'support/fake_api_client.dart';
+import 'support/fake_provider_sign_in.dart';
 import 'support/fake_session_storage.dart';
 
 void main() {
@@ -189,5 +191,85 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trending'), findsOneWidget);
+  });
+
+  group('after a provider sign-in', () {
+    ProviderSession result({required bool created}) => ProviderSession(
+          session: const Session(token: 'token-g', userId: 'user-2', email: 'gina@example.com'),
+          created: created,
+        );
+
+    testWidgets('a new provider account lands on the referral prompt', (tester) async {
+      client.onSignInWithGoogle = (_) async => result(created: true);
+      final container = await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(),
+        google: FakeProviderSignIn.google(),
+      );
+
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Have a referral code?'), findsOneWidget);
+      expect(find.text('Trending'), findsNothing);
+      expect(container.read(sessionProvider.notifier).justCreatedViaProvider, isFalse);
+    });
+
+    testWidgets('an existing provider account lands on home', (tester) async {
+      client.onSignInWithGoogle = (_) async => result(created: false);
+      await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(),
+        google: FakeProviderSignIn.google(),
+      );
+
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trending'), findsOneWidget);
+      expect(find.text('Have a referral code?'), findsNothing);
+    });
+
+    testWidgets('email and password registration still lands on Verify email', (tester) async {
+      await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(),
+        google: FakeProviderSignIn.google(),
+      );
+      await tester.tap(find.text('Create an account'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
+      await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verify email'), findsOneWidget);
+      expect(find.text('Have a referral code?'), findsNothing);
+    });
+
+    testWidgets('signing out clears the pending prompt', (tester) async {
+      client.onSignInWithGoogle = (_) async => result(created: true);
+      final container = await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(),
+        google: FakeProviderSignIn.google(),
+        settle: true,
+      );
+      final notifier = container.read(sessionProvider.notifier);
+      await notifier.signInWithProvider(
+        const ProviderCredential(provider: SignInProvider.google, token: 't'),
+      );
+      expect(notifier.justCreatedViaProvider, isTrue);
+
+      await notifier.signOut();
+
+      expect(notifier.justCreatedViaProvider, isFalse);
+    });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/provider_sign_in.dart';
 import '../../core/session_storage.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
@@ -34,6 +35,19 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   bool takeJustRegistered() {
     final value = _justRegistered;
     _justRegistered = false;
+    return value;
+  }
+
+  bool _justCreatedViaProvider = false;
+
+  /// True between a provider sign-in that created the account and the
+  /// referral prompt opening, so the router can send the user there.
+  bool get justCreatedViaProvider => _justCreatedViaProvider;
+
+  /// Reads and clears [justCreatedViaProvider]; the prompt calls it when it opens.
+  bool takeJustCreatedViaProvider() {
+    final value = _justCreatedViaProvider;
+    _justCreatedViaProvider = false;
     return value;
   }
 
@@ -81,6 +95,24 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _start(session);
   }
 
+  /// Signs in with what a Google or Apple sheet returned; the server links,
+  /// finds or creates the account.
+  Future<void> signInWithProvider(ProviderCredential credential) async {
+    final api = ref.read(apiClientProvider);
+    final result = switch (credential.provider) {
+      SignInProvider.google => await api.signInWithGoogle(
+          idToken: credential.token,
+        ),
+      SignInProvider.apple => await api.signInWithApple(
+          identityToken: credential.token,
+          nonce: credential.nonce!,
+          authorizationCode: credential.authorizationCode ?? '',
+        ),
+    };
+    _justCreatedViaProvider = result.created;
+    await _start(result.session);
+  }
+
   /// Sets a new password with an emailed code and signs in with the fresh
   /// session; a rejected code throws and leaves the user signed out.
   Future<void> completePasswordReset({
@@ -112,6 +144,17 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _clearLocalSession();
   }
 
+  /// Deletes the account confirmed by a fresh provider sign-in; a rejected
+  /// token throws and keeps the session.
+  Future<void> deleteAccountWithProvider(ProviderCredential credential) async {
+    await ref.read(apiClientProvider).deleteAccount(
+          provider: credential.provider.apiName,
+          token: credential.token,
+          nonce: credential.nonce,
+        );
+    await _clearLocalSession();
+  }
+
   /// Drops a session the server no longer accepts, without calling the server.
   Future<void> expire() async {
     if (_restoring) return;
@@ -132,6 +175,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   Future<void> _clearLocalSession() async {
     ref.invalidate(lastRequestProvider);
     ref.invalidate(homeNotifierProvider);
+    _justCreatedViaProvider = false;
     await _discardStoredSession();
     state = const AsyncData(null);
   }

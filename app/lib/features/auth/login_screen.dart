@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'credentials_form.dart';
+import 'provider_buttons.dart';
 import 'session_notifier.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -14,6 +15,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _email = TextEditingController();
+  bool _providerBusy = false;
 
   @override
   void dispose() {
@@ -45,9 +47,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 CredentialsForm(
                   submitLabel: 'Sign in',
                   emailController: _email,
+                  enabled: !_providerBusy,
                   onSubmit: (email, password, _) => ref
                       .read(sessionProvider.notifier)
                       .signIn(email: email, password: password),
+                ),
+                ProviderButtons(
+                  onBusyChanged: (busy) {
+                    if (mounted) setState(() => _providerBusy = busy);
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextButton(

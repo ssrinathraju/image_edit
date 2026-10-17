@@ -4,13 +4,21 @@ import 'package:go_router/go_router.dart';
 
 import '../../configs/app_config.dart';
 import 'credentials_form.dart';
+import 'provider_buttons.dart';
 import 'session_notifier.dart';
 
-class RegisterScreen extends ConsumerWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  bool _providerBusy = false;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Create account')),
       body: Center(
@@ -23,6 +31,7 @@ class RegisterScreen extends ConsumerWidget {
               children: [
                 CredentialsForm(
                   submitLabel: 'Create account',
+                  enabled: !_providerBusy,
                   passwordError: (password) =>
                       password.length < AppConfig.minPasswordChars
                           ? 'At least ${AppConfig.minPasswordChars} characters'
@@ -35,6 +44,11 @@ class RegisterScreen extends ConsumerWidget {
                         password: password,
                         referralCode: referralCode.isEmpty ? null : referralCode,
                       ),
+                ),
+                ProviderButtons(
+                  onBusyChanged: (busy) {
+                    if (mounted) setState(() => _providerBusy = busy);
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextButton(

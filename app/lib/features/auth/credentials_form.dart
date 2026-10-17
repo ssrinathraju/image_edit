@@ -12,11 +12,15 @@ class CredentialsForm extends StatefulWidget {
     this.passwordError,
     this.withReferralCode = false,
     this.emailController,
+    this.enabled = true,
     super.key,
   });
 
   /// Lets the parent read the typed email; the parent owns and disposes it.
   final TextEditingController? emailController;
+
+  /// False while something else on the screen (a provider sign-in) is in flight.
+  final bool enabled;
 
   final String submitLabel;
 
@@ -56,6 +60,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
   }
 
   bool get _canSubmit =>
+      widget.enabled &&
       !_submitting &&
       _email.text.trim().isNotEmpty &&
       _password.text.isNotEmpty &&

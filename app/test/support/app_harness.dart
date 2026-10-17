@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/plans/invite_screen.dart';
@@ -12,6 +13,7 @@ import 'package:image_edit/services/generation_providers.dart';
 
 import 'fake_api_client.dart';
 import 'fake_image_picker.dart';
+import 'fake_provider_sign_in.dart';
 import 'fake_session_storage.dart';
 
 class FakeLinkLauncher implements LinkLauncher {
@@ -52,6 +54,11 @@ Future<ProviderContainer> pumpApp(
   FakeShare? share,
   String? inviteUrl,
   FakeImagePicker? picker,
+  FakeProviderSignIn? google,
+  FakeProviderSignIn? apple,
+  bool? googleAvailable,
+  bool? appleAvailable,
+  TargetPlatform platform = TargetPlatform.android,
   bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
@@ -71,6 +78,13 @@ Future<ProviderContainer> pumpApp(
         ),
         shareTextProvider.overrideWithValue((share ?? FakeShare()).call),
         inviteUrlProvider.overrideWithValue(inviteUrl),
+        targetPlatformProvider.overrideWithValue(platform),
+        if (google != null) googleProviderSignInProvider.overrideWithValue(google),
+        if (apple != null) appleProviderSignInProvider.overrideWithValue(apple),
+        if (googleAvailable ?? google != null)
+          isGoogleSignInAvailableProvider.overrideWithValue(true),
+        if (appleAvailable ?? apple != null)
+          isAppleSignInAvailableProvider.overrideWithValue(true),
       ],
       child: Consumer(
         builder: (context, ref, _) =>

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'features/auth/forgot_password_screen.dart';
 import 'features/auth/login_screen.dart';
+import 'features/auth/referral_prompt_screen.dart';
 import 'features/auth/register_screen.dart';
 import 'features/auth/reset_password_screen.dart';
 import 'features/auth/session_notifier.dart';
@@ -24,6 +25,7 @@ const String _register = '/register';
 const String _forgotPassword = '/forgot-password';
 const String _resetPassword = '/reset-password';
 const String _verifyEmail = '/verify-email';
+const String _referralPrompt = '/referral-prompt';
 
 /// Pages a signed-out user may open.
 const Set<String> _signedOutPages = {
@@ -50,8 +52,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     }
     final isAuthPage = _signedOutPages.contains(location) || location == _splash;
     if (!isAuthPage) return null;
-    final justRegistered = ref.read(sessionProvider.notifier).justRegistered;
-    return justRegistered ? _verifyEmail : '/';
+    final notifier = ref.read(sessionProvider.notifier);
+    if (notifier.justRegistered) return _verifyEmail;
+    if (notifier.justCreatedViaProvider) return _referralPrompt;
+    return '/';
   }
 
   final router = GoRouter(
@@ -75,6 +79,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: _verifyEmail, builder: (_, _) => const VerifyEmailScreen()),
+      GoRoute(
+        path: _referralPrompt,
+        builder: (_, _) => const ReferralPromptScreen(),
+      ),
       GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/upgrade', builder: (_, _) => const UpgradeScreen()),
