@@ -1,8 +1,13 @@
 import json
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Optional
 
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
 from PIL import Image
 
 TEST_TEMPLATES = [
@@ -108,3 +113,68 @@ def grant_bonus(user_store, user_id: str, credits: int) -> None:
         "UPDATE users SET bonus_credits = ? WHERE id = ?", (credits, user_id)
     )
     user_store._conn.commit()
+
+
+GOOGLE_AUDIENCE = "google-web.apps.example"
+APPLE_BUNDLE = "com.example.imageedit"
+TEST_KID = "test-key-1"
+
+
+def make_rsa_key() -> rsa.RSAPrivateKey:
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+class FakeJwksClient:
+    """Stands in for PyJWKClient: serves local public keys by kid, or fails like a dead endpoint."""
+
+    def __init__(self, keys: dict, unreachable: bool = False) -> None:
+        self._keys = keys
+        self.unreachable = unreachable
+
+    def get_signing_key_from_jwt(self, token: str):
+        if self.unreachable:
+            raise jwt.PyJWKClientConnectionError("fetch failed")
+        kid = jwt.get_unverified_header(token).get("kid")
+        if kid not in self._keys:
+            raise jwt.PyJWKClientError("Unable to find a signing key that matches")
+        return SimpleNamespace(key=self._keys[kid].public_key())
+
+
+def _base_claims(issuer: str, audience: str, subject: str, email: Optional[str]) -> dict:
+    now = int(time.time())
+    claims = {"iss": issuer, "aud": audience, "sub": subject, "iat": now, "exp": now + 600}
+    if email is not None:
+        claims["email"] = email
+    return claims
+
+
+def sign_token(key, claims: dict, kid: str = TEST_KID, algorithm: str = "RS256") -> str:
+    return jwt.encode(claims, key, algorithm=algorithm, headers={"kid": kid})
+
+
+def google_claims(
+    subject: str = "g-1",
+    email: Optional[str] = "ana@example.com",
+    email_verified: bool = True,
+    **overrides,
+) -> dict:
+    claims = _base_claims("https://accounts.google.com", GOOGLE_AUDIENCE, subject, email)
+    claims["email_verified"] = email_verified
+    claims.update(overrides)
+    return claims
+
+
+def apple_claims(
+    subject: str = "a-1",
+    email: Optional[str] = "ana@example.com",
+    raw_nonce: Optional[str] = "raw-nonce",
+    **overrides,
+) -> dict:
+    import hashlib
+
+    claims = _base_claims("https://appleid.apple.com", APPLE_BUNDLE, subject, email)
+    claims["email_verified"] = "true"
+    if raw_nonce is not None:
+        claims["nonce"] = hashlib.sha256(raw_nonce.encode()).hexdigest()
+    claims.update(overrides)
+    return claims

@@ -4,11 +4,11 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
 
 ## 1. Server: dependency, settings and verifiers
 
-- [ ] 1.1 Add `pyjwt[crypto]` with `uv add` and add the settings from Decision 7, with their startup checks. Verify that `uv run python -c "import jwt, cryptography"` succeeds and that `tests/configs/test_settings.py` covers:
+- [x] 1.1 Add `pyjwt[crypto]` with `uv add` and add the settings from Decision 7, with their startup checks. Verify that `uv run python -c "import jwt, cryptography"` succeeds and that `tests/configs/test_settings.py` covers:
   - every default;
   - `GOOGLE_CLIENT_IDS` parsed from the environment;
   - the refusals for partial Apple key settings, key settings without a bundle ID, and an unreadable key file.
-- [ ] 1.2 Add `core/identity_verifier.py` (`IdentityVerifier`, `ProviderIdentity`, `InvalidProviderToken`, `ProviderUnavailable`), and `services/identity/google_verifier.py` and `services/identity/apple_verifier.py`, following Decision 1, each taking an injectable JWKS client. Add a test helper in `tests/helpers.py` that makes an RSA key, a fake JWKS client, and signed Google and Apple tokens with any claims. Verify that `tests/services/identity/test_google_verifier.py` and `test_apple_verifier.py` cover:
+- [x] 1.2 Add `core/identity_verifier.py` (`IdentityVerifier`, `ProviderIdentity`, `InvalidProviderToken`, `ProviderUnavailable`), and `services/identity/google_verifier.py` and `services/identity/apple_verifier.py`, following Decision 1, each taking an injectable JWKS client. Add a test helper in `tests/helpers.py` that makes an RSA key, a fake JWKS client, and signed Google and Apple tokens with any claims. Verify that `tests/services/identity/test_google_verifier.py` and `test_apple_verifier.py` cover:
   - a valid token;
   - each issuer form;
   - a wrong audience;
