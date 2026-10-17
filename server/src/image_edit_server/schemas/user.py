@@ -21,6 +21,7 @@ class User:
     bonus_credits: int = 0
     referral_code: str = ""
     referral_rewards: int = 0
+    email_verified: bool = False
 
 
 @dataclass(frozen=True)

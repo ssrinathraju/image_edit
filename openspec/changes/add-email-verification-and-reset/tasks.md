@@ -12,7 +12,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
 
 ## 2. Server: schema migration and store operations
 
-- [ ] 2.1 In `repos/user_store.py`:
+- [x] 2.1 In `repos/user_store.py`:
   - Add the `email_verified` and `referral_bonus_pending` columns and the `email_codes` and `email_sends` tables, following Decision 3.
   - On first add, mark existing users verified in the same transaction.
   - Set `SCHEMA_VERSION = 3`.
@@ -22,7 +22,7 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
   - a fresh database;
   - a version-2 database with users, sessions and paid referrals: users become verified, bonuses and sessions are unchanged, and pending stays 0;
   - running the migration twice changing nothing.
-- [ ] 2.2 Add `issue_code(...)` and `consume_code(...)` to `SqliteUserStore` and the `UserStore` protocol, following Decision 4, with an injected clock. Verify `tests/repos/test_user_store_codes.py` covers each of the following:
+- [x] 2.2 Add `issue_code(...)` and `consume_code(...)` to `SqliteUserStore` and the `UserStore` protocol, following Decision 4, with an injected clock. Verify `tests/repos/test_user_store_codes.py` covers each of the following:
   - a new code replacing the old one;
   - purposes being independent;
   - reuse after `ok` being rejected;
@@ -36,14 +36,14 @@ Work on branch `feat/add-email-verification-and-reset`. Do not push to `main`. S
   - rows being removed when the user is deleted;
   - the stored hash not containing the digits;
   - two threads consuming the same code with exactly one `ok`.
-- [ ] 2.3 Change `register_user` to stop paying rewards: insert 0 bonus credits and set `referral_bonus_pending` when a valid code is used. Add `mark_email_verified(user_id, bonus, max_rewards)` following Decision 5. Verify `tests/repos/test_user_store_referrals.py` is updated to cover:
+- [x] 2.3 Change `register_user` to stop paying rewards: insert 0 bonus credits and set `referral_bonus_pending` when a valid code is used. Add `mark_email_verified(user_id, bonus, max_rewards)` following Decision 5. Verify `tests/repos/test_user_store_referrals.py` is updated to cover:
   - registration paying nothing;
   - verification paying both accounts;
   - a second call paying nothing;
   - the referrer cap;
   - a deleted referrer still letting the friend be paid;
   - an account without a referral getting nothing.
-- [ ] 2.4 Add `reset_password(user_id, code, new_hash, now, bonus, max_rewards)` following Decision 6. Verify `tests/repos/test_user_store_reset.py` covers:
+- [x] 2.4 Add `reset_password(user_id, code, new_hash, now, bonus, max_rewards)` following Decision 6. Verify `tests/repos/test_user_store_reset.py` covers:
   - success changing the hash, deleting all sessions, verifying the account and paying a pending referral;
   - a wrong code changing nothing and counting an attempt;
   - an expired code changing nothing.

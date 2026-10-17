@@ -59,8 +59,6 @@ class AuthService:
                 normalized,
                 hash_password(password),
                 referral_code,
-                self._settings.REFERRAL_BONUS,
-                self._settings.REFERRAL_MAX_REWARDS,
             )
         except EmailTakenError:
             raise _error(409, "email_taken", "this email is already registered")

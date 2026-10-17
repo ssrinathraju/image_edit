@@ -26,6 +26,13 @@ def _register(client, email, code=None) -> dict:
     return {"Authorization": f"Bearer {resp.json()['token']}"}
 
 
+def _verify(client, headers) -> None:
+    from image_edit_server.api.deps import get_user_store
+
+    users = client.app.dependency_overrides[get_user_store]()
+    users.mark_email_verified(_me(client, headers)["id"], 5, 10)
+
+
 def _me(client, headers) -> dict:
     return client.get("/me", headers=headers).json()
 
@@ -44,6 +51,7 @@ def test_referral_rewards_both_and_bonus_covers_the_fourth(app_client):
     code = _me(app_client, a)["referral"]["code"]
 
     b = _register(app_client, "b@example.com", code.lower())
+    _verify(app_client, b)
 
     assert _me(app_client, a)["usage"]["bonus_credits"] == 5
     assert _me(app_client, b)["usage"]["bonus_credits"] == 5
@@ -56,10 +64,11 @@ def test_eleventh_friend_is_rewarded_but_the_referrer_is_not(app_client):
     a = _register(app_client, "a@example.com")
     code = _me(app_client, a)["referral"]["code"]
     for i in range(10):
-        _register(app_client, f"f{i}@example.com", code)
+        _verify(app_client, _register(app_client, f"f{i}@example.com", code))
     assert _me(app_client, a)["usage"]["bonus_credits"] == 50
 
     eleventh = _register(app_client, "f10@example.com", code)
+    _verify(app_client, eleventh)
 
     assert _me(app_client, eleventh)["usage"]["bonus_credits"] == 5
     after = _me(app_client, a)

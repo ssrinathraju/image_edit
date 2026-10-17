@@ -186,7 +186,7 @@ def _me(client, token):
     return client.get("/me", headers=_bearer(token)).json()
 
 
-def test_register_with_a_lowercase_referral_code_rewards_both(anon_client):
+def test_register_with_a_lowercase_referral_code_rewards_both(anon_client, user_store):
     referrer = _register(anon_client).json()
     code = _me(anon_client, referrer["token"])["referral"]["code"]
 
@@ -196,6 +196,8 @@ def test_register_with_a_lowercase_referral_code_rewards_both(anon_client):
     )
 
     assert resp.status_code == 201
+    assert _me(anon_client, resp.json()["token"])["usage"]["bonus_credits"] == 0
+    user_store.mark_email_verified(resp.json()["id"], 5, 10)
     assert _me(anon_client, resp.json()["token"])["usage"]["bonus_credits"] == 5
     assert _me(anon_client, referrer["token"])["usage"]["bonus_credits"] == 5
     assert _me(anon_client, referrer["token"])["referral"]["rewards"] == 1
