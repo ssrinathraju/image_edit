@@ -12,11 +12,19 @@ class CredentialsForm extends StatefulWidget {
     this.passwordError,
     this.withReferralCode = false,
     this.emailController,
+    this.enabled = true,
+    this.describeFailure = describeError,
     super.key,
   });
 
+  /// Turns a failed submit into the inline message; defaults to the server's own text.
+  final String Function(Object error) describeFailure;
+
   /// Lets the parent read the typed email; the parent owns and disposes it.
   final TextEditingController? emailController;
+
+  /// False while something else on the screen (a provider sign-in) is in flight.
+  final bool enabled;
 
   final String submitLabel;
 
@@ -56,6 +64,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
   }
 
   bool get _canSubmit =>
+      widget.enabled &&
       !_submitting &&
       _email.text.trim().isNotEmpty &&
       _password.text.isNotEmpty &&
@@ -74,7 +83,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _failure = describeError(error));
+      setState(() => _failure = widget.describeFailure(error));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

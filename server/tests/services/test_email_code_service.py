@@ -18,8 +18,8 @@ def users() -> SqliteUserStore:
 
 
 @pytest.fixture
-def uid(users) -> str:
-    return users.create_user("ana@example.com", "hash").id
+def address() -> str:
+    return "ana@example.com"
 
 
 class RecordingSender:
@@ -35,19 +35,19 @@ class FailingSender:
         raise ConnectionRefusedError(f"refused while sending {body}")
 
 
-def test_issue_returns_a_six_digit_code_that_the_store_accepts(users, uid):
-    outcome = email_code_service.issue_code(users, uid, CodePurpose.VERIFY_EMAIL, SETTINGS, NOW)
+def test_issue_returns_a_six_digit_code_that_the_store_accepts(users, address):
+    outcome = email_code_service.issue_code(users, address, CodePurpose.REGISTRATION, SETTINGS, NOW)
 
     assert len(outcome.code) == 6 and outcome.code.isdigit()
-    result = users.consume_code(uid, CodePurpose.VERIFY_EMAIL, outcome.code, NOW, 5)
+    result = users.consume_code(address, CodePurpose.REGISTRATION, outcome.code, NOW, 5)
     assert result is ConsumeResult.OK
 
 
-def test_a_limited_issue_passes_retry_after_through(users, uid):
-    email_code_service.issue_code(users, uid, CodePurpose.VERIFY_EMAIL, SETTINGS, NOW)
+def test_a_limited_issue_passes_retry_after_through(users, address):
+    email_code_service.issue_code(users, address, CodePurpose.REGISTRATION, SETTINGS, NOW)
 
     outcome = email_code_service.issue_code(
-        users, uid, CodePurpose.VERIFY_EMAIL, SETTINGS, NOW.replace(second=20)
+        users, address, CodePurpose.REGISTRATION, SETTINGS, NOW.replace(second=20)
     )
 
     assert outcome.code is None
@@ -58,7 +58,7 @@ def test_a_limited_issue_passes_retry_after_through(users, uid):
 def test_the_message_names_the_code_and_the_minutes(purpose):
     sender = RecordingSender()
 
-    email_code_service.deliver(sender, "u1", "ana@example.com", purpose, "123456", 15)
+    email_code_service.deliver(sender, "ana@example.com", purpose, "123456", 15)
 
     to, subject, body = sender.sent[0]
     assert to == "ana@example.com"
@@ -69,9 +69,8 @@ def test_the_message_names_the_code_and_the_minutes(purpose):
 def test_a_raising_sender_is_logged_without_the_code_and_does_not_raise(caplog):
     with caplog.at_level(logging.ERROR):
         email_code_service.deliver(
-            FailingSender(), "u1", "ana@example.com", CodePurpose.VERIFY_EMAIL, "123456", 15
+            FailingSender(), "ana@example.com", CodePurpose.REGISTRATION, "123456", 15
         )
 
     assert "ConnectionRefusedError" in caplog.text
-    assert "u1" in caplog.text
     assert "123456" not in caplog.text

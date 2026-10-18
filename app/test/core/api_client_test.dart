@@ -192,35 +192,59 @@ void main() {
       expect(fired, 0);
     });
 
-    test('register and login post credentials and parse the session', () async {
-      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
-      final client = _client(adapter);
+    test('register posts the credentials and returns nothing', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
 
-      final registered =
-          await client.register(email: 'a@b.co', password: 'password-1');
+      await _client(adapter).register(email: 'a@b.co', password: 'password-1');
+
       expect(adapter.last!.method, 'POST');
       expect(adapter.last!.path, '/auth/register');
       expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
-      expect(registered.token, 't');
-      expect(registered.userId, 'u');
-
-      await client.login(email: 'a@b.co', password: 'password-1');
-      expect(adapter.last!.path, '/auth/login');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
     });
 
-    test('verifyEmail and resendVerification post to the documented routes', () async {
+    test('register sends a trimmed referral code and omits a blank one', () async {
       final adapter = _FakeAdapter(<String, dynamic>{});
       final client = _client(adapter);
 
-      await client.verifyEmail(code: '123456');
-      expect(adapter.last!.method, 'POST');
-      expect(adapter.last!.path, '/auth/verify-email');
-      expect(adapter.last!.data, {'code': '123456'});
+      await client.register(
+        email: 'a@b.co',
+        password: 'password-1',
+        referralCode: '  k7m2qx9p ',
+      );
+      expect(adapter.last!.data['referral_code'], 'k7m2qx9p');
 
-      await client.resendVerification();
+      await client.register(email: 'a@b.co', password: 'password-1', referralCode: '  ');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+    });
+
+    test('confirmRegistration posts the code and parses the session', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+
+      final session =
+          await _client(adapter).confirmRegistration(
+            email: 'a@b.co',
+            code: '123456',
+            password: 'password-1',
+          );
+
       expect(adapter.last!.method, 'POST');
-      expect(adapter.last!.path, '/auth/verify-email/resend');
+      expect(adapter.last!.path, '/auth/register/confirm');
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'code': '123456',
+        'password': 'password-1',
+      });
+      expect((session.token, session.userId, session.email), ('t', 'u', 'a@b.co'));
+    });
+
+    test('login posts credentials and parses the session', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+
+      final session = await _client(adapter).login(email: 'a@b.co', password: 'password-1');
+
+      expect(adapter.last!.path, '/auth/login');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      expect(session.token, 't');
     });
 
     test('requestPasswordReset posts the email', () async {
@@ -237,7 +261,6 @@ void main() {
         'token': 'fresh',
         'id': 'u',
         'email': 'a@b.co',
-        'email_verified': true,
       });
 
       final session = await _client(adapter).confirmPasswordReset(
@@ -253,7 +276,7 @@ void main() {
         'new_password': 'new password 1',
       });
       expect(session.token, 'fresh');
-      expect(session.emailVerified, isTrue);
+      expect(session.email, 'a@b.co');
     });
 
     test('logout, fetchMe and deleteAccount hit the documented routes', () async {
@@ -273,6 +296,108 @@ void main() {
       expect(adapter.last!.method, 'DELETE');
       expect(adapter.last!.path, '/me');
       expect(adapter.last!.data, {'password': 'password-1'});
+    });
+  });
+
+  group('provider sign-in', () {
+    final sessionBody = {
+      'token': 'tok',
+      'id': 'u1',
+      'email': 'gina@example.com',
+      'email_verified': true,
+      'created': true,
+    };
+
+    test('signInWithGoogle posts the id token and parses created', () async {
+      final adapter = _FakeAdapter(sessionBody);
+
+      final result = await _client(adapter).signInWithGoogle(idToken: 'g-id');
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/auth/oauth/google');
+      expect(adapter.last!.data, {'id_token': 'g-id'});
+      expect(result.created, isTrue);
+      expect(result.session.token, 'tok');
+    });
+
+    test('signInWithApple posts the token, raw nonce and code', () async {
+      final adapter = _FakeAdapter({...sessionBody, 'created': false});
+
+      final result = await _client(adapter).signInWithApple(
+        identityToken: 'a-id',
+        nonce: 'raw',
+        authorizationCode: 'code',
+      );
+
+      expect(adapter.last!.path, '/auth/oauth/apple');
+      expect(adapter.last!.data, {
+        'identity_token': 'a-id',
+        'nonce': 'raw',
+        'authorization_code': 'code',
+      });
+      expect(result.created, isFalse);
+    });
+
+    test('a 401 from a provider endpoint does not expire the session', () async {
+      var expired = false;
+      final adapter = _FakeAdapter({
+        'detail': {'error': 'invalid_provider_token', 'detail': 'x'},
+      }, status: 401);
+      final client = _client(adapter, onUnauthorized: () => expired = true);
+
+      await expectLater(client.signInWithGoogle(idToken: 'bad'), throwsA(isA<DioException>()));
+      await expectLater(
+        client.signInWithApple(identityToken: 'bad', nonce: 'n', authorizationCode: 'c'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(expired, isFalse);
+    });
+
+    test('redeemReferral posts the code', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).redeemReferral(code: 'K7M2QX9P');
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/referral');
+      expect(adapter.last!.data, {'code': 'K7M2QX9P'});
+    });
+
+    test('deleteAccount sends the provider form without a password', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).deleteAccount(
+        provider: 'apple',
+        token: 'fresh',
+        nonce: 'raw',
+      );
+
+      expect(adapter.last!.method, 'DELETE');
+      expect(adapter.last!.path, '/me');
+      expect(adapter.last!.data, {'provider': 'apple', 'token': 'fresh', 'nonce': 'raw'});
+    });
+
+    test('deleteAccount with google sends no nonce', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).deleteAccount(provider: 'google', token: 'fresh');
+
+      expect(adapter.last!.data, {'provider': 'google', 'token': 'fresh'});
+    });
+
+    test('fetchMe parses providers and hasPassword', () async {
+      final adapter = _FakeAdapter({
+        'id': 'u',
+        'email': 'a@b.co',
+        'providers': ['google'],
+        'has_password': false,
+      });
+
+      final me = await _client(adapter).fetchMe();
+
+      expect(me.providers, ['google']);
+      expect(me.hasPassword, isFalse);
     });
   });
 

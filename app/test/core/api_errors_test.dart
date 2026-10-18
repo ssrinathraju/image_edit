@@ -31,15 +31,14 @@ void main() {
     );
   });
 
-  test('each verification and reset error code is recognised', () {
+  test('each registration and reset error code is recognised', () {
     Object coded(String code) => _error({
           'detail': {'error': code, 'detail': 'x'},
         }, status: 400);
 
-    expect(isEmailNotVerified(coded('email_not_verified')), isTrue);
+    expect(isEmailTaken(coded('email_taken')), isTrue);
     expect(isInvalidCode(coded('invalid_code')), isTrue);
     expect(isCodeExpired(coded('code_expired')), isTrue);
-    expect(isAlreadyVerified(coded('already_verified')), isTrue);
     expect(isTooManyRequests(coded('too_many_requests')), isTrue);
     expect(isInvalidCode(coded('code_expired')), isFalse);
     expect(isTooManyRequests(StateError('boom')), isFalse);
@@ -62,5 +61,22 @@ void main() {
     expect(retryAfterSecondsOf(withHeader('soon')), isNull);
     expect(retryAfterSecondsOf(withHeader('0')), isNull);
     expect(retryAfterSecondsOf(StateError('boom')), isNull);
+  });
+
+  test('each provider sign-in and referral error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 400);
+
+    expect(isInvalidProviderToken(coded('invalid_provider_token')), isTrue);
+    expect(isProviderEmailUnverified(coded('provider_email_unverified')), isTrue);
+    expect(isProviderEmailMissing(coded('provider_email_missing')), isTrue);
+    expect(isProviderNotConfigured(coded('provider_not_configured')), isTrue);
+    expect(isProviderUnavailable(coded('provider_unavailable')), isTrue);
+    expect(isProviderAlreadyLinked(coded('provider_already_linked')), isTrue);
+    expect(isReferralNotAllowed(coded('referral_not_allowed')), isTrue);
+    expect(isInvalidReferralCode(coded('invalid_referral_code')), isTrue);
+    expect(isInvalidProviderToken(coded('provider_unavailable')), isFalse);
+    expect(isReferralNotAllowed(StateError('boom')), isFalse);
   });
 }

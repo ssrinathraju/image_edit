@@ -149,33 +149,17 @@ void main() {
     expect(calls, 3);
   });
 
-  testWidgets('an unverified email opens the Verify screen, not a snackbar', (tester) async {
+  testWidgets('a refused submit with an unknown error shows the server message', (tester) async {
     client.onSubmit = (_) async => throw apiError(
-          403,
-          'email_not_verified',
-          'verify your email address before generating',
+          400,
+          'invalid_prompt',
+          'the prompt is not allowed',
         );
     await _pumpCustom(tester);
 
     await _generate(tester);
 
-    expect(find.text('verify-screen'), findsOneWidget);
-    expect(find.text('verify your email address before generating'), findsNothing);
-    expect(find.text('Daily limit reached'), findsNothing);
-  });
-
-  testWidgets('the photo and prompt are kept after returning from Verify', (tester) async {
-    client.onSubmit = (_) async => throw apiError(
-          403,
-          'email_not_verified',
-          'verify your email address before generating',
-        );
-    await _pumpCustom(tester);
-    await _generate(tester);
-
-    await tester.tap(find.byType(BackButton));
-    await tester.pumpAndSettle();
-
+    expect(find.text('the prompt is not allowed'), findsOneWidget);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, 'a cat in space');
     expect(isGenerateEnabled(tester), isTrue);

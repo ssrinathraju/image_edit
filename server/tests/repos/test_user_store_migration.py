@@ -1,11 +1,15 @@
 import hashlib
 import sqlite3
+from datetime import timedelta
 
 import pytest
 
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.passwords import hash_password
 from image_edit_server.core.referral_codes import ALPHABET
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
+from image_edit_server.services.auth_service import AuthService
 
 OLD_SCHEMA = """
 CREATE TABLE users (
@@ -152,17 +156,27 @@ def _user_version(path) -> int:
         conn.close()
 
 
-def test_fresh_database_has_the_verification_schema(tmp_path):
+def _verified_flags(store) -> dict:
+    rows = store._conn.execute("SELECT id, email_verified FROM users").fetchall()
+    return dict(rows)
+
+
+def test_fresh_database_has_the_email_keyed_code_schema(tmp_path):
     path = str(tmp_path / "fresh.db")
     store = SqliteUserStore(path)
 
     assert {"email_verified", "referral_bonus_pending"} <= _columns(path, "users")
-    assert _columns(path, "email_codes") >= {
-        "user_id", "purpose", "code_hash", "expires_at", "attempts", "created_at"
+    assert _columns(path, "email_codes") == {
+        "email", "purpose", "code_hash", "expires_at", "attempts", "created_at"
     }
-    assert _columns(path, "email_sends") >= {"id", "user_id", "purpose", "sent_at"}
-    assert _user_version(path) == 3
-    assert store.create_user("ana@example.com", "hash").email_verified is False
+    assert _columns(path, "email_sends") == {"id", "email", "purpose", "sent_at"}
+    assert _columns(path, "pending_registrations") == {
+        "email", "password_hash", "referral_code", "created_at"
+    }
+    assert _user_version(path) == 4
+    assert _verified_flags(SqliteUserStore(path)) == {}
+    created = store.create_user("ana@example.com", "hash")
+    assert _verified_flags(store) == {created.id: 1}
 
 
 def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db):
@@ -170,31 +184,163 @@ def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db)
 
     a, b = store.get_by_id("u0"), store.get_by_id("u1")
 
-    assert (a.email_verified, b.email_verified) == (True, True)
+    assert _verified_flags(store) == {"u0": 1, "u1": 1}
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_user_by_session("v2-token").id == "u0"
-    pending = store._conn.execute(
-        "SELECT SUM(referral_bonus_pending) FROM users"
-    ).fetchone()[0]
-    assert pending == 0
-    assert _user_version(v2_db) == 3
+    assert _user_version(v2_db) == 4
 
 
-def test_upgraded_users_are_not_paid_again_when_marked_verified(v2_db):
-    store = SqliteUserStore(v2_db)
-
-    assert store.mark_email_verified("u1", 5, 10) is False
-
-    assert store.get_by_id("u1").bonus_credits == 5
-    assert store.get_by_id("u0").bonus_credits == 5
-
-
-def test_running_the_verification_migration_twice_changes_nothing(v2_db):
+def test_running_the_migration_twice_changes_nothing_for_new_accounts(v2_db):
     first = SqliteUserStore(v2_db)
-    first.create_user("new@example.com", "hash")
+    created = first.create_user("new@example.com", "hash")
     first.close()
 
     second = SqliteUserStore(v2_db)
 
-    assert second.get_by_email("new@example.com").email_verified is False
-    assert second.get_by_id("u0").email_verified is True
+    assert _verified_flags(second) == {"u0": 1, "u1": 1, created.id: 1}
+
+
+V3_SCHEMA = V2_SCHEMA + """
+ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN referral_bonus_pending INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE email_codes (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, purpose)
+);
+CREATE TABLE email_sends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    sent_at TEXT NOT NULL
+);
+"""
+
+
+@pytest.fixture
+def v3_db(tmp_path) -> str:
+    """A schema-version-3 file: verified users, a session, a paid referral, and an
+    unverified account holding a verification code."""
+    path = str(tmp_path / "v3.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(V3_SCHEMA)
+    conn.execute("PRAGMA user_version = 3")
+    conn.execute(
+        "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+        " referral_code, referral_rewards, email_verified) VALUES ('u0', 'a@example.com',"
+        " 'h0', '2026-01-01T00:00:00+00:00', 5, 'AAAAAAAA', 1, 1)"
+    )
+    conn.execute(
+        "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+        " referral_code, referred_by, email_verified) VALUES ('u1', 'b@example.com',"
+        " 'h1', '2026-01-01T00:00:00+00:00', 5, 'BBBBBBBB', 'u0', 1)"
+    )
+    conn.execute(
+        "INSERT INTO sessions VALUES (?, 'u0', '2026-01-01T00:00:00+00:00',"
+        " '2099-01-01T00:00:00+00:00')",
+        (hashlib.sha256(b"v3-token").hexdigest(),),
+    )
+    conn.execute(
+        "INSERT INTO users (id, email, password_hash, created_at, referral_code,"
+        " email_verified) VALUES ('u2', 'c@example.com', ?, '2026-01-01T00:00:00+00:00',"
+        " 'CCCCCCCC', 0)",
+        (hash_password("correct horse battery"),),
+    )
+    conn.execute(
+        "INSERT INTO email_codes VALUES ('u2', 'verify_email', 'x',"
+        " '2099-01-01T00:00:00+00:00', 0, '2026-01-01T00:00:00+00:00')"
+    )
+    conn.execute(
+        "INSERT INTO email_sends (user_id, purpose, sent_at) VALUES"
+        " ('u2', 'verify_email', '2026-01-01T00:00:00+00:00')"
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_fresh_database_has_the_identity_schema(tmp_path):
+    path = str(tmp_path / "fresh.db")
+    SqliteUserStore(path)
+
+    assert {"created_via", "referral_redeemed"} <= _columns(path, "users")
+    assert _columns(path, "identities") >= {
+        "provider", "subject", "user_id", "email", "apple_refresh_token", "created_at"
+    }
+    assert _user_version(path) == 4
+
+
+def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
+    store = SqliteUserStore(v3_db)
+
+    a, b = store.get_by_id("u0"), store.get_by_id("u1")
+
+    assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
+    assert store.get_password_hash("u0") == "h0"
+    assert store.get_user_by_session("v3-token").id == "u0"
+    assert store._conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0] == 0
+    vias = store._conn.execute("SELECT DISTINCT created_via FROM users").fetchall()
+    assert vias == [("password",)]
+    assert (a.has_password, b.has_password) == (True, True)
+    assert store.list_providers("u0") == []
+    assert _user_version(v3_db) == 4
+
+
+def test_upgrading_a_v3_database_verifies_an_unverified_account_and_it_can_log_in(v3_db):
+    store = SqliteUserStore(v3_db)
+    throttle = LoginThrottle(5, timedelta(minutes=15))
+    auth = AuthService(store, throttle, Settings(), lambda _: None, object())
+
+    token, user = auth.login("c@example.com", "correct horse battery")
+
+    assert _verified_flags(store)["u2"] == 1
+    assert store.get_user_by_session(token).id == user.id == "u2"
+
+
+def test_upgrading_a_v3_database_recreates_the_code_tables_by_email(v3_db):
+    store = SqliteUserStore(v3_db)
+
+    assert _columns(v3_db, "email_codes") == {
+        "email", "purpose", "code_hash", "expires_at", "attempts", "created_at"
+    }
+    assert _columns(v3_db, "email_sends") == {"id", "email", "purpose", "sent_at"}
+    assert store._conn.execute("SELECT COUNT(*) FROM email_codes").fetchone()[0] == 0
+    assert store._conn.execute("SELECT COUNT(*) FROM email_sends").fetchone()[0] == 0
+    assert store._conn.execute(
+        "SELECT COUNT(*) FROM pending_registrations"
+    ).fetchone()[0] == 0
+
+
+def test_running_the_identity_migration_twice_changes_nothing(v3_db):
+    first = SqliteUserStore(v3_db)
+    before = first._conn.execute(
+        "SELECT id, created_via, referral_redeemed, bonus_credits FROM users ORDER BY id"
+    ).fetchall()
+    first.close()
+
+    second = SqliteUserStore(v3_db)
+
+    after = second._conn.execute(
+        "SELECT id, created_via, referral_redeemed, bonus_credits FROM users ORDER BY id"
+    ).fetchall()
+    assert after == before
+    assert second.get_by_id("u1").bonus_credits == 5
+
+
+def test_running_the_migration_twice_keeps_codes_written_after_the_first_run(v3_db):
+    first = SqliteUserStore(v3_db)
+    first._conn.execute(
+        "INSERT INTO email_codes VALUES ('c@example.com', 'registration', 'x',"
+        " '2099-01-01T00:00:00+00:00', 0, '2026-01-01T00:00:00+00:00')"
+    )
+    first._conn.commit()
+    first.close()
+
+    second = SqliteUserStore(v3_db)
+
+    assert second._conn.execute("SELECT COUNT(*) FROM email_codes").fetchone()[0] == 1
+    assert _verified_flags(second) == {"u0": 1, "u1": 1, "u2": 1}

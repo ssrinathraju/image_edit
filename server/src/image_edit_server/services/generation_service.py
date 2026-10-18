@@ -31,15 +31,6 @@ async def submit(
     settings: Settings,
 ) -> str:
     """Validate inputs, reserve a generation, persist uploads, queue a job."""
-    # First, so an unverified account learns why before anything else is checked.
-    if not user.email_verified:
-        raise HTTPException(
-            403,
-            ErrorBody(
-                error="email_not_verified",
-                detail="verify your email address before generating",
-            ).model_dump(),
-        )
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)

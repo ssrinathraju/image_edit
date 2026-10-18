@@ -2,13 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'features/auth/confirm_registration_screen.dart';
 import 'features/auth/forgot_password_screen.dart';
 import 'features/auth/login_screen.dart';
+import 'features/auth/referral_prompt_screen.dart';
+import 'features/auth/registration_draft.dart';
 import 'features/auth/register_screen.dart';
 import 'features/auth/reset_password_screen.dart';
 import 'features/auth/session_notifier.dart';
 import 'features/auth/splash_screen.dart';
-import 'features/auth/verify_email_screen.dart';
 import 'features/custom_generation/custom_generation_screen.dart';
 import 'features/generation_status/generation_status_screen.dart';
 import 'features/home/home_screen.dart';
@@ -23,12 +25,14 @@ const String _login = '/login';
 const String _register = '/register';
 const String _forgotPassword = '/forgot-password';
 const String _resetPassword = '/reset-password';
-const String _verifyEmail = '/verify-email';
+const String _confirmRegistration = '/confirm-registration';
+const String _referralPrompt = '/referral-prompt';
 
 /// Pages a signed-out user may open.
 const Set<String> _signedOutPages = {
   _login,
   _register,
+  _confirmRegistration,
   _forgotPassword,
   _resetPassword,
 };
@@ -46,12 +50,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       return location == _splash ? null : _splash;
     }
     if (session.value == null) {
+      if (location == _confirmRegistration &&
+          ref.read(registrationDraftProvider) == null) {
+        return _register;
+      }
       return _signedOutPages.contains(location) ? null : _login;
     }
     final isAuthPage = _signedOutPages.contains(location) || location == _splash;
     if (!isAuthPage) return null;
-    final justRegistered = ref.read(sessionProvider.notifier).justRegistered;
-    return justRegistered ? _verifyEmail : '/';
+    final notifier = ref.read(sessionProvider.notifier);
+    if (notifier.justCreatedViaProvider) return _referralPrompt;
+    return '/';
   }
 
   final router = GoRouter(
@@ -74,7 +83,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           email: state.uri.queryParameters['email'] ?? '',
         ),
       ),
-      GoRoute(path: _verifyEmail, builder: (_, _) => const VerifyEmailScreen()),
+      GoRoute(
+        path: _confirmRegistration,
+        builder: (_, _) => const ConfirmRegistrationScreen(),
+      ),
+      GoRoute(
+        path: _referralPrompt,
+        builder: (_, _) => const ReferralPromptScreen(),
+      ),
       GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/upgrade', builder: (_, _) => const UpgradeScreen()),

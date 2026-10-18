@@ -13,6 +13,7 @@ from image_edit_server.api.deps import (
     get_settings,
     get_user_store,
 )
+from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
@@ -24,11 +25,12 @@ from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from tests.helpers import (
+    FakeAppleClient,
     FakeClock,
+    FakeVerifier,
     RecordingSender,
     build_templates_dir,
     register_headers,
-    register_verified_headers,
 )
 
 
@@ -64,6 +66,27 @@ def clock() -> FakeClock:
 
 
 @pytest.fixture
+def google_verifier(clock) -> FakeVerifier:
+    return FakeVerifier("google", clock)
+
+
+@pytest.fixture
+def apple_verifier(clock) -> FakeVerifier:
+    return FakeVerifier("apple", clock)
+
+
+@pytest.fixture
+def apple_client() -> FakeAppleClient:
+    return FakeAppleClient()
+
+
+@pytest.fixture
+def verifiers(google_verifier, apple_verifier) -> dict:
+    """The configured providers; a test removes an entry to make it unconfigured."""
+    return {"google": google_verifier, "apple": apple_verifier}
+
+
+@pytest.fixture
 def user_store() -> SqliteUserStore:
     return SqliteUserStore(":memory:")
 
@@ -77,7 +100,9 @@ def settings(tmp_path, templates_dir) -> Settings:
 
 
 @pytest.fixture
-def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
+def app(
+    store, catalog, user_store, settings, sender, clock, verifiers, apple_client
+) -> FastAPI:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
@@ -88,8 +113,11 @@ def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
         lambda user_id: [store.delete(j.id) for j in store.list_for_user(user_id)],
         sender,
         clock,
+        verifiers=verifiers,
+        apple_client=apple_client,
     )
     app = FastAPI()
+    install_validation_error_handler(app)
     quota_service = QuotaService(user_store, settings)
     app.include_router(router)
     app.include_router(templates_router)
@@ -100,7 +128,7 @@ def app(store, catalog, user_store, settings, sender, clock) -> FastAPI:
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
-    app.dependency_overrides[get_referral_service] = lambda: ReferralService(settings)
+    app.dependency_overrides[get_referral_service] = lambda: ReferralService(settings, user_store, clock)
     return app
 
 
@@ -110,20 +138,10 @@ def anon_client(app) -> TestClient:
 
 
 @pytest.fixture
-def client(app, user_store) -> TestClient:
-    """A client already signed in as ana@example.com, whose email is verified."""
+def client(app) -> TestClient:
+    """A client already signed in as ana@example.com."""
     test_client = TestClient(app)
-    test_client.headers.update(
-        register_verified_headers(test_client, user_store, "ana@example.com")
-    )
-    return test_client
-
-
-@pytest.fixture
-def unverified_client(app) -> TestClient:
-    """A client signed in as una@example.com, whose email is not verified."""
-    test_client = TestClient(app)
-    test_client.headers.update(register_headers(test_client, "una@example.com"))
+    test_client.headers.update(register_headers(test_client, "ana@example.com"))
     return test_client
 
 
@@ -133,5 +151,5 @@ def user_id(client) -> str:
 
 
 @pytest.fixture
-def second_user_headers(anon_client, user_store) -> dict:
-    return register_verified_headers(anon_client, user_store, "ben@example.com")
+def second_user_headers(anon_client) -> dict:
+    return register_headers(anon_client, "ben@example.com")

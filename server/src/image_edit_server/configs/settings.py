@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from pathlib import Path
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import serialization
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -44,6 +47,13 @@ class Settings(BaseSettings):
     EMAIL_RESEND_SECONDS: int = Field(default=60, ge=1)
     EMAIL_MAX_PER_HOUR: int = Field(default=5, ge=1)
 
+    # Comma-separated in the environment; the iOS, Android and web/server client IDs.
+    GOOGLE_CLIENT_IDS: Annotated[list[str], NoDecode] = []
+    APPLE_BUNDLE_ID: str = ""
+    APPLE_TEAM_ID: str = ""
+    APPLE_KEY_ID: str = ""
+    APPLE_PRIVATE_KEY_PATH: str = ""
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"
@@ -59,6 +69,56 @@ class Settings(BaseSettings):
         if self.SMTP_HOST and not self.SMTP_FROM:
             raise ValueError("SMTP_FROM must be set when SMTP_HOST is set")
         return self
+
+    @field_validator("GOOGLE_CLIENT_IDS", mode="before")
+    @classmethod
+    def _split_google_client_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def _check_apple_key_settings(self) -> "Settings":
+        key_settings = {
+            "APPLE_TEAM_ID": self.APPLE_TEAM_ID,
+            "APPLE_KEY_ID": self.APPLE_KEY_ID,
+            "APPLE_PRIVATE_KEY_PATH": self.APPLE_PRIVATE_KEY_PATH,
+        }
+        missing = [name for name, value in key_settings.items() if not value]
+        if len(missing) == len(key_settings):
+            return self
+        if missing:
+            raise ValueError(
+                "Apple key settings must be set together; missing " + ", ".join(missing)
+            )
+        if not self.APPLE_BUNDLE_ID:
+            raise ValueError("APPLE_BUNDLE_ID must be set when the Apple key settings are set")
+        self._check_apple_key_file()
+        return self
+
+    def _check_apple_key_file(self) -> None:
+        path = self.APPLE_PRIVATE_KEY_PATH
+        try:
+            key_bytes = Path(path).read_bytes()
+        except OSError as error:
+            raise ValueError(
+                f"APPLE_PRIVATE_KEY_PATH {path!r} cannot be read: {error}"
+            ) from error
+        try:
+            serialization.load_pem_private_key(key_bytes, password=None)
+        except (ValueError, TypeError, UnsupportedAlgorithm) as error:
+            raise ValueError(
+                f"APPLE_PRIVATE_KEY_PATH {path!r} is not a PEM private key: {error}"
+            ) from error
+
+    def is_google_configured(self) -> bool:
+        return bool(self.GOOGLE_CLIENT_IDS)
+
+    def is_apple_configured(self) -> bool:
+        return bool(self.APPLE_BUNDLE_ID)
+
+    def is_apple_revocation_configured(self) -> bool:
+        return bool(self.APPLE_PRIVATE_KEY_PATH)
 
     def accepted_image_types_set(self) -> frozenset[str]:
         return frozenset(t.strip() for t in self.ACCEPTED_IMAGE_TYPES.split(","))

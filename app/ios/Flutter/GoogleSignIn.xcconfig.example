@@ -1,0 +1,4 @@
+// Copy to GoogleSignIn.xcconfig (git-ignored) and fill in the iOS OAuth client's
+// reversed client ID from the Google Cloud console, for example
+// com.googleusercontent.apps.1234567890-abcdef.
+GOOGLE_REVERSED_CLIENT_ID =

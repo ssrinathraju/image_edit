@@ -51,3 +51,12 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
 - [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
 - [ ] **Manual passes never recorded for add-email-verification-and-reset** — tasks 11.2 (iOS simulator pass) and 11.3 (optional real SMTP send) were not run.
+
+## From add-social-sign-in
+
+- [ ] **Encrypt the stored Apple refresh token** — `identities.apple_refresh_token` is plain text in `app.db`. Someone holding the database can use it only to get Apple tokens that identify the user to this app, but encrypting it needs a key-management design.
+- [ ] **Sign in with Apple entitlement blocks signed device builds until the Apple Developer membership exists** — `app/ios/Runner.xcodeproj/project.pbxproj` sets `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements` for Debug, Release and Profile, and a free Personal Team cannot sign `com.apple.developer.applesignin`. The simulator and `--no-codesign` builds are unaffected. Documented in `server/README.md` (device note after the console checklist). Confirm on a device during the manual pass (14.3), and move the entitlement to a Release-only configuration if development devices must keep working before the membership.
+- [ ] **Mutual referral redemption** — two fresh provider accounts can redeem each other's codes (each gets +5 once, within 24 hours of creation). Bounded by the referrer cap and by the one-redemption-per-account rule. Closing it needs a rule such as "a code from an account that itself redeemed in the last 24 hours is refused", which is a spec change. Part of the wider referral-farming item above (disposable emails, no per-IP limits).
+
+- [ ] **Correct two design.md statements at archive time (add-social-sign-in)** — (1) Risks, thread-safety bullet: a second concurrent confirm of the same registration can get 409 `email_taken`, not `code_expired`. (2) Risks, pruning (line ~168): an abandoned address is pruned at startup and on the next registration or reset request, not by the periodic retention sweep, which does not prune email rows; either reword or call `prune_email_rows` from `run_retention`.
+- [ ] **Confirm screen `_backToRegistration` fallback loses typed values** — `context.go('/register')` opens a fresh screen when Confirm is the root route; unreachable in normal flow.

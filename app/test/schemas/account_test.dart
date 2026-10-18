@@ -42,30 +42,48 @@ void main() {
     expect(profile.referral, isNull);
   });
 
-  test('email_verified is read when present and defaults to true when absent', () {
-    final unverified = UserProfile.fromJson(
+  test('a profile and a session ignore a leftover email_verified field', () {
+    final profile = UserProfile.fromJson(
       {'id': 'u1', 'email': 'ana@example.com', 'email_verified': false},
     );
-    final verified = UserProfile.fromJson(
-      {'id': 'u1', 'email': 'ana@example.com', 'email_verified': true},
+    final session = Session.fromJson(
+      {'token': 't', 'id': 'u1', 'email': 'ana@example.com', 'email_verified': false},
     );
-    final oldServer = UserProfile.fromJson({'id': 'u1', 'email': 'ana@example.com'});
 
-    expect(unverified.emailVerified, isFalse);
-    expect(verified.emailVerified, isTrue);
-    expect(oldServer.emailVerified, isTrue);
-  });
-
-  test('a session parses email_verified and defaults it to true when absent', () {
-    final base = {'token': 't', 'id': 'u1', 'email': 'ana@example.com'};
-
-    expect(Session.fromJson({...base, 'email_verified': false}).emailVerified, isFalse);
-    expect(Session.fromJson({...base, 'email_verified': true}).emailVerified, isTrue);
-    expect(Session.fromJson(base).emailVerified, isTrue);
+    expect(profile.email, 'ana@example.com');
+    expect(session.toJson(), {'token': 't', 'id': 'u1', 'email': 'ana@example.com'});
   });
 
   test('an unknown plan reads as free', () {
     expect(Plan.parse('gold'), Plan.free);
     expect(Plan.parse(null), Plan.free);
+  });
+
+  test('providers and has_password are parsed', () {
+    final profile = UserProfile.fromJson({
+      'id': 'u1',
+      'email': 'ana@example.com',
+      'providers': ['apple', 'google'],
+      'has_password': false,
+    });
+
+    expect(profile.providers, ['apple', 'google']);
+    expect(profile.hasPassword, isFalse);
+  });
+
+  test('providers default to empty and has_password to true when absent', () {
+    final profile = UserProfile.fromJson({'id': 'u1', 'email': 'ana@example.com'});
+
+    expect(profile.providers, isEmpty);
+    expect(profile.hasPassword, isTrue);
+  });
+
+  test('a provider sign-in response parses created and defaults it to false', () {
+    final base = {'token': 't', 'id': 'u1', 'email': 'ana@example.com'};
+
+    expect(ProviderSession.fromJson({...base, 'created': true}).created, isTrue);
+    expect(ProviderSession.fromJson({...base, 'created': false}).created, isFalse);
+    expect(ProviderSession.fromJson(base).created, isFalse);
+    expect(ProviderSession.fromJson(base).session.token, 't');
   });
 }

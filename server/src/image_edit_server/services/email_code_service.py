@@ -18,7 +18,7 @@ from image_edit_server.core.user_store import UserStore
 logger = logging.getLogger(__name__)
 
 _PURPOSE_TEXT = {
-    CodePurpose.VERIFY_EMAIL: ("verification code", "verify your email address"),
+    CodePurpose.REGISTRATION: ("registration code", "finish creating your account"),
     CodePurpose.PASSWORD_RESET: ("password reset code", "reset your password"),
 }
 
@@ -39,18 +39,22 @@ def limits_from(settings: Settings) -> CodeLimits:
     )
 
 
+def new_code(email: str, purpose: CodePurpose) -> tuple[str, str]:
+    """A fresh random code and the hash that is stored in its place."""
+    code = generate_code()
+    return code, hash_code(email, purpose, code)
+
+
 def issue_code(
     users: UserStore,
-    user_id: str,
+    email: str,
     purpose: CodePurpose,
     settings: Settings,
     now: datetime,
 ) -> CodeOutcome:
-    """Generate and store a code for the account, unless a sending limit applies."""
-    code = generate_code()
-    result = users.issue_code(
-        user_id, purpose, hash_code(user_id, purpose, code), now, limits_from(settings)
-    )
+    """Generate and store a code for the address, unless a sending limit applies."""
+    code, code_hash = new_code(email, purpose)
+    result = users.issue_code(email, purpose, code_hash, now, limits_from(settings))
     if not result.issued:
         return CodeOutcome(code=None, retry_after_seconds=result.retry_after_seconds)
     return CodeOutcome(code=code)
@@ -70,7 +74,6 @@ def compose_message(
 
 def deliver(
     sender: EmailSender,
-    user_id: str,
     to: str,
     purpose: CodePurpose,
     code: str,
@@ -82,8 +85,5 @@ def deliver(
         sender.send(to, subject, body)
     except Exception as error:
         logger.error(
-            "Could not send %s email for user %s: %s",
-            purpose.value,
-            user_id,
-            type(error).__name__,
+            "Could not send %s email: %s", purpose.value, type(error).__name__
         )

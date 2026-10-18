@@ -20,8 +20,20 @@ class Clock:
         return self.now
 
 
+def _start(auth, email, password, referral_code=None):
+    """Start a registration and run its email task, as the response's background would."""
+    tasks = BackgroundTasks()
+    auth.register(email, password, referral_code, tasks)
+    for task in tasks.tasks:
+        task.func(*task.args, **task.kwargs)
+
+
 def _register(auth, email, password, referral_code=None):
-    return auth.register(email, password, referral_code, BackgroundTasks())
+    """Register and confirm with the emailed code; returns (session token, user)."""
+    _start(auth, email, password, referral_code)
+    return auth.confirm_registration(
+        email, auth._sender.last_code(email.strip().lower()), password
+    )
 
 
 @pytest.fixture
@@ -47,7 +59,13 @@ def _error(excinfo) -> tuple[int, str]:
     return excinfo.value.status_code, excinfo.value.detail["error"]
 
 
-def test_register_returns_token_that_resolves_to_the_user(auth, users):
+def test_register_creates_no_account_until_confirmed(auth, users):
+    _start(auth, "ana@example.com", PASSWORD)
+
+    assert users.get_by_email("ana@example.com") is None
+
+
+def test_confirm_returns_token_that_resolves_to_the_user(auth, users):
     token, user = _register(auth, "ana@example.com", PASSWORD)
 
     assert users.get_user_by_session(token) == user
@@ -66,6 +84,18 @@ def test_register_duplicate_in_other_case_is_409(auth):
         _register(auth, "ANA@example.com", PASSWORD)
 
     assert _error(excinfo) == (409, "email_taken")
+
+
+def test_confirm_with_a_wrong_code_is_400_invalid_code(auth, users):
+    _start(auth, "ana@example.com", PASSWORD)
+    right = auth._sender.last_code("ana@example.com")
+    wrong = "000000" if right != "000000" else "111111"
+
+    with pytest.raises(HTTPException) as excinfo:
+        auth.confirm_registration("ana@example.com", wrong, PASSWORD)
+
+    assert _error(excinfo) == (400, "invalid_code")
+    assert users.get_by_email("ana@example.com") is None
 
 
 def test_register_short_password_is_400_and_creates_nothing(auth, users):

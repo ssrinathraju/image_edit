@@ -13,7 +13,7 @@ from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
 from image_edit_server.repos import file_storage
 from image_edit_server.services.retention_service import sweep
-from tests.helpers import RecordingSender, register_and_verify_through_api
+from tests.helpers import RecordingSender, register_headers
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
@@ -53,7 +53,7 @@ def test_expired_result_and_its_job_disappear_but_a_young_one_stays(tmp_path, te
     sender = RecordingSender()
     app = create_app(settings, sender=sender)
     with TestClient(app) as client:
-        headers = register_and_verify_through_api(client, sender, "ana@example.com")
+        headers = register_headers(client, "ana@example.com")
         old, young = _generate(client, headers), _generate(client, headers)
         assert client.get(old["result_url"]).status_code == 200
         _age(file_storage.output_path(old["job_id"], str(tmp_path)), hours=25)

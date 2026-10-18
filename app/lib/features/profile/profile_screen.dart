@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api_errors.dart';
+import '../../core/provider_sign_in.dart';
 import '../../schemas/account.dart';
 import '../../schemas/session.dart';
 import '../auth/session_notifier.dart';
@@ -17,6 +19,8 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _deleting = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,7 +46,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       body: ListView(
         children: [
+          if (_deleting) const LinearProgressIndicator(),
           _Header(email: email),
+          if (account != null) _ProviderLines(providers: account.providers),
           if (account?.usage != null) _PlanCard(account: account!),
           const Divider(),
           ListTile(
@@ -84,7 +90,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               'Delete account',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            onTap: () => _confirmDelete(context, ref),
+            enabled: !_deleting,
+            onTap: () => _confirmDelete(context, ref, account),
           ),
           if (version != null)
             Padding(
@@ -123,20 +130,76 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    UserProfile? account,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final password = await showDialog<String>(
+    final provider = account != null && !account.hasPassword
+        ? _providerToConfirmWith(account)
+        : null;
+    final confirmation = await showDialog<String>(
       context: context,
-      builder: (_) => const _DeleteAccountDialog(),
+      builder: (_) => _DeleteAccountDialog(confirmWith: provider),
     );
-    if (password == null) return;
+    // The profile can be gone by now (say the session expired behind the dialog).
+    if (confirmation == null || !mounted) return;
+    setState(() => _deleting = true);
     try {
-      await ref
-          .read(sessionProvider.notifier)
-          .deleteAccount(password: password);
+      final notifier = ref.read(sessionProvider.notifier);
+      if (provider == null) {
+        await notifier.deleteAccount(password: confirmation);
+      } else {
+        final credential = await ref.read(signInProviderFor(provider)).signIn();
+        if (credential == null) return;
+        await notifier.deleteAccountWithProvider(credential);
+      }
     } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_deleteErrorMessage(error, provider))),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
+  }
+
+  /// Apple when the account is linked to it and this is an iPhone, otherwise Google.
+  SignInProvider _providerToConfirmWith(UserProfile account) {
+    final isIos = ref.read(targetPlatformProvider) == TargetPlatform.iOS;
+    final hasApple = account.providers.contains(SignInProvider.apple.apiName);
+    return hasApple && isIos ? SignInProvider.apple : SignInProvider.google;
+  }
+
+  String _deleteErrorMessage(Object error, SignInProvider? provider) {
+    if (provider != null && isInvalidProviderToken(error)) {
+      return "Couldn't confirm with ${provider.label}";
+    }
+    return describeError(error);
+  }
+}
+
+/// "Signed in with Google" lines for the linked providers; nothing when there are none.
+class _ProviderLines extends StatelessWidget {
+  const _ProviderLines({required this.providers});
+
+  final List<String> providers;
+
+  @override
+  Widget build(BuildContext context) {
+    final linked = [
+      for (final provider in SignInProvider.values)
+        if (providers.contains(provider.apiName)) provider,
+    ];
+    return Column(
+      children: [
+        for (final provider in linked)
+          Text(
+            'Signed in with ${provider.label}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+      ],
+    );
   }
 }
 
@@ -232,7 +295,10 @@ class _LinkTile extends ConsumerWidget {
 }
 
 class _DeleteAccountDialog extends StatefulWidget {
-  const _DeleteAccountDialog();
+  const _DeleteAccountDialog({this.confirmWith});
+
+  /// Set for an account without a password: it confirms by signing in again with this provider.
+  final SignInProvider? confirmWith;
 
   @override
   State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
@@ -249,6 +315,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = widget.confirmWith;
     return AlertDialog(
       title: const Text('Delete account?'),
       content: Column(
@@ -260,15 +327,18 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
             'generated images are deleted and cannot be recovered.',
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
+          if (provider == null)
+            TextField(
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            )
+          else
+            Text("You'll be asked to sign in with ${provider.label} again to confirm."),
         ],
       ),
       actions: [
@@ -280,7 +350,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
           style: FilledButton.styleFrom(
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
-          onPressed: _password.text.isEmpty
+          onPressed: provider == null && _password.text.isEmpty
               ? null
               : () => Navigator.of(context).pop(_password.text),
           child: const Text('Delete account'),

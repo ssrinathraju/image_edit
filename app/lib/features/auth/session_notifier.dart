@@ -1,11 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/provider_sign_in.dart';
 import '../../core/session_storage.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
 import '../common/submit_controller.dart';
 import '../home/home_notifier.dart';
+import 'registration_draft.dart';
 
 final sessionStorageProvider =
     Provider<SessionStorage>((_) => SecureSessionStorage());
@@ -24,16 +26,16 @@ final sessionTokenHolderProvider =
 /// saved session is being checked, and an error means it could not be checked.
 class SessionNotifier extends AsyncNotifier<Session?> {
   bool _restoring = false;
-  bool _justRegistered = false;
+  bool _justCreatedViaProvider = false;
 
-  /// True between registering and the Verify email screen opening, so the
-  /// router can send a new account there instead of home.
-  bool get justRegistered => _justRegistered;
+  /// True between a provider sign-in that created the account and the
+  /// referral prompt opening, so the router can send the user there.
+  bool get justCreatedViaProvider => _justCreatedViaProvider;
 
-  /// Reads and clears [justRegistered]; the Verify screen calls it when it opens.
-  bool takeJustRegistered() {
-    final value = _justRegistered;
-    _justRegistered = false;
+  /// Reads and clears [justCreatedViaProvider]; the prompt calls it when it opens.
+  bool takeJustCreatedViaProvider() {
+    final value = _justCreatedViaProvider;
+    _justCreatedViaProvider = false;
     return value;
   }
 
@@ -67,18 +69,67 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _start(session);
   }
 
-  Future<void> register({
+  /// Asks the server to email a registration code and keeps what was entered
+  /// as the draft. No account or session exists until [confirmRegistration].
+  Future<void> startRegistration({
     required String email,
     required String password,
     String? referralCode,
   }) async {
-    final session = await ref.read(apiClientProvider).register(
+    await ref.read(apiClientProvider).register(
           email: email,
           password: password,
           referralCode: referralCode,
         );
-    _justRegistered = true;
+    ref.read(registrationDraftProvider.notifier).state = RegistrationDraft(
+      email: email,
+      password: password,
+      referralCode: referralCode,
+    );
+  }
+
+  /// Sends the draft's registration again, for Resend; a refusal throws.
+  Future<void> resendRegistrationCode() async {
+    final draft = ref.read(registrationDraftProvider);
+    if (draft == null) return;
+    await ref.read(apiClientProvider).register(
+          email: draft.email,
+          password: draft.password,
+          referralCode: draft.referralCode,
+        );
+  }
+
+  /// Creates the account with the emailed code and the draft's password, and
+  /// signs in; a rejected code throws and leaves the draft in place.
+  Future<void> confirmRegistration({required String code}) async {
+    final draft = ref.read(registrationDraftProvider);
+    if (draft == null) return;
+    final session = await ref
+        .read(apiClientProvider)
+        .confirmRegistration(
+          email: draft.email,
+          code: code,
+          password: draft.password,
+        );
     await _start(session);
+  }
+
+  /// Signs in with what a Google or Apple sheet returned; the server links,
+  /// finds or creates the account.
+  Future<void> signInWithProvider(ProviderCredential credential) async {
+    final api = ref.read(apiClientProvider);
+    final result = switch (credential.provider) {
+      SignInProvider.google => await api.signInWithGoogle(
+          idToken: credential.token,
+        ),
+      SignInProvider.apple => await api.signInWithApple(
+          identityToken: credential.token,
+          nonce: credential.nonce!,
+          authorizationCode: credential.authorizationCode ?? '',
+        ),
+    };
+    _justCreatedViaProvider = result.created;
+    await _start(result.session);
   }
 
   /// Sets a new password with an emailed code and signs in with the fresh
@@ -112,6 +163,17 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _clearLocalSession();
   }
 
+  /// Deletes the account confirmed by a fresh provider sign-in; a rejected
+  /// token throws and keeps the session.
+  Future<void> deleteAccountWithProvider(ProviderCredential credential) async {
+    await ref.read(apiClientProvider).deleteAccount(
+          provider: credential.provider.apiName,
+          token: credential.token,
+          nonce: credential.nonce,
+        );
+    await _clearLocalSession();
+  }
+
   /// Drops a session the server no longer accepts, without calling the server.
   Future<void> expire() async {
     if (_restoring) return;
@@ -122,6 +184,8 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await ref.read(sessionStorageProvider).write(session);
     ref.read(sessionTokenHolderProvider).token = session.token;
     state = AsyncData(session);
+    // Every way of signing in ends the registration flow.
+    ref.read(registrationDraftProvider.notifier).state = null;
   }
 
   Future<void> _discardStoredSession() async {
@@ -132,6 +196,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   Future<void> _clearLocalSession() async {
     ref.invalidate(lastRequestProvider);
     ref.invalidate(homeNotifierProvider);
+    _justCreatedViaProvider = false;
     await _discardStoredSession();
     state = const AsyncData(null);
   }

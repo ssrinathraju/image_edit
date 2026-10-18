@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,19 +19,24 @@ from image_edit_server.api.deps import (
     get_settings,
     get_user_store,
 )
+from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router as generations_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.email_sender import EmailSender
+from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
 from image_edit_server.services.account_cleanup import purge_user_jobs
+from image_edit_server.services.apple_revocation import AppleRevocationClient
 from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.email.log_sender import LogSender
 from image_edit_server.services.email.smtp_sender import SmtpSender
+from image_edit_server.services.identity.apple_verifier import AppleVerifier
+from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.retention_service import run_retention, sweep
@@ -59,6 +65,25 @@ def _make_email_sender(cfg: Settings) -> EmailSender:
     return LogSender()
 
 
+def _make_verifiers(cfg: Settings) -> dict[str, IdentityVerifier]:
+    verifiers: dict[str, IdentityVerifier] = {}
+    if cfg.is_google_configured():
+        verifiers["google"] = GoogleVerifier(cfg.GOOGLE_CLIENT_IDS)
+    if cfg.is_apple_configured():
+        verifiers["apple"] = AppleVerifier(cfg.APPLE_BUNDLE_ID)
+    return verifiers
+
+
+def _make_apple_client(cfg: Settings) -> Optional[AppleRevocationClient]:
+    if cfg.is_apple_revocation_configured():
+        return AppleRevocationClient(cfg)
+    if cfg.is_apple_configured():
+        logger.warning(
+            "Apple key settings are not set: Apple tokens will not be revoked when accounts are deleted"
+        )
+    return None
+
+
 def _open_user_store(cfg: Settings) -> SqliteUserStore:
     db_path = Path(auth_db_path(cfg))
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,8 +91,12 @@ def _open_user_store(cfg: Settings) -> SqliteUserStore:
 
 
 def create_app(
-    settings: Settings | None = None, sender: EmailSender | None = None
+    settings: Settings | None = None,
+    sender: EmailSender | None = None,
+    verifiers: dict[str, IdentityVerifier] | None = None,
+    apple_client: AppleRevocationClient | None = None,
 ) -> FastAPI:
+    """Build the app; `verifiers` and `apple_client` replace the real provider clients in tests."""
     cfg = settings or Settings()
     email_sender = sender or _make_email_sender(cfg)
     store = InMemoryJobStore()
@@ -81,10 +110,12 @@ def create_app(
         cfg,
         lambda user_id: purge_user_jobs(user_id, store, cfg.STORAGE_ROOT),
         email_sender,
+        verifiers=verifiers if verifiers is not None else _make_verifiers(cfg),
+        apple_client=apple_client or _make_apple_client(cfg),
     )
 
     quota_service = QuotaService(user_store, cfg)
-    referral_service = ReferralService(cfg)
+    referral_service = ReferralService(cfg, user_store)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -105,6 +136,11 @@ def create_app(
         except Exception:
             logger.exception("Startup retention sweep failed")
 
+        try:
+            user_store.prune_email_rows(datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Startup pruning of email-keyed rows failed")
+
         workers = [
             asyncio.create_task(run_worker(
                 store,
@@ -124,6 +160,7 @@ def create_app(
         user_store.close()
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)
+    install_validation_error_handler(app)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cfg.CORS_ORIGINS,
@@ -152,5 +189,3 @@ def create_app(
 
     return app
 
-
-app = create_app()

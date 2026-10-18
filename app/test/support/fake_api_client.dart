@@ -17,17 +17,35 @@ class FakeApiClient implements GenerationApiClient {
   Future<Uint8List> Function(String url) onFetchBytes =
       (_) async => Uint8List.fromList([1, 2, 3]);
 
-  Future<Session> Function(String email, String password) onRegister =
+  Future<void> Function(String email, String password) onRegister =
+      (_, _) async {};
+  Future<Session> Function(String email, String code) onConfirmRegistration =
       (email, _) async => Session(token: 'token-new', userId: 'user-1', email: email);
   final referralCodes = <String?>[];
+  final registrationPasswords = <String>[];
+  final confirmedRegistrations = <List<String>>[];
   Future<Session> Function(String email, String password) onLogin =
       (email, _) async => Session(token: 'token-1', userId: 'user-1', email: email);
   Future<void> Function() onLogout = () async {};
   Future<UserProfile> Function() onFetchMe =
       () async => const UserProfile(id: 'user-1', email: 'ana@example.com');
   Future<void> Function(String password) onDeleteAccount = (_) async {};
-  Future<void> Function(String code) onVerifyEmail = (_) async {};
-  Future<void> Function() onResendVerification = () async {};
+  Future<void> Function(String provider, String token, String? nonce)
+      onDeleteWithProvider = (_, _, _) async {};
+  Future<ProviderSession> Function(String idToken) onSignInWithGoogle =
+      (_) async => const ProviderSession(
+            session: Session(token: 'token-google', userId: 'user-2', email: 'gina@example.com'),
+            created: false,
+          );
+  Future<ProviderSession> Function(
+    String identityToken,
+    String nonce,
+    String authorizationCode,
+  ) onSignInWithApple = (_, _, _) async => const ProviderSession(
+        session: Session(token: 'token-apple', userId: 'user-3', email: 'ann@example.com'),
+        created: false,
+      );
+  Future<void> Function(String code) onRedeemReferral = (_) async {};
   Future<void> Function(String email) onRequestPasswordReset = (_) async {};
   Future<Session> Function(String email, String code, String newPassword)
       onConfirmPasswordReset = (email, _, _) async =>
@@ -38,8 +56,10 @@ class FakeApiClient implements GenerationApiClient {
   final loggedIn = <String>[];
   var logoutCalls = 0;
   final deletedWith = <String>[];
-  final verifiedWith = <String>[];
-  var resendCalls = 0;
+  final deletedViaProvider = <List<String?>>[];
+  final googleTokens = <String>[];
+  final appleSignIns = <List<String>>[];
+  final redeemedCodes = <String>[];
   final resetRequestedFor = <String>[];
   final resetConfirmed = <List<String>>[];
   final submitted = <GenerationRequest>[];
@@ -70,14 +90,25 @@ class FakeApiClient implements GenerationApiClient {
   String resolveUrl(String path) => 'http://fake$path';
 
   @override
-  Future<Session> register({
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
   }) {
     registered.add(email);
+    registrationPasswords.add(password);
     referralCodes.add(referralCode);
     return onRegister(email, password);
+  }
+
+  @override
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
+    required String password,
+  }) {
+    confirmedRegistrations.add([email, code, password]);
+    return onConfirmRegistration(email, code);
   }
 
   @override
@@ -96,21 +127,40 @@ class FakeApiClient implements GenerationApiClient {
   Future<UserProfile> fetchMe() => onFetchMe();
 
   @override
-  Future<void> deleteAccount({required String password}) {
-    deletedWith.add(password);
+  Future<void> deleteAccount({
+    String? password,
+    String? provider,
+    String? token,
+    String? nonce,
+  }) {
+    if (provider != null) {
+      deletedViaProvider.add([provider, token, nonce]);
+      return onDeleteWithProvider(provider, token!, nonce);
+    }
+    deletedWith.add(password!);
     return onDeleteAccount(password);
   }
 
   @override
-  Future<void> verifyEmail({required String code}) {
-    verifiedWith.add(code);
-    return onVerifyEmail(code);
+  Future<ProviderSession> signInWithGoogle({required String idToken}) {
+    googleTokens.add(idToken);
+    return onSignInWithGoogle(idToken);
   }
 
   @override
-  Future<void> resendVerification() {
-    resendCalls++;
-    return onResendVerification();
+  Future<ProviderSession> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+  }) {
+    appleSignIns.add([identityToken, nonce, authorizationCode]);
+    return onSignInWithApple(identityToken, nonce, authorizationCode);
+  }
+
+  @override
+  Future<void> redeemReferral({required String code}) {
+    redeemedCodes.add(code);
+    return onRedeemReferral(code);
   }
 
   @override
@@ -147,12 +197,14 @@ UserProfile fakeProfile({
   int rewards = 0,
   String code = 'K7M2QX9P',
   DateTime? resetsAt,
-  bool emailVerified = true,
+  List<String> providers = const [],
+  bool hasPassword = true,
 }) =>
     UserProfile(
       id: 'user-1',
       email: 'ana@example.com',
-      emailVerified: emailVerified,
+      providers: providers,
+      hasPassword: hasPassword,
       plan: plan,
       usage: Usage(
         dailyLimit: dailyLimit,

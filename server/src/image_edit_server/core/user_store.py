@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Protocol
 
@@ -9,6 +10,7 @@ from image_edit_server.core.email_codes import (
     ConsumeResult,
     IssueResult,
 )
+from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 
@@ -16,45 +18,102 @@ class EmailTakenError(Exception):
     """Raised when creating a user whose email already has an account."""
 
 
+class RegistrationChanged(Exception):
+    """Raised when the pending registration no longer matches what the caller checked."""
+
+
+@dataclass(frozen=True)
+class PendingRegistration:
+    """The pending row as read when its code was accepted."""
+
+    password_hash: str
+    created_at: str
+
+
 class QuotaExceeded(Exception):
     """Raised when an account has no daily allowance or bonus credits left."""
 
 
 class InvalidReferralCode(Exception):
-    """Raised when registering with a referral code that matches no account."""
+    """Raised when a referral code matches no account."""
 
 
 class UserNotFound(Exception):
     """Raised when an operation targets an account that no longer exists."""
 
 
+class ProviderEmailMissing(Exception):
+    """Raised when an unlinked provider identity arrives without an email."""
+
+
+class ProviderEmailUnverified(Exception):
+    """Raised when the provider does not vouch for the email of an unlinked identity."""
+
+
+class ProviderAlreadyLinked(Exception):
+    """Raised when linking would give an account a second identity of one provider."""
+
+
+class ReferralNotAllowed(Exception):
+    """Raised when an account may not redeem a referral code (late, repeated or password-made)."""
+
+
 class UserStore(Protocol):
     def create_user(self, email: str, password_hash: str) -> User:
-        """Create a bare user (no referral); raises EmailTakenError on a duplicate."""
+        """Create a bare verified user (no referral); raises EmailTakenError on a duplicate."""
         ...
 
-    def register_user(
+    def start_registration(
         self,
         email: str,
         password_hash: str,
         referral_code: Optional[str],
-    ) -> User:
-        """Create an unverified user; a valid referral code is paid out on verification.
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> IssueResult:
+        """Hold a registration as pending and store its code, unless a sending limit applies.
 
-        Raises EmailTakenError or InvalidReferralCode; nothing is written then.
+        Raises EmailTakenError or InvalidReferralCode; nothing is written then. When
+        a limit applies the earlier pending registration and code are kept.
         """
         ...
 
-    def mark_email_verified(self, user_id: str, bonus: int, max_rewards: int) -> bool:
-        """Verify the email and pay any pending referral reward, once.
+    def check_registration_code(
+        self, email: str, code: str, now: datetime, max_attempts: int
+    ) -> tuple[ConsumeResult, Optional[PendingRegistration]]:
+        """Check the registration code without using it up.
 
-        Returns False when the account was already verified or does not exist.
+        Returns (ok, pending) or (wrong | expired, None). A correct code with no
+        pending row counts as expired, unless an account has the email: then
+        EmailTakenError is raised.
         """
+        ...
+
+    def complete_registration(
+        self,
+        email: str,
+        checked: PendingRegistration,
+        password_matches: bool,
+        now: datetime,
+        bonus: int,
+        max_rewards: int,
+    ) -> User:
+        """Create the verified account if the pending row is still `checked` and the password matched.
+
+        Raises RegistrationChanged, after discarding the pending row and its code, on a
+        mismatch or a changed row. Raises EmailTakenError, after discarding the pending
+        row, when an account has the email.
+        """
+        ...
+
+    def prune_email_rows(self, now: datetime) -> None:
+        """Delete expired codes, send rows past the send window and stale pending registrations."""
         ...
 
     def issue_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code_hash: str,
         now: datetime,
@@ -65,7 +124,7 @@ class UserStore(Protocol):
 
     def consume_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code: str,
         now: datetime,
@@ -76,16 +135,14 @@ class UserStore(Protocol):
 
     def reset_password(
         self,
-        user_id: str,
+        email: str,
         code: str,
         new_hash: str,
         now: datetime,
         max_attempts: int,
-        bonus: int,
-        max_rewards: int,
     ) -> ConsumeResult:
-        """Consume a reset code and, on ok, change the password, drop every
-        session and verify the email, all in one transaction."""
+        """Consume a reset code and, on ok, change the password and drop every
+        session of the account, all in one transaction."""
         ...
 
     def reserve_generation(self, user_id: str, daily_limit: int, now: datetime) -> str:
@@ -134,3 +191,40 @@ class UserStore(Protocol):
         ...
 
     def delete_session(self, token: str) -> None: ...
+
+    def sign_in_with_identity(
+        self, identity: ProviderIdentity, now: datetime
+    ) -> tuple[User, bool]:
+        """Find the linked account, link by email, or create one; returns (user, created).
+
+        Creating an account discards any pending registration for its email. Raises
+        ProviderEmailMissing, ProviderEmailUnverified or ProviderAlreadyLinked before
+        writing anything.
+        """
+        ...
+
+    def has_identity(self, user_id: str, provider: str, subject: str) -> bool: ...
+
+    def list_providers(self, user_id: str) -> list[str]:
+        """The provider names linked to the account, sorted."""
+        ...
+
+    def set_apple_refresh_token(self, user_id: str, token: str) -> None: ...
+
+    def get_apple_refresh_token(self, user_id: str) -> Optional[str]: ...
+
+    def redeem_referral(
+        self,
+        user_id: str,
+        code: str,
+        now: datetime,
+        window: timedelta,
+        bonus: int,
+        max_rewards: int,
+    ) -> None:
+        """Link a provider-made account to a referrer and pay both at once.
+
+        Raises ReferralNotAllowed, InvalidReferralCode or UserNotFound; nothing is
+        written then.
+        """
+        ...

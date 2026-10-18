@@ -16,18 +16,35 @@ abstract class GenerationApiClient {
   Future<Uint8List> fetchImageBytes(String url);
   String resolveUrl(String path);
 
-  Future<Session> register({
+  /// Starts a registration: the server emails a code and creates no account.
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
   });
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
+    required String password,
+  });
   Future<Session> login({required String email, required String password});
   Future<void> logout();
   Future<UserProfile> fetchMe();
-  Future<void> deleteAccount({required String password});
+  Future<void> deleteAccount({
+    String? password,
+    String? provider,
+    String? token,
+    String? nonce,
+  });
 
-  Future<void> verifyEmail({required String code});
-  Future<void> resendVerification();
+  Future<ProviderSession> signInWithGoogle({required String idToken});
+  Future<ProviderSession> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+  });
+  Future<void> redeemReferral({required String code});
+
   Future<void> requestPasswordReset({required String email});
   Future<Session> confirmPasswordReset({
     required String email,
@@ -38,6 +55,8 @@ abstract class GenerationApiClient {
 
 const String _loginPath = '/auth/login';
 const String _registerPath = '/auth/register';
+const String _googlePath = '/auth/oauth/google';
+const String _applePath = '/auth/oauth/apple';
 
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 60);
@@ -70,7 +89,12 @@ class DioApiClient implements GenerationApiClient {
         },
         onError: (error, handler) {
           final path = error.requestOptions.path;
-          final isCredentialCall = path == _loginPath || path == _registerPath;
+          final isCredentialCall = const {
+            _loginPath,
+            _registerPath,
+            _googlePath,
+            _applePath,
+          }.contains(path);
           if (error.response?.statusCode == 401 && !isCredentialCall) {
             onUnauthorized?.call();
           }
@@ -148,18 +172,33 @@ class DioApiClient implements GenerationApiClient {
   String resolveUrl(String path) => '$_baseUrl$path';
 
   @override
-  Future<Session> register({
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
   }) {
     final code = referralCode?.trim();
-    return _authenticate(
+    return _dio.post<void>(
       _registerPath,
-      email,
-      password,
-      referralCode: code == null || code.isEmpty ? null : code,
+      data: {
+        'email': email,
+        'password': password,
+        'referral_code': ?(code == null || code.isEmpty ? null : code),
+      },
     );
+  }
+
+  @override
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
+    required String password,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/auth/register/confirm',
+      data: {'email': email, 'code': code, 'password': password},
+    );
+    return Session.fromJson(response.data!);
   }
 
   @override
@@ -176,16 +215,49 @@ class DioApiClient implements GenerationApiClient {
   }
 
   @override
-  Future<void> deleteAccount({required String password}) =>
-      _dio.delete<void>('/me', data: {'password': password});
+  Future<void> deleteAccount({
+    String? password,
+    String? provider,
+    String? token,
+    String? nonce,
+  }) =>
+      _dio.delete<void>(
+        '/me',
+        data: {
+          'password': ?password,
+          'provider': ?provider,
+          'token': ?token,
+          'nonce': ?nonce,
+        },
+      );
 
   @override
-  Future<void> verifyEmail({required String code}) =>
-      _dio.post<void>('/auth/verify-email', data: {'code': code});
+  Future<ProviderSession> signInWithGoogle({required String idToken}) =>
+      _signInWithProvider(_googlePath, {'id_token': idToken});
 
   @override
-  Future<void> resendVerification() =>
-      _dio.post<void>('/auth/verify-email/resend');
+  Future<ProviderSession> signInWithApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+  }) =>
+      _signInWithProvider(_applePath, {
+        'identity_token': identityToken,
+        'nonce': nonce,
+        'authorization_code': authorizationCode,
+      });
+
+  @override
+  Future<void> redeemReferral({required String code}) =>
+      _dio.post<void>('/me/referral', data: {'code': code});
+
+  Future<ProviderSession> _signInWithProvider(
+    String path,
+    Map<String, String> body,
+  ) async {
+    final response = await _dio.post<Map<String, dynamic>>(path, data: body);
+    return ProviderSession.fromJson(response.data!);
+  }
 
   @override
   Future<void> requestPasswordReset({required String email}) =>
@@ -204,19 +276,10 @@ class DioApiClient implements GenerationApiClient {
     return Session.fromJson(response.data!);
   }
 
-  Future<Session> _authenticate(
-    String path,
-    String email,
-    String password, {
-    String? referralCode,
-  }) async {
+  Future<Session> _authenticate(String path, String email, String password) async {
     final response = await _dio.post<Map<String, dynamic>>(
       path,
-      data: {
-        'email': email,
-        'password': password,
-        'referral_code': ?referralCode,
-      },
+      data: {'email': email, 'password': password},
     );
     return Session.fromJson(response.data!);
   }

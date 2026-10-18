@@ -80,7 +80,11 @@ class _ResendCodeButtonState extends State<ResendCodeButton> {
     }
     final wait = retryAfterSecondsOf(error);
     if (wait != null) _startCountdown(wait);
-    setState(() => _message = _tooManyCodesMessage);
+    setState(() {
+      _message = wait == null
+          ? _tooManyCodesMessage
+          : 'Too many codes requested, try again in ${wait}s';
+    });
   }
 
   @override
