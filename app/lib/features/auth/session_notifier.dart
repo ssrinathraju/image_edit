@@ -99,16 +99,19 @@ class SessionNotifier extends AsyncNotifier<Session?> {
         );
   }
 
-  /// Creates the account with the emailed code and signs in; a rejected code
-  /// throws and leaves the draft in place.
+  /// Creates the account with the emailed code and the draft's password, and
+  /// signs in; a rejected code throws and leaves the draft in place.
   Future<void> confirmRegistration({required String code}) async {
     final draft = ref.read(registrationDraftProvider);
     if (draft == null) return;
     final session = await ref
         .read(apiClientProvider)
-        .confirmRegistration(email: draft.email, code: code);
+        .confirmRegistration(
+          email: draft.email,
+          code: code,
+          password: draft.password,
+        );
     await _start(session);
-    ref.read(registrationDraftProvider.notifier).state = null;
   }
 
   /// Signs in with what a Google or Apple sheet returned; the server links,
@@ -181,6 +184,8 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await ref.read(sessionStorageProvider).write(session);
     ref.read(sessionTokenHolderProvider).token = session.token;
     state = AsyncData(session);
+    // Every way of signing in ends the registration flow.
+    ref.read(registrationDraftProvider.notifier).state = null;
   }
 
   Future<void> _discardStoredSession() async {

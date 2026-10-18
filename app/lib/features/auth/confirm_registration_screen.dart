@@ -12,6 +12,8 @@ import 'session_notifier.dart';
 const String _invalidCodeMessage = 'Code is incorrect';
 const String _expiredCodeMessage = 'Code has expired, tap Resend';
 const String _emailTakenMessage = 'Email already registered';
+const String _registrationChangedMessage =
+    'Your registration changed. Submit it again.';
 
 /// Asks for the code emailed at registration. Going back returns to the
 /// registration screen underneath, which still holds what was typed.
@@ -50,12 +52,24 @@ class _ConfirmRegistrationScreenState
           .confirmRegistration(code: _code.text);
     } catch (error) {
       if (!mounted) return;
+      if (isRegistrationChanged(error)) return _backToRegistration();
       setState(() {
         _failure = _messageFor(error);
         _emailTaken = isEmailTaken(error);
       });
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _backToRegistration() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text(_registrationChangedMessage)));
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/register');
     }
   }
 
@@ -74,53 +88,65 @@ class _ConfirmRegistrationScreenState
   @override
   Widget build(BuildContext context) {
     final email = ref.watch(registrationDraftProvider)?.email ?? '';
-    return Scaffold(
-      appBar: AppBar(title: const Text('Confirm registration')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'We sent a 6-digit code to $email. Enter it to create your account.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                CodeField(controller: _code, onChanged: () => setState(() {})),
-                if (_failure != null) ...[
-                  const SizedBox(height: 12),
+    // The draft holds the plain password, so it lives only while this screen does.
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) ref.read(registrationDraftProvider.notifier).state = null;
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Confirm registration')),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Text(
-                    _failure!,
+                    'We sent a 6-digit code to $email. Enter it to create your account.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                  const SizedBox(height: 20),
+                  CodeField(
+                    controller: _code,
+                    onChanged: () => setState(() {}),
+                  ),
+                  if (_failure != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _failure!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  if (_emailTaken)
+                    TextButton(
+                      onPressed: _goToSignIn,
+                      child: const Text('Go to sign-in'),
+                    ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _canSubmit ? _submit : null,
+                    child: _submitting
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Confirm'),
+                  ),
+                  const SizedBox(height: 12),
+                  ResendCodeButton(
+                    startCounting: true,
+                    onResend: ref
+                        .read(sessionProvider.notifier)
+                        .resendRegistrationCode,
                   ),
                 ],
-                if (_emailTaken)
-                  TextButton(
-                    onPressed: _goToSignIn,
-                    child: const Text('Go to sign-in'),
-                  ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: _canSubmit ? _submit : null,
-                  child: _submitting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Confirm'),
-                ),
-                const SizedBox(height: 12),
-                ResendCodeButton(
-                  startCounting: true,
-                  onResend:
-                      ref.read(sessionProvider.notifier).resendRegistrationCode,
-                ),
-              ],
+              ),
             ),
           ),
         ),

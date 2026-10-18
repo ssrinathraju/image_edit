@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_edit/features/auth/registration_draft.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fake_api_client.dart';
@@ -83,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(client.confirmedRegistrations, [
-      ['new@example.com', '123456'],
+      ['new@example.com', '123456', 'password-1'],
     ]);
     expect(storage.saved?.email, 'new@example.com');
     expect(find.text('Trending'), findsOneWidget);
@@ -209,5 +211,42 @@ void main() {
     expect(textOf('Password'), 'password-1');
     expect(textOf('Referral code (optional)'), 'K7M2QX9P');
     expect(storage.saved, isNull);
+  });
+
+  testWidgets('a changed registration returns to the form with the values kept', (
+    tester,
+  ) async {
+    client.onConfirmRegistration = (_, _) async =>
+        throw apiError(409, 'registration_changed', 'register again');
+    await _openConfirmScreen(tester);
+
+    await _enterCode(tester, '123456');
+    await tester.tap(_confirmButton);
+    await tester.pumpAndSettle();
+
+    expect(client.confirmedRegistrations.single[2], 'password-1');
+    expect(find.text('Your registration changed. Submit it again.'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
+    String textOf(String label) =>
+        tester.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
+    expect(textOf('Email'), 'new@example.com');
+    expect(textOf('Password'), 'password-1');
+    expect(storage.saved, isNull);
+  });
+
+  testWidgets('the draft is gone after Back, then Sign in', (tester) async {
+    await _openConfirmScreen(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(Scaffold).first),
+    );
+    expect(container.read(registrationDraftProvider), isNotNull);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('I already have an account'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(container.read(registrationDraftProvider), isNull);
   });
 }

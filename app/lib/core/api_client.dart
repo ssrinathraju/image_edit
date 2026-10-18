@@ -25,6 +25,7 @@ abstract class GenerationApiClient {
   Future<Session> confirmRegistration({
     required String email,
     required String code,
+    required String password,
   });
   Future<Session> login({required String email, required String password});
   Future<void> logout();
@@ -191,10 +192,11 @@ class DioApiClient implements GenerationApiClient {
   Future<Session> confirmRegistration({
     required String email,
     required String code,
+    required String password,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/auth/register/confirm',
-      data: {'email': email, 'code': code},
+      data: {'email': email, 'code': code, 'password': password},
     );
     return Session.fromJson(response.data!);
   }

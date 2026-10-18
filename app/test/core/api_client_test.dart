@@ -221,11 +221,19 @@ void main() {
       final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
 
       final session =
-          await _client(adapter).confirmRegistration(email: 'a@b.co', code: '123456');
+          await _client(adapter).confirmRegistration(
+            email: 'a@b.co',
+            code: '123456',
+            password: 'password-1',
+          );
 
       expect(adapter.last!.method, 'POST');
       expect(adapter.last!.path, '/auth/register/confirm');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'code': '123456'});
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'code': '123456',
+        'password': 'password-1',
+      });
       expect((session.token, session.userId, session.email), ('t', 'u', 'a@b.co'));
     });
 

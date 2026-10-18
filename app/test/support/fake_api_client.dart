@@ -105,8 +105,9 @@ class FakeApiClient implements GenerationApiClient {
   Future<Session> confirmRegistration({
     required String email,
     required String code,
+    required String password,
   }) {
-    confirmedRegistrations.add([email, code]);
+    confirmedRegistrations.add([email, code, password]);
     return onConfirmRegistration(email, code);
   }
 

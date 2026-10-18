@@ -158,10 +158,21 @@ void main() {
     await notifier.confirmRegistration(code: '123456');
 
     expect(client.confirmedRegistrations, [
-      ['new@example.com', '123456'],
+      ['new@example.com', '123456', 'password-1'],
     ]);
     expect(container.read(sessionProvider).value!.email, 'new@example.com');
     expect(storage.saved?.email, 'new@example.com');
+    expect(container.read(registrationDraftProvider), isNull);
+  });
+
+  test('signing in clears a registration draft', () async {
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+    final notifier = container.read(sessionProvider.notifier);
+    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+
+    await notifier.signIn(email: 'a@b.co', password: 'password-1');
+
     expect(container.read(registrationDraftProvider), isNull);
   });
 

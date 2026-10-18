@@ -26,11 +26,14 @@ bool isQuotaExceeded(Object error) => errorCodeOf(error) == quotaExceededCode;
 const String invalidCodeCode = 'invalid_code';
 const String codeExpiredCode = 'code_expired';
 const String emailTakenCode = 'email_taken';
+const String registrationChangedCode = 'registration_changed';
 const String tooManyRequestsCode = 'too_many_requests';
 
 bool isInvalidCode(Object error) => errorCodeOf(error) == invalidCodeCode;
 bool isCodeExpired(Object error) => errorCodeOf(error) == codeExpiredCode;
 bool isEmailTaken(Object error) => errorCodeOf(error) == emailTakenCode;
+bool isRegistrationChanged(Object error) =>
+    errorCodeOf(error) == registrationChangedCode;
 bool isTooManyRequests(Object error) => errorCodeOf(error) == tooManyRequestsCode;
 
 const String invalidProviderTokenCode = 'invalid_provider_token';
