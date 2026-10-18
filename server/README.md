@@ -18,15 +18,24 @@ OpenAPI schema: http://localhost:8000/openapi.json
 
 ## Accounts and authentication
 
-Generation endpoints require a session. Register (or log in) to get a bearer token, then send it as
-`Authorization: Bearer <token>`. `GET /templates` and the template previews stay public.
+Generation endpoints require a session. Register (two steps, below) or log in to get a bearer
+token, then send it as `Authorization: Bearer <token>`. `GET /templates` and the template previews
+stay public.
+
+Registration creates **no account** until the emailed code is confirmed, so an unverified account
+never exists:
 
 ```bash
-# Register → 201 {"token": "...", "id": "...", "email": "ana@example.com", "email_verified": false}
+# Step 1: start a registration → 202 {}  (no account and no session yet; a 6-digit code is emailed)
 # `referral_code` is optional; an unknown code is a 400 invalid_referral_code
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "ana@example.com", "password": "correct horse battery"}'
+
+# Step 2: confirm with the emailed code → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+curl -X POST http://localhost:8000/auth/register/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ana@example.com", "code": "123456"}'
 
 # Log in → 200 with a new token; the same error for a wrong password and an unknown email
 curl -X POST http://localhost:8000/auth/login \
@@ -36,10 +45,11 @@ curl -X POST http://localhost:8000/auth/login \
 TOKEN=<token from the response>
 
 curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
-# → {"id": "...", "email": "ana@example.com", "created_at": "...", "email_verified": false, "plan": "free",
+# → {"id": "...", "email": "ana@example.com", "created_at": "...", "plan": "free",
 #    "usage": {"daily_limit": 3, "used_today": 0, "bonus_credits": 0, "remaining": 3,
 #              "resets_at": "2026-10-17T00:00:00+00:00", "plan_limits": {"free": 3, "premium": 30}},
-#    "referral": {"code": "K7M2QX9P", "rewards": 0, "max_rewards": 10, "bonus_per_referral": 5}}
+#    "referral": {"code": "K7M2QX9P", "rewards": 0, "max_rewards": 10, "bonus_per_referral": 5},
+#    "providers": [], "has_password": true}
 
 # Log out: revokes this token only → 204
 curl -X POST http://localhost:8000/auth/logout -H "Authorization: Bearer $TOKEN"
@@ -49,6 +59,10 @@ curl -X DELETE http://localhost:8000/me \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"password": "correct horse battery"}'
 ```
+
+Registering the same email again before confirming replaces the pending registration (and its
+code), subject to the sending limits. A pending registration that is never confirmed is discarded
+after 24 hours.
 
 Errors: `401 unauthorized` (missing, unknown, expired or revoked token), `409 email_taken`,
 `400 invalid_credentials_format` (malformed email or a password outside 8-128 characters),
@@ -79,12 +93,13 @@ server answers:
 
 Bonus credits are one-time and are spent only after the daily allowance. Each account has a
 referral code (`referral.code` in `/me`). Registering with someone's code does not pay anyone yet: both accounts receive
-`REFERRAL_BONUS` credits when the new account **verifies its email** (or completes a password
-reset, which also verifies it), once. A referrer is rewarded for at most
-`REFERRAL_MAX_REWARDS` friends. An account that never verifies earns nothing for either side.
+`REFERRAL_BONUS` credits when the registration is **confirmed** and the account is created, once.
+If the referrer deleted their account in between, only the new account is paid. A referrer is
+rewarded for at most `REFERRAL_MAX_REWARDS` friends. A registration that is never confirmed earns
+nothing for either side.
 
 ```bash
-# Register with a friend's code (case and surrounding spaces are ignored)
+# Start a registration with a friend's code (case and surrounding spaces are ignored); confirm as above
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "ben@example.com", "password": "correct horse battery", "referral_code": "k7m2qx9p"}'
@@ -106,42 +121,47 @@ Jobs are held in memory, so a restart loses any job that was queued or running. 
 are refunded automatically when the server starts again. This assumes a single server process: a
 second instance on the same `app.db` would refund the first one's in-flight jobs.
 
-The first start after upgrading migrates an existing `app.db` in place: users keep their data,
-become `free` with no bonus credits, and receive referral codes. The migration is idempotent.
-Accounts that exist when email verification first ships are marked **verified** by that same
-first start, so nobody is locked out of generating.
+The first start after upgrading migrates an existing `app.db` in place (schema version 4): users keep
+their data, become `free` with no bonus credits, and receive referral codes. The migration is
+idempotent. It also:
 
-## Email verification and password reset
+- adds the provider and pending-registration tables and recreates the code tables keyed by email
+  address (a code in flight during the upgrade has to be requested again);
+- marks every **unverified account verified**, because unverified accounts no longer exist. This is
+  safe only for development data. If a real database ever holds accounts created between the
+  email-verification release and this one, check them by hand first: anyone who registered an email
+  they do not own would keep that account.
 
-New accounts start with an unverified email and are emailed a 6-digit code. Until the email is
-verified, `POST /generations` answers `403 email_not_verified`; reading existing jobs still works.
-A code is valid for 15 minutes, is invalidated after 5 wrong tries, and is stored hashed. At most one
-code email per account is sent every 60 seconds and 5 per hour (both purposes together).
+**Back up `app.db` before upgrading.** The migration cannot be run backwards: a rollback to the
+previous server needs the backup, because the old code tables had a different shape.
+
+## Email codes and password reset
+
+Registration and password reset both use a 6-digit code emailed to the address. A code is valid for
+15 minutes, is invalidated after 5 wrong tries, and is stored hashed. Codes and their limits are
+**per email address**: at most one code email every 60 seconds and 5 per hour, counting
+registration and reset codes together. A limited request sends nothing and keeps the earlier code
+valid; `POST /auth/register` then answers `429 too_many_requests` with a `Retry-After` header.
 
 ```bash
-# Verify with the emailed code → 200 {"email_verified": true}
-curl -X POST http://localhost:8000/auth/verify-email \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"code": "123456"}'
-
-# Send a new code → 202 {}  (429 with a Retry-After header when sent too recently or too often)
-curl -X POST http://localhost:8000/auth/verify-email/resend -H "Authorization: Bearer $TOKEN"
-
 # Forgot password: always 202 {}, whether or not the email has an account
 curl -X POST http://localhost:8000/auth/password-reset/request \
   -H "Content-Type: application/json" -d '{"email": "ana@example.com"}'
 
 # Set a new password with the code → 200, same body as login with a fresh token.
-# Revokes every other session and verifies the email.
+# Revokes every other session.
 curl -X POST http://localhost:8000/auth/password-reset/confirm \
   -H "Content-Type: application/json" \
   -d '{"email": "ana@example.com", "code": "123456", "new_password": "a new long password"}'
 ```
 
 Errors: `400 invalid_code` (wrong code; on reset also an unknown email or an expired code, all with
-the same message), `400 code_expired` (verification code expired, used, invalidated or never
-issued), `409 already_verified`, `429 too_many_requests` (resend only; see `Retry-After`),
-`403 email_not_verified` (generation), and `400 invalid_credentials_format` as before.
+the same message), `400 code_expired` (registration code expired, used, invalidated or never
+issued), `409 email_taken` (also when the email got an account, say through Google, after the
+registration started), `429 too_many_requests` (registration only; see `Retry-After`), and
+`400 invalid_credentials_format` as before. `POST /auth/verify-email` and
+`/auth/verify-email/resend`, the `email_verified` response fields and the `403 email_not_verified`
+generation gate no longer exist.
 
 **Sending email.** Set `IMAGE_EDIT_SMTP_HOST` and `IMAGE_EDIT_SMTP_FROM` (plus username and
 password if the server needs them) to send plain-text email over SMTP. `IMAGE_EDIT_SMTP_SECURITY` is
@@ -163,14 +183,18 @@ expiry, and for Apple the nonce); the app's word is never trusted. A provider th
 configured answers `503 provider_not_configured`.
 
 - A linked identity signs in to its account (the account email never changes).
-- Otherwise, an account with the same email (any letter case) is linked and signed in; an
-  unverified password account becomes verified.
+- Otherwise, an account with the same email (any letter case) is linked and signed in. Every
+  account's email was proven by a confirmed registration code or a provider, so this joins two
+  parties who proved control of the same address.
 - Otherwise a new account is created: verified, **no password**, with a referral code. Password
   login on it fails exactly like a wrong password until the owner completes a password reset.
+- An unlinked identity needs a provider-verified email (`email_verified` true, as a boolean or the
+  string `"true"`), for Google and Apple alike; otherwise `400 provider_email_unverified`. An Apple
+  token with no email for an unlinked identity is `400 provider_email_missing`.
 - An account has at most one identity per provider.
 
 ```bash
-# → 200 {"token": "...", "id": "...", "email": "...", "email_verified": true, "created": true}
+# → 200 {"token": "...", "id": "...", "email": "...", "created": true}
 curl -X POST http://localhost:8000/auth/oauth/google \
   -H "Content-Type: application/json" -d '{"id_token": "<GOOGLE_ID_TOKEN>"}'
 
@@ -215,14 +239,20 @@ accepts:
 `IMAGE_EDIT_APPLE_BUNDLE_ID` is enough to accept Apple sign-in. Setting `APPLE_TEAM_ID`,
 `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY_PATH` (the `.p8` file) as well turns on the authorization-code
 exchange and revocation. The server refuses to start if only some of the three key settings are
-set, if they are set without a bundle ID, or if the key file cannot be read.
+set, if they are set without a bundle ID, or if the key file cannot be read or is not a PEM private
+key.
 
 **Apple revocation warning.** App Store rules require revoking Apple's authorization when an account
 is deleted. Without the three key settings the server logs a startup warning, sign-in still works,
 and deletion cannot revoke anything. Revocation runs after the response and a failure is only
 logged. The Apple refresh token is stored in plain text in `app.db` (encrypting it is in `todo.md`).
 
-Provider tokens, authorization codes and refresh tokens are never logged or returned.
+Provider tokens, authorization codes and refresh tokens are never logged or returned, and a `422`
+validation error describes which field failed without echoing the values that were sent.
+
+**Provider key fetching.** The provider's published keys are cached by PyJWT. A token with an
+unknown key ID forces at most one refetch every 30 seconds. An unreachable key endpoint, a body
+that is not JSON, or a key set with no keys answers `503 provider_unavailable`.
 
 **Console setup checklist.**
 
@@ -239,6 +269,14 @@ Apple Developer:
 - [ ] Create a Sign in with Apple key, download the `.p8` once, and note the Key ID and Team ID.
 - [ ] Set `IMAGE_EDIT_APPLE_BUNDLE_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_PATH`.
 - [ ] Set `APPLE_SIGN_IN=true` in the app's `.env`.
+
+**Running the iOS app on a physical device before the Apple Developer Program membership exists.**
+The Runner target carries the Sign in with Apple entitlement
+(`app/ios/Runner/Runner.entitlements`, set as `CODE_SIGN_ENTITLEMENTS` for Debug, Release and
+Profile). A free Personal Team cannot sign that capability, so a signed device build fails to
+provision. The simulator and `flutter build ios --no-codesign` are unaffected. Until the membership
+exists, either use the simulator or clear `CODE_SIGN_ENTITLEMENTS` for the Debug configuration in
+Xcode for device runs (and restore it afterwards: do not commit the change).
 
 ## Submit a generation job
 
@@ -324,8 +362,8 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_SMTP_SECURITY` | `starttls` | `starttls`, `ssl` or `none` |
 | `IMAGE_EDIT_EMAIL_CODE_TTL_MINUTES` | `15` | How long an emailed code is valid (minimum 1) |
 | `IMAGE_EDIT_EMAIL_CODE_MAX_ATTEMPTS` | `5` | Wrong tries before a code is invalidated (minimum 1) |
-| `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one account (minimum 1) |
-| `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per account per hour (minimum 1) |
+| `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one email address (minimum 1) |
+| `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per email address per hour (minimum 1) |
 | `IMAGE_EDIT_GOOGLE_CLIENT_IDS` | _(empty)_ | Comma-separated Google client IDs accepted as the token audience; empty disables Google sign-in |
 | `IMAGE_EDIT_APPLE_BUNDLE_ID` | _(empty)_ | App bundle ID, the Apple token audience; empty disables Apple sign-in |
 | `IMAGE_EDIT_APPLE_TEAM_ID` | _(empty)_ | Apple team ID; set with the next two or none |
