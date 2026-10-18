@@ -22,7 +22,7 @@ class QuotaExceeded(Exception):
 
 
 class InvalidReferralCode(Exception):
-    """Raised when registering with a referral code that matches no account."""
+    """Raised when a referral code matches no account."""
 
 
 class UserNotFound(Exception):
@@ -47,31 +47,44 @@ class ReferralNotAllowed(Exception):
 
 class UserStore(Protocol):
     def create_user(self, email: str, password_hash: str) -> User:
-        """Create a bare user (no referral); raises EmailTakenError on a duplicate."""
+        """Create a bare verified user (no referral); raises EmailTakenError on a duplicate."""
         ...
 
-    def register_user(
+    def start_registration(
         self,
         email: str,
         password_hash: str,
         referral_code: Optional[str],
-    ) -> User:
-        """Create an unverified user; a valid referral code is paid out on verification.
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> IssueResult:
+        """Hold a registration as pending and store its code, unless a sending limit applies.
 
-        Raises EmailTakenError or InvalidReferralCode; nothing is written then.
+        Raises EmailTakenError or InvalidReferralCode; nothing is written then. When
+        a limit applies the earlier pending registration and code are kept.
         """
         ...
 
-    def mark_email_verified(self, user_id: str, bonus: int, max_rewards: int) -> bool:
-        """Verify the email and pay any pending referral reward, once.
+    def confirm_registration(
+        self,
+        email: str,
+        code: str,
+        now: datetime,
+        max_attempts: int,
+        bonus: int,
+        max_rewards: int,
+    ) -> tuple[ConsumeResult, Optional[User]]:
+        """Check the registration code and, when it is right, create the verified account.
 
-        Returns False when the account was already verified or does not exist.
+        Returns (ok, user), or (wrong | expired, None). Raises EmailTakenError, after
+        discarding the pending registration, when an account took the email meanwhile.
         """
         ...
 
     def issue_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code_hash: str,
         now: datetime,
@@ -82,7 +95,7 @@ class UserStore(Protocol):
 
     def consume_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code: str,
         now: datetime,
@@ -93,16 +106,14 @@ class UserStore(Protocol):
 
     def reset_password(
         self,
-        user_id: str,
+        email: str,
         code: str,
         new_hash: str,
         now: datetime,
         max_attempts: int,
-        bonus: int,
-        max_rewards: int,
     ) -> ConsumeResult:
-        """Consume a reset code and, on ok, change the password, drop every
-        session and verify the email, all in one transaction."""
+        """Consume a reset code and, on ok, change the password and drop every
+        session of the account, all in one transaction."""
         ...
 
     def reserve_generation(self, user_id: str, daily_limit: int, now: datetime) -> str:
@@ -153,12 +164,13 @@ class UserStore(Protocol):
     def delete_session(self, token: str) -> None: ...
 
     def sign_in_with_identity(
-        self, identity: ProviderIdentity, now: datetime, bonus: int, max_rewards: int
+        self, identity: ProviderIdentity, now: datetime
     ) -> tuple[User, bool]:
         """Find the linked account, link by email, or create one; returns (user, created).
 
-        Raises ProviderEmailMissing, ProviderEmailUnverified or ProviderAlreadyLinked
-        before writing anything.
+        Creating an account discards any pending registration for its email. Raises
+        ProviderEmailMissing, ProviderEmailUnverified or ProviderAlreadyLinked before
+        writing anything.
         """
         ...
 

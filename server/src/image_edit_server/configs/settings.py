@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Literal
 
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import serialization
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -91,13 +93,23 @@ class Settings(BaseSettings):
             )
         if not self.APPLE_BUNDLE_ID:
             raise ValueError("APPLE_BUNDLE_ID must be set when the Apple key settings are set")
+        self._check_apple_key_file()
+        return self
+
+    def _check_apple_key_file(self) -> None:
+        path = self.APPLE_PRIVATE_KEY_PATH
         try:
-            Path(self.APPLE_PRIVATE_KEY_PATH).read_bytes()
+            key_bytes = Path(path).read_bytes()
         except OSError as error:
             raise ValueError(
-                f"APPLE_PRIVATE_KEY_PATH {self.APPLE_PRIVATE_KEY_PATH!r} cannot be read: {error}"
+                f"APPLE_PRIVATE_KEY_PATH {path!r} cannot be read: {error}"
             ) from error
-        return self
+        try:
+            serialization.load_pem_private_key(key_bytes, password=None)
+        except (ValueError, TypeError, UnsupportedAlgorithm) as error:
+            raise ValueError(
+                f"APPLE_PRIVATE_KEY_PATH {path!r} is not a PEM private key: {error}"
+            ) from error
 
     def is_google_configured(self) -> bool:
         return bool(self.GOOGLE_CLIENT_IDS)

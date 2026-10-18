@@ -83,7 +83,7 @@ def test_correct_code_returns_a_working_token(anon_client, sender, registered):
     assert resp.status_code == 200
     body = resp.json()
     assert body["email"] == "ana@example.com"
-    assert body["email_verified"] is True
+    assert set(body) == {"token", "id", "email"}
     me = anon_client.get("/me", headers={"Authorization": f"Bearer {body['token']}"})
     assert me.status_code == 200
     assert me.json()["id"] == body["id"]
@@ -105,13 +105,6 @@ def test_all_earlier_sessions_are_revoked(anon_client, sender, registered):
     assert anon_client.get("/me", headers={"Authorization": f"Bearer {second}"}).status_code == 401
     new = {"Authorization": f"Bearer {resp.json()['token']}"}
     assert anon_client.get("/me", headers=new).status_code == 200
-
-
-def test_reset_verifies_an_unverified_account(anon_client, sender, registered):
-    resp = _reset(anon_client, sender)
-
-    me = anon_client.get("/me", headers={"Authorization": f"Bearer {resp.json()['token']}"})
-    assert me.json()["email_verified"] is True
 
 
 def test_reset_clears_a_login_lockout(anon_client, sender, registered):

@@ -41,15 +41,14 @@ def _google(client, token):
     return client.post("/auth/oauth/google", json={"id_token": token})
 
 
-def _register_verified(client, sender, email) -> dict:
+def _register_confirmed(client, sender, email) -> dict:
     resp = client.post("/auth/register", json={"email": email, "password": DEFAULT_PASSWORD})
-    assert resp.status_code == 201, resp.text
-    headers = _bearer(resp)
-    verify = client.post(
-        "/auth/verify-email", json={"code": sender.last_code(email)}, headers=headers
+    assert resp.status_code == 202, resp.text
+    confirm = client.post(
+        "/auth/register/confirm", json={"email": email, "code": sender.last_code(email)}
     )
-    assert verify.status_code == 200, verify.text
-    return headers
+    assert confirm.status_code == 201, confirm.text
+    return _bearer(confirm)
 
 
 def _bonus(client, headers) -> int:
@@ -57,7 +56,7 @@ def _bonus(client, headers) -> int:
 
 
 def test_social_sign_in_flow(app_client, sender, google):
-    friend = _register_verified(app_client, sender, "friend@example.com")
+    friend = _register_confirmed(app_client, sender, "friend@example.com")
     friend_code = app_client.get("/me", headers=friend).json()["referral"]["code"]
 
     google.add("first-signin", "g-1", email="gina@example.com")
@@ -81,7 +80,7 @@ def test_social_sign_in_flow(app_client, sender, google):
     again = _google(app_client, "first-signin")
     assert (again.json()["created"], again.json()["id"]) == (False, created.json()["id"])
 
-    pat = _register_verified(app_client, sender, "pat@example.com")
+    pat = _register_confirmed(app_client, sender, "pat@example.com")
     pat_id = app_client.get("/me", headers=pat).json()["id"]
     google.add("pat-signin", "g-2", email="pat@example.com")
     linked = _google(app_client, "pat-signin")

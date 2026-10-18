@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 from image_edit_server.configs.settings import Settings
+from tests.helpers import write_apple_key_file
 
 
 def test_defaults():
@@ -144,8 +145,7 @@ def test_apple_bundle_id_alone_configures_sign_in_but_not_revocation():
 
 
 def test_all_apple_key_settings_with_a_readable_key_are_accepted(tmp_path):
-    key = tmp_path / "AuthKey.p8"
-    key.write_text("key")
+    key = write_apple_key_file(tmp_path / "AuthKey.p8")
     s = Settings(
         APPLE_BUNDLE_ID="com.example.app",
         APPLE_TEAM_ID="TEAM",
@@ -161,8 +161,7 @@ def test_partial_apple_key_settings_are_rejected_naming_the_missing_ones():
 
 
 def test_apple_key_settings_without_a_bundle_id_are_rejected(tmp_path):
-    key = tmp_path / "AuthKey.p8"
-    key.write_text("key")
+    key = write_apple_key_file(tmp_path / "AuthKey.p8")
     with pytest.raises(ValidationError, match="APPLE_BUNDLE_ID"):
         Settings(APPLE_TEAM_ID="T", APPLE_KEY_ID="K", APPLE_PRIVATE_KEY_PATH=str(key))
 
@@ -174,4 +173,17 @@ def test_an_unreadable_apple_key_file_is_rejected(tmp_path):
             APPLE_TEAM_ID="T",
             APPLE_KEY_ID="K",
             APPLE_PRIVATE_KEY_PATH=str(tmp_path / "missing.p8"),
+        )
+
+
+def test_an_apple_key_file_that_is_not_a_pem_key_is_rejected(tmp_path):
+    key = tmp_path / "AuthKey.p8"
+    key.write_text("not a pem key")
+
+    with pytest.raises(ValidationError, match="not a PEM private key"):
+        Settings(
+            APPLE_BUNDLE_ID="b",
+            APPLE_TEAM_ID="T",
+            APPLE_KEY_ID="K",
+            APPLE_PRIVATE_KEY_PATH=str(key),
         )

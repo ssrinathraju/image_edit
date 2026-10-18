@@ -141,3 +141,32 @@ def test_a_failing_revoke_status_is_logged_without_the_token(settings, caplog):
 
     assert "500" in caplog.text
     assert SECRET_TOKEN not in caplog.text
+
+
+def test_a_key_file_that_cannot_be_parsed_makes_the_exchange_return_none_not_raise(
+    settings, caplog
+):
+    post = FakePost()
+    client = _client(settings, post)
+    client._private_key = "not a pem key"
+
+    with caplog.at_level("WARNING"):
+        token = client.exchange_code(SECRET_CODE)
+
+    assert token is None
+    assert post.calls == []
+    assert SECRET_CODE not in caplog.text
+    assert "Apple code exchange failed" in caplog.text
+
+
+def test_a_key_file_that_cannot_be_parsed_makes_revoke_log_not_raise(settings, caplog):
+    post = FakePost()
+    client = _client(settings, post)
+    client._private_key = "not a pem key"
+
+    with caplog.at_level("WARNING"):
+        client.revoke(SECRET_TOKEN)
+
+    assert post.calls == []
+    assert SECRET_TOKEN not in caplog.text
+    assert "Apple revocation failed" in caplog.text

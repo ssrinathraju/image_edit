@@ -68,13 +68,13 @@ class AppleRevocationClient:
 
     def exchange_code(self, code: str) -> Optional[str]:
         """Trade an authorization code for a refresh token; None when Apple refuses or is down."""
-        form = {
-            "client_id": self._bundle_id,
-            "client_secret": self.build_client_secret(),
-            "code": code,
-            "grant_type": "authorization_code",
-        }
         try:
+            form = {
+                "client_id": self._bundle_id,
+                "client_secret": self.build_client_secret(),
+                "code": code,
+                "grant_type": "authorization_code",
+            }
             status, body = self._post(APPLE_TOKEN_URL, form)
             if status != HTTP_OK:
                 logger.warning("Apple code exchange failed: HTTP %s", status)
@@ -90,13 +90,13 @@ class AppleRevocationClient:
 
     def revoke(self, token: str) -> None:
         """Ask Apple to revoke a refresh token; every failure is logged and swallowed."""
-        form = {
-            "client_id": self._bundle_id,
-            "client_secret": self.build_client_secret(),
-            "token": token,
-            "token_type_hint": "refresh_token",
-        }
         try:
+            form = {
+                "client_id": self._bundle_id,
+                "client_secret": self.build_client_secret(),
+                "token": token,
+                "token_type_hint": "refresh_token",
+            }
             status, _ = self._post(APPLE_REVOKE_URL, form)
         except Exception as error:
             logger.warning("Apple revocation failed: %s", type(error).__name__)

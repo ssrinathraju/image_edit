@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import DEFAULT_PASSWORD, RecordingSender, register_and_verify_through_api
+from tests.helpers import DEFAULT_PASSWORD, RecordingSender, register_headers
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
@@ -40,7 +40,7 @@ def _generate(client, headers) -> dict:
 
 
 def test_deleting_the_account_removes_sessions_login_and_images(app_client, sender, tmp_path):
-    headers = register_and_verify_through_api(app_client, sender, "ana@example.com")
+    headers = register_headers(app_client, "ana@example.com")
     body = _generate(app_client, headers)
     assert body["status"] == "succeeded"
     assert app_client.get(body["result_url"]).status_code == 200

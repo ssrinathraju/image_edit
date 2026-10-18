@@ -101,30 +101,42 @@ CREATE TABLE IF NOT EXISTS generation_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_user_day ON generation_usage(user_id, day);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
+"""
+
+# Codes are keyed by email address because a registration code exists before its
+# account does; deleting an account therefore removes its rows explicitly.
+_EMAIL_SCHEMA = """
 CREATE TABLE IF NOT EXISTS email_codes (
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
     purpose TEXT NOT NULL,
     code_hash TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    PRIMARY KEY (user_id, purpose)
+    PRIMARY KEY (email, purpose)
 );
 CREATE TABLE IF NOT EXISTS email_sends (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
     purpose TEXT NOT NULL,
     sent_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_email_sends_user ON email_sends(user_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_email_sends_email ON email_sends(email, sent_at);
+CREATE TABLE IF NOT EXISTS pending_registrations (
+    email TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    referral_code TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 _USER_COLUMNS = (
     "u.id, u.email, u.created_at, u.plan, u.bonus_credits, u.referral_code,"
-    " u.referral_rewards, u.email_verified, u.password_hash <> ''"
+    " u.referral_rewards, u.password_hash <> ''"
 )
-_USER_COLUMN_COUNT = 9
+_USER_COLUMN_COUNT = 8
 SEND_WINDOW = timedelta(hours=1)
+PENDING_REGISTRATION_MAX_AGE = timedelta(hours=24)
 
 
 def _utc_now() -> datetime:
@@ -144,8 +156,7 @@ def _to_user(row: tuple) -> User:
         bonus_credits=row[4],
         referral_code=row[5] or "",
         referral_rewards=row[6],
-        email_verified=bool(row[7]),
-        has_password=bool(row[8]),
+        has_password=bool(row[7]),
     )
 
 
@@ -192,10 +203,14 @@ class SqliteUserStore:
                         self._conn.execute(
                             f"ALTER TABLE users ADD COLUMN {column} {definition}"
                         )
-                if "email_verified" not in existing:
-                    # Accounts that exist before verification shipped are trusted.
-                    self._conn.execute("UPDATE users SET email_verified = 1")
-                for statement in (_USAGE_SCHEMA + _IDENTITY_SCHEMA).strip().split(";"):
+                # Every account is now proven by a registration code or a provider, so
+                # older never-verified accounts (development data) are trusted.
+                self._conn.execute(
+                    "UPDATE users SET email_verified = 1 WHERE email_verified = 0"
+                )
+                self._drop_user_keyed_code_tables()
+                schema = _USAGE_SCHEMA + _IDENTITY_SCHEMA + _EMAIL_SCHEMA
+                for statement in schema.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
                 usage_columns = {
@@ -217,6 +232,14 @@ class SqliteUserStore:
             except Exception:
                 self._conn.rollback()
                 raise
+
+    def _drop_user_keyed_code_tables(self) -> None:
+        # Codes live 15 minutes and send times an hour, so the version-3 rows are
+        # not worth converting; at worst a reset code in flight is requested again.
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(email_codes)")}
+        if "user_id" in columns:
+            self._conn.execute("DROP TABLE email_codes")
+            self._conn.execute("DROP TABLE IF EXISTS email_sends")
 
     def _backfill_referral_codes(self) -> None:
         missing = self._conn.execute(
@@ -241,47 +264,45 @@ class SqliteUserStore:
     # ── users ────────────────────────────────────────────────────────────
 
     def create_user(self, email: str, password_hash: str) -> User:
-        return self.register_user(email, password_hash, None)
-
-    def register_user(
-        self,
-        email: str,
-        password_hash: str,
-        referral_code: Optional[str],
-    ) -> User:
-        code_to_redeem = normalize_code(referral_code) if referral_code else ""
-        user_id = str(ULID())
-        created_at = self._clock().isoformat()
         try:
             with self._lock, self._conn:
-                referrer = self._find_referrer(code_to_redeem)
-                new_code = self._unused_code()
-                self._conn.execute(
-                    "INSERT INTO users (id, email, password_hash, created_at,"
-                    " bonus_credits, referral_code, referred_by, referral_bonus_pending)"
-                    " VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-                    (
-                        user_id,
-                        email,
-                        password_hash,
-                        created_at,
-                        new_code,
-                        referrer,
-                        1 if referrer else 0,
-                    ),
+                user_id = self._insert_password_user(
+                    email, password_hash, self._clock(), 0, None
                 )
+                return self._load_user(user_id)
         except sqlite3.IntegrityError as error:
             # Only a duplicate email is the caller's fault; any other violation
             # (say a referral-code collision) is a bug and must not read as one.
             if "users.email" not in str(error):
                 raise
             raise EmailTakenError(email) from error
-        return User(
-            id=user_id,
-            email=email,
-            created_at=created_at,
-            referral_code=new_code,
+
+    def _insert_password_user(
+        self,
+        email: str,
+        password_hash: str,
+        now: datetime,
+        bonus_credits: int,
+        referrer_id: Optional[str],
+    ) -> str:
+        user_id = str(ULID())
+        # email_verified stays written as 1 so a rollback to the version-3 server
+        # does not treat these accounts as unverified.
+        self._conn.execute(
+            "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
+            " referral_code, referred_by, email_verified)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+            (
+                user_id,
+                email,
+                password_hash,
+                now.isoformat(),
+                bonus_credits,
+                self._unused_code(),
+                referrer_id,
+            ),
         )
+        return user_id
 
     def _find_referrer(self, code: str) -> Optional[str]:
         if not code:
@@ -292,28 +313,6 @@ class SqliteUserStore:
         if row is None:
             raise InvalidReferralCode(code)
         return row[0]
-
-    def mark_email_verified(self, user_id: str, bonus: int, max_rewards: int) -> bool:
-        with self._lock, self._conn:
-            return self._verify_and_reward(user_id, bonus, max_rewards)
-
-    def _verify_and_reward(self, user_id: str, bonus: int, max_rewards: int) -> bool:
-        row = self._conn.execute(
-            "SELECT email_verified, referral_bonus_pending, referred_by"
-            " FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-        if row is None or row[0]:
-            return False
-        _, pending, referrer_id = row
-        self._conn.execute(
-            "UPDATE users SET email_verified = 1, referral_bonus_pending = 0,"
-            " bonus_credits = bonus_credits + ? WHERE id = ?",
-            (bonus if pending else 0, user_id),
-        )
-        if referrer_id:
-            self._reward_referrer(referrer_id, bonus, max_rewards)
-        return True
 
     def _reward_referrer(self, referrer_id: str, bonus: int, max_rewards: int) -> None:
         self._conn.execute(
@@ -338,6 +337,12 @@ class SqliteUserStore:
 
     def delete_user(self, user_id: str) -> None:
         with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT email FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if row:
+                self._conn.execute("DELETE FROM email_codes WHERE email = ?", (row[0],))
+                self._conn.execute("DELETE FROM email_sends WHERE email = ?", (row[0],))
             self._conn.execute(
                 "UPDATE users SET referred_by = NULL WHERE referred_by = ?", (user_id,)
             )
@@ -357,39 +362,42 @@ class SqliteUserStore:
 
     def issue_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code_hash: str,
         now: datetime,
         limits: CodeLimits,
     ) -> IssueResult:
         with self._lock, self._conn:
-            recent = self._recent_sends(user_id, now)
-            wait = self._seconds_until_allowed(recent, now, limits)
+            wait = self._seconds_until_allowed(self._recent_sends(email, now), now, limits)
             if wait > 0:
                 return IssueResult(issued=False, retry_after_seconds=wait)
-            self._conn.execute(
-                "INSERT OR REPLACE INTO email_codes"
-                " (user_id, purpose, code_hash, expires_at, attempts, created_at)"
-                " VALUES (?, ?, ?, ?, 0, ?)",
-                (
-                    user_id,
-                    purpose.value,
-                    code_hash,
-                    (now + limits.ttl).isoformat(),
-                    now.isoformat(),
-                ),
-            )
-            self._conn.execute(
-                "INSERT INTO email_sends (user_id, purpose, sent_at) VALUES (?, ?, ?)",
-                (user_id, purpose.value, now.isoformat()),
-            )
+            self._store_code(email, purpose, code_hash, now, limits)
         return IssueResult(issued=True)
 
-    def _recent_sends(self, user_id: str, now: datetime) -> list[datetime]:
-        """Send times within the last hour, pruning older rows for this user."""
+    def _store_code(
+        self,
+        email: str,
+        purpose: CodePurpose,
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO email_codes"
+            " (email, purpose, code_hash, expires_at, attempts, created_at)"
+            " VALUES (?, ?, ?, ?, 0, ?)",
+            (email, purpose.value, code_hash, (now + limits.ttl).isoformat(), now.isoformat()),
+        )
+        self._conn.execute(
+            "INSERT INTO email_sends (email, purpose, sent_at) VALUES (?, ?, ?)",
+            (email, purpose.value, now.isoformat()),
+        )
+
+    def _recent_sends(self, email: str, now: datetime) -> list[datetime]:
+        """Send times within the last hour, pruning older rows for this address."""
         rows = self._conn.execute(
-            "SELECT id, sent_at FROM email_sends WHERE user_id = ?", (user_id,)
+            "SELECT id, sent_at FROM email_sends WHERE email = ?", (email,)
         ).fetchall()
         cutoff = now - SEND_WINDOW
         stale = [row[0] for row in rows if datetime.fromisoformat(row[1]) <= cutoff]
@@ -412,18 +420,18 @@ class SqliteUserStore:
 
     def consume_code(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code: str,
         now: datetime,
         max_attempts: int,
     ) -> ConsumeResult:
         with self._lock, self._conn:
-            return self._consume(user_id, purpose, code, now, max_attempts)
+            return self._consume(email, purpose, code, now, max_attempts)
 
     def _consume(
         self,
-        user_id: str,
+        email: str,
         purpose: CodePurpose,
         code: str,
         now: datetime,
@@ -431,48 +439,138 @@ class SqliteUserStore:
     ) -> ConsumeResult:
         row = self._conn.execute(
             "SELECT code_hash, expires_at, attempts FROM email_codes"
-            " WHERE user_id = ? AND purpose = ?",
-            (user_id, purpose.value),
+            " WHERE email = ? AND purpose = ?",
+            (email, purpose.value),
         ).fetchone()
         if row is None or row[2] >= max_attempts:
             return ConsumeResult.EXPIRED
         if datetime.fromisoformat(row[1]) < now:
             return ConsumeResult.EXPIRED
-        if not hmac.compare_digest(row[0], hash_code(user_id, purpose, code)):
+        if not hmac.compare_digest(row[0], hash_code(email, purpose, code)):
             self._conn.execute(
                 "UPDATE email_codes SET attempts = attempts + 1"
-                " WHERE user_id = ? AND purpose = ?",
-                (user_id, purpose.value),
+                " WHERE email = ? AND purpose = ?",
+                (email, purpose.value),
             )
             return ConsumeResult.WRONG
         self._conn.execute(
-            "DELETE FROM email_codes WHERE user_id = ? AND purpose = ?",
-            (user_id, purpose.value),
+            "DELETE FROM email_codes WHERE email = ? AND purpose = ?",
+            (email, purpose.value),
         )
         return ConsumeResult.OK
 
     def reset_password(
         self,
-        user_id: str,
+        email: str,
         code: str,
         new_hash: str,
         now: datetime,
         max_attempts: int,
-        bonus: int,
-        max_rewards: int,
     ) -> ConsumeResult:
         with self._lock, self._conn:
-            result = self._consume(
-                user_id, CodePurpose.PASSWORD_RESET, code, now, max_attempts
-            )
+            result = self._consume(email, CodePurpose.PASSWORD_RESET, code, now, max_attempts)
             if result is not ConsumeResult.OK:
                 return result
+            row = self._conn.execute(
+                "SELECT id FROM users WHERE email = ?", (email,)
+            ).fetchone()
+            if row is None:
+                return ConsumeResult.EXPIRED
             self._conn.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id)
+                "UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, row[0])
             )
-            self._conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-            self._verify_and_reward(user_id, bonus, max_rewards)
+            self._conn.execute("DELETE FROM sessions WHERE user_id = ?", (row[0],))
         return result
+
+    # ── registration ─────────────────────────────────────────────────────
+
+    def start_registration(
+        self,
+        email: str,
+        password_hash: str,
+        referral_code: Optional[str],
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> IssueResult:
+        wanted = normalize_code(referral_code) if referral_code else ""
+        with self._lock, self._conn:
+            self._find_referrer(wanted)
+            if self._email_has_account(email):
+                raise EmailTakenError(email)
+            wait = self._seconds_until_allowed(self._recent_sends(email, now), now, limits)
+            if wait > 0:
+                return IssueResult(issued=False, retry_after_seconds=wait)
+            self._conn.execute(
+                "DELETE FROM pending_registrations WHERE created_at <= ?",
+                ((now - PENDING_REGISTRATION_MAX_AGE).isoformat(),),
+            )
+            self._conn.execute(
+                "INSERT OR REPLACE INTO pending_registrations"
+                " (email, password_hash, referral_code, created_at) VALUES (?, ?, ?, ?)",
+                (email, password_hash, wanted or None, now.isoformat()),
+            )
+            self._store_code(email, CodePurpose.REGISTRATION, code_hash, now, limits)
+        return IssueResult(issued=True)
+
+    def confirm_registration(
+        self,
+        email: str,
+        code: str,
+        now: datetime,
+        max_attempts: int,
+        bonus: int,
+        max_rewards: int,
+    ) -> tuple[ConsumeResult, Optional[User]]:
+        with self._lock, self._conn:
+            result = self._consume(email, CodePurpose.REGISTRATION, code, now, max_attempts)
+            if result is not ConsumeResult.OK:
+                return result, None
+            pending = self._conn.execute(
+                "SELECT password_hash, referral_code FROM pending_registrations"
+                " WHERE email = ?",
+                (email,),
+            ).fetchone()
+            taken = self._email_has_account(email)
+            if not taken and pending is None:
+                return ConsumeResult.EXPIRED, None
+            self._conn.execute(
+                "DELETE FROM pending_registrations WHERE email = ?", (email,)
+            )
+            if not taken:
+                user_id = self._create_confirmed_user(
+                    email, pending[0], pending[1], now, bonus, max_rewards
+                )
+                return ConsumeResult.OK, self._load_user(user_id)
+        raise EmailTakenError(email)
+
+    def _create_confirmed_user(
+        self,
+        email: str,
+        password_hash: str,
+        referral_code: Optional[str],
+        now: datetime,
+        bonus: int,
+        max_rewards: int,
+    ) -> str:
+        referrer = None
+        if referral_code:
+            row = self._conn.execute(
+                "SELECT id FROM users WHERE referral_code = ?", (referral_code,)
+            ).fetchone()
+            referrer = row[0] if row else None
+        user_id = self._insert_password_user(
+            email, password_hash, now, bonus if referral_code else 0, referrer
+        )
+        if referrer:
+            self._reward_referrer(referrer, bonus, max_rewards)
+        return user_id
+
+    def _email_has_account(self, email: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM users WHERE email = ?", (email,)
+        ).fetchone()
+        return row is not None
 
     # ── sessions ─────────────────────────────────────────────────────────
 
@@ -514,7 +612,7 @@ class SqliteUserStore:
     # ── provider identities ──────────────────────────────────────────────
 
     def sign_in_with_identity(
-        self, identity: ProviderIdentity, now: datetime, bonus: int, max_rewards: int
+        self, identity: ProviderIdentity, now: datetime
     ) -> tuple[User, bool]:
         with self._lock, self._conn:
             linked = self._conn.execute(
@@ -528,7 +626,7 @@ class SqliteUserStore:
                 "SELECT id FROM users WHERE email = ?", (email,)
             ).fetchone()
             if existing:
-                self._link_identity(existing[0], identity, email, now, bonus, max_rewards)
+                self._link_identity(existing[0], identity, email, now)
                 return self._load_user(existing[0]), False
             user_id = self._insert_provider_user(identity, email, now)
             return self._load_user(user_id), True
@@ -547,8 +645,6 @@ class SqliteUserStore:
         identity: ProviderIdentity,
         email: str,
         now: datetime,
-        bonus: int,
-        max_rewards: int,
     ) -> None:
         same_provider = self._conn.execute(
             "SELECT 1 FROM identities WHERE user_id = ? AND provider = ?",
@@ -557,12 +653,13 @@ class SqliteUserStore:
         if same_provider:
             raise ProviderAlreadyLinked(identity.provider)
         self._insert_identity(user_id, identity, email, now)
-        self._verify_and_reward(user_id, bonus, max_rewards)
 
     def _insert_provider_user(
         self, identity: ProviderIdentity, email: str, now: datetime
     ) -> str:
         user_id = str(ULID())
+        # A stale registration code for this email must not later create a second account.
+        self._conn.execute("DELETE FROM pending_registrations WHERE email = ?", (email,))
         self._conn.execute(
             "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
             " referral_code, email_verified, created_via)"

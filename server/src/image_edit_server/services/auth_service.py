@@ -50,8 +50,15 @@ def _error(status: int, code: str, detail: str) -> HTTPException:
     return HTTPException(status, ErrorBody(error=code, detail=detail).model_dump())
 
 
-def _already_verified() -> HTTPException:
-    return _error(409, "already_verified", "this email is already verified")
+def _too_many_codes(retry_after_seconds: int) -> HTTPException:
+    return HTTPException(
+        429,
+        ErrorBody(
+            error="too_many_requests",
+            detail=f"too many codes requested; retry in {retry_after_seconds} seconds",
+        ).model_dump(),
+        headers={"Retry-After": str(retry_after_seconds)},
+    )
 
 
 def _invalid_reset_code() -> HTTPException:
@@ -89,15 +96,20 @@ class AuthService:
         password: str,
         referral_code: Optional[str],
         background: BackgroundTasks,
-    ) -> tuple[str, User]:
-        """Create an unverified account, email it a code, and start its first session."""
+    ) -> None:
+        """Hold a registration as pending and email its code; no account exists until it is confirmed."""
         normalized = normalize_email(email)
         self._validate_credentials_format(normalized, password)
+        password_hash = hash_password(password)
+        code, code_hash = email_code_service.new_code(normalized, CodePurpose.REGISTRATION)
         try:
-            user = self._users.register_user(
+            result = self._users.start_registration(
                 normalized,
-                hash_password(password),
+                password_hash,
                 referral_code,
+                code_hash,
+                self._clock(),
+                email_code_service.limits_from(self._settings),
             )
         except EmailTakenError:
             raise _error(409, "email_taken", "this email is already registered")
@@ -105,48 +117,47 @@ class AuthService:
             raise _error(
                 400, "invalid_referral_code", "this referral code was not recognised"
             )
-        self._send_code(user, CodePurpose.VERIFY_EMAIL, background)
-        return self._start_session(user), user
+        if not result.issued:
+            raise _too_many_codes(result.retry_after_seconds)
+        self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, background)
 
-    def verify_email(self, user: User, code: str) -> None:
-        if user.email_verified:
-            raise _already_verified()
-        result = self._users.consume_code(
-            user.id,
-            CodePurpose.VERIFY_EMAIL,
-            code.strip(),
-            self._clock(),
-            self._settings.EMAIL_CODE_MAX_ATTEMPTS,
-        )
+    def confirm_registration(self, email: str, code: str) -> tuple[str, User]:
+        """Create the account for a pending registration whose emailed code is right."""
+        normalized = normalize_email(email)
+        try:
+            result, user = self._users.confirm_registration(
+                normalized,
+                code.strip(),
+                self._clock(),
+                self._settings.EMAIL_CODE_MAX_ATTEMPTS,
+                self._settings.REFERRAL_BONUS,
+                self._settings.REFERRAL_MAX_REWARDS,
+            )
+        except EmailTakenError:
+            raise _error(409, "email_taken", "this email is already registered")
         if result is ConsumeResult.WRONG:
             raise _error(400, "invalid_code", "the code is incorrect")
-        if result is ConsumeResult.EXPIRED:
-            raise _error(
-                400, "code_expired", "the code has expired; request a new one"
-            )
-        self._mark_verified(user.id)
-
-    def resend_verification(self, user: User, background: BackgroundTasks) -> None:
-        if user.email_verified:
-            raise _already_verified()
-        outcome = self._send_code(user, CodePurpose.VERIFY_EMAIL, background)
-        if outcome.code is None:
-            raise HTTPException(
-                429,
-                ErrorBody(
-                    error="too_many_requests",
-                    detail=f"too many codes requested; retry in {outcome.retry_after_seconds} seconds",
-                ).model_dump(),
-                headers={"Retry-After": str(outcome.retry_after_seconds)},
-            )
+        if result is ConsumeResult.EXPIRED or user is None:
+            raise _error(400, "code_expired", "the code has expired; register again")
+        return self._start_session(user), user
 
     def request_password_reset(self, email: str, background: BackgroundTasks) -> None:
         """Always succeeds for a well-formed email, so it never reveals whether an account exists."""
         normalized = normalize_email(email)
         self._validate_email_format(normalized)
-        user = self._users.get_by_email(normalized)
-        if user is not None:
-            self._send_code(user, CodePurpose.PASSWORD_RESET, background)
+        if self._users.get_by_email(normalized) is None:
+            return
+        outcome = email_code_service.issue_code(
+            self._users,
+            normalized,
+            CodePurpose.PASSWORD_RESET,
+            self._settings,
+            self._clock(),
+        )
+        if outcome.code is not None:
+            self._schedule_code_email(
+                normalized, CodePurpose.PASSWORD_RESET, outcome.code, background
+            )
 
     def confirm_password_reset(
         self, email: str, code: str, new_password: str
@@ -158,19 +169,16 @@ class AuthService:
         if user is None:
             raise _invalid_reset_code()
         result = self._users.reset_password(
-            user.id,
+            normalized,
             code.strip(),
             new_hash,
             self._clock(),
             self._settings.EMAIL_CODE_MAX_ATTEMPTS,
-            self._settings.REFERRAL_BONUS,
-            self._settings.REFERRAL_MAX_REWARDS,
         )
         if result is not ConsumeResult.OK:
             raise _invalid_reset_code()
         self._throttle.reset(normalized)
-        verified = self._users.get_by_id(user.id) or user
-        return self._start_session(verified), verified
+        return self._start_session(user), user
 
     def login(self, email: str, password: str) -> tuple[str, User]:
         normalized = normalize_email(email)
@@ -200,12 +208,7 @@ class AuthService:
         """Sign in to the account for a provider token, linking or creating it; returns (session, user, created)."""
         identity = self._verify_provider_token(provider, token, nonce, 401)
         try:
-            user, created = self._users.sign_in_with_identity(
-                identity,
-                self._clock(),
-                self._settings.REFERRAL_BONUS,
-                self._settings.REFERRAL_MAX_REWARDS,
-            )
+            user, created = self._users.sign_in_with_identity(identity, self._clock())
         except ProviderEmailUnverified:
             raise _error(
                 400, "provider_email_unverified", f"the {provider} email is not verified"
@@ -329,28 +332,21 @@ class AuthService:
                 f"{self._settings.LOGIN_LOCKOUT_MINUTES} minutes",
             )
 
-    def _mark_verified(self, user_id: str) -> None:
-        self._users.mark_email_verified(
-            user_id, self._settings.REFERRAL_BONUS, self._settings.REFERRAL_MAX_REWARDS
+    def _schedule_code_email(
+        self,
+        email: str,
+        purpose: CodePurpose,
+        code: str,
+        background: BackgroundTasks,
+    ) -> None:
+        background.add_task(
+            email_code_service.deliver,
+            self._sender,
+            email,
+            purpose,
+            code,
+            self._settings.EMAIL_CODE_TTL_MINUTES,
         )
-
-    def _send_code(
-        self, user: User, purpose: CodePurpose, background: BackgroundTasks
-    ) -> email_code_service.CodeOutcome:
-        outcome = email_code_service.issue_code(
-            self._users, user.id, purpose, self._settings, self._clock()
-        )
-        if outcome.code is not None:
-            background.add_task(
-                email_code_service.deliver,
-                self._sender,
-                user.id,
-                user.email,
-                purpose,
-                outcome.code,
-                self._settings.EMAIL_CODE_TTL_MINUTES,
-            )
-        return outcome
 
     def _start_session(self, user: User) -> str:
         ttl = timedelta(days=self._settings.SESSION_TTL_DAYS)

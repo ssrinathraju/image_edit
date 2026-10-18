@@ -13,6 +13,7 @@ from image_edit_server.api.deps import (
     get_settings,
     get_user_store,
 )
+from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
@@ -30,7 +31,6 @@ from tests.helpers import (
     RecordingSender,
     build_templates_dir,
     register_headers,
-    register_verified_headers,
 )
 
 
@@ -117,6 +117,7 @@ def app(
         apple_client=apple_client,
     )
     app = FastAPI()
+    install_validation_error_handler(app)
     quota_service = QuotaService(user_store, settings)
     app.include_router(router)
     app.include_router(templates_router)
@@ -137,20 +138,10 @@ def anon_client(app) -> TestClient:
 
 
 @pytest.fixture
-def client(app, user_store) -> TestClient:
-    """A client already signed in as ana@example.com, whose email is verified."""
+def client(app) -> TestClient:
+    """A client already signed in as ana@example.com."""
     test_client = TestClient(app)
-    test_client.headers.update(
-        register_verified_headers(test_client, user_store, "ana@example.com")
-    )
-    return test_client
-
-
-@pytest.fixture
-def unverified_client(app) -> TestClient:
-    """A client signed in as una@example.com, whose email is not verified."""
-    test_client = TestClient(app)
-    test_client.headers.update(register_headers(test_client, "una@example.com"))
+    test_client.headers.update(register_headers(test_client, "ana@example.com"))
     return test_client
 
 
@@ -160,5 +151,5 @@ def user_id(client) -> str:
 
 
 @pytest.fixture
-def second_user_headers(anon_client, user_store) -> dict:
-    return register_verified_headers(anon_client, user_store, "ben@example.com")
+def second_user_headers(anon_client) -> dict:
+    return register_headers(anon_client, "ben@example.com")

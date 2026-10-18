@@ -1,3 +1,4 @@
+import json
 import time
 
 import jwt
@@ -136,3 +137,36 @@ def test_unreachable_keys_raise_provider_unavailable(verifier, jwks, key):
 
     with pytest.raises(ProviderUnavailable):
         verifier.verify(sign_token(key, google_claims()))
+
+
+@pytest.mark.parametrize(
+    "claim,expected",
+    [(True, True), ("true", True), (False, False), ("false", False), (1, False)],
+)
+def test_email_verified_is_true_only_for_boolean_true_or_the_string_true(
+    verifier, key, claim, expected
+):
+    token = sign_token(key, google_claims(email_verified=claim))
+
+    assert verifier.verify(token).email_verified is expected
+
+
+def test_a_key_endpoint_that_answers_with_a_non_json_body_is_provider_unavailable(
+    verifier, jwks, key
+):
+    jwks.error = json.JSONDecodeError("Expecting value", "<html>", 0)
+
+    with pytest.raises(ProviderUnavailable):
+        verifier.verify(sign_token(key, google_claims()))
+
+
+def test_a_key_set_with_no_keys_is_provider_unavailable_but_an_unknown_kid_is_rejected(
+    verifier, jwks, key
+):
+    jwks.error = jwt.PyJWKClientError("The JWKS endpoint did not contain any signing keys")
+    with pytest.raises(ProviderUnavailable):
+        verifier.verify(sign_token(key, google_claims()))
+
+    jwks.error = None
+    with pytest.raises(InvalidProviderToken):
+        verifier.verify(sign_token(key, google_claims(), kid="other"))

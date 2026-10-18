@@ -1,5 +1,5 @@
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -12,8 +12,6 @@ from image_edit_server.core.user_store import (
 from image_edit_server.repos.user_store import SqliteUserStore
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
-BONUS = 5
-MAX = 10
 
 
 @pytest.fixture
@@ -31,7 +29,7 @@ def _identity(
 
 
 def _sign_in(users, identity):
-    return users.sign_in_with_identity(identity, NOW, BONUS, MAX)
+    return users.sign_in_with_identity(identity, NOW)
 
 
 def _count(users, table) -> int:
@@ -43,7 +41,7 @@ def test_a_new_identity_creates_a_verified_account_with_no_password(users):
 
     assert created is True
     assert user.email == "ana@example.com"
-    assert (user.email_verified, user.has_password) == (True, False)
+    assert user.has_password is False
     assert len(user.referral_code) == 8
     assert users.get_password_hash(user.id) == ""
     assert users.list_providers(user.id) == ["google"]
@@ -60,7 +58,7 @@ def test_a_linked_identity_returns_its_user_with_an_unchanged_email(users):
 
 
 def test_a_mixed_case_email_links_to_a_password_account_and_keeps_its_password(users):
-    existing = users.register_user("ana@example.com", "hash", None)
+    existing = users.create_user("ana@example.com", "hash")
 
     user, created = _sign_in(users, _identity(email="ANA@example.com"))
 
@@ -70,17 +68,16 @@ def test_a_mixed_case_email_links_to_a_password_account_and_keeps_its_password(u
     assert users.list_providers(existing.id) == ["google"]
 
 
-def test_linking_verifies_an_unverified_account_and_pays_its_pending_referral_once(users):
-    referrer = users.register_user("ref@example.com", "hash", None)
-    friend = users.register_user("ana@example.com", "hash", referrer.referral_code)
+def test_linking_changes_nothing_else_about_the_account(users):
+    existing = users.create_user("ana@example.com", "hash")
+    users.create_session(existing.id, timedelta(days=1))
+    before = users.get_by_id(existing.id)
 
-    user, _ = _sign_in(users, _identity())
-    assert user.email_verified is True
-    _sign_in(users, _identity(provider="apple", subject="a-1"))
+    _sign_in(users, _identity())
 
-    assert users.get_by_id(friend.id).bonus_credits == BONUS
-    after = users.get_by_id(referrer.id)
-    assert (after.bonus_credits, after.referral_rewards) == (BONUS, 1)
+    assert users.get_by_id(existing.id) == before
+    assert _count(users, "sessions") == 1
+    assert users.get_password_hash(existing.id) == "hash"
 
 
 def test_an_apple_relay_email_becomes_the_account_email(users):
@@ -99,13 +96,12 @@ def test_an_unknown_identity_without_an_email_is_refused(users):
 
 
 def test_an_unverified_email_writes_nothing(users):
-    users.register_user("ana@example.com", "hash", None)
+    users.create_user("ana@example.com", "hash")
 
     with pytest.raises(ProviderEmailUnverified):
         _sign_in(users, _identity(verified=False))
 
     assert _count(users, "identities") == 0
-    assert users.get_by_email("ana@example.com").email_verified is False
 
 
 def test_a_linked_apple_identity_without_an_email_still_signs_in(users):

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import time
 
 import jwt
@@ -11,6 +12,7 @@ from image_edit_server.core.identity_verifier import (
 from image_edit_server.services.identity.apple_verifier import AppleVerifier
 from tests.helpers import (
     APPLE_BUNDLE,
+    MISSING,
     TEST_KID,
     FakeJwksClient,
     apple_claims,
@@ -133,6 +135,38 @@ def test_hs256_token_is_rejected(verifier):
 
 def test_unreachable_keys_raise_provider_unavailable(verifier, jwks, key):
     jwks.unreachable = True
+
+    with pytest.raises(ProviderUnavailable):
+        verifier.verify(sign_token(key, apple_claims()), nonce=NONCE)
+
+
+@pytest.mark.parametrize(
+    "claim,expected",
+    [("true", True), (True, True), (MISSING, False), (False, False), ("false", False),
+     ("True", False), (1, False)],
+)
+def test_email_verified_is_true_only_for_boolean_true_or_the_string_true(
+    verifier, key, claim, expected
+):
+    token = sign_token(key, apple_claims(email_verified=claim))
+
+    assert verifier.verify(token, nonce=NONCE).email_verified is expected
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        json.JSONDecodeError("Expecting value", "<html>", 0),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+        jwt.PyJWKSetError("The JWK Set did not contain any keys"),
+        jwt.PyJWKClientError("The JWKS endpoint did not return a JSON object"),
+        jwt.PyJWKClientError("The JWKS endpoint did not contain any signing keys"),
+    ],
+)
+def test_a_broken_key_endpoint_is_provider_unavailable_not_a_rejected_token(
+    verifier, jwks, key, error
+):
+    jwks.error = error
 
     with pytest.raises(ProviderUnavailable):
         verifier.verify(sign_token(key, apple_claims()), nonce=NONCE)

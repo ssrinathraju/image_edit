@@ -13,6 +13,7 @@ from image_edit_server.core.identity_verifier import (
 from image_edit_server.services.identity.jwt_verification import (
     JwksClient,
     decode_provider_token,
+    is_email_verified_claim,
     make_jwks_client,
 )
 
@@ -39,7 +40,7 @@ class AppleVerifier:
             provider=PROVIDER,
             subject=str(claims["sub"]),
             email=claims.get("email") or None,
-            email_verified=claims.get("email_verified") in (True, "true"),
+            email_verified=is_email_verified_claim(claims.get("email_verified")),
             issued_at=datetime.fromtimestamp(claims["iat"], tz=timezone.utc),
         )
 

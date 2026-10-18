@@ -51,12 +51,16 @@ def test_no_password_material_is_returned(client):
     assert "hash" not in text
 
 
-def test_a_client_cannot_choose_its_plan(anon_client, user_store):
-    resp = anon_client.post(
+def test_a_client_cannot_choose_its_plan(anon_client, sender):
+    anon_client.post(
         "/auth/register",
         json={"email": "eve@example.com", "password": "correct horse battery", "plan": "premium"},
     )
-    headers = {"Authorization": f"Bearer {resp.json()['token']}"}
+    confirmed = anon_client.post(
+        "/auth/register/confirm",
+        json={"email": "eve@example.com", "code": sender.last_code("eve@example.com")},
+    )
+    headers = {"Authorization": f"Bearer {confirmed.json()['token']}"}
 
     anon_client.post(
         "/generations", data={"prompt": "x", "plan": "premium"}, headers=headers
@@ -65,18 +69,13 @@ def test_a_client_cannot_choose_its_plan(anon_client, user_store):
     assert anon_client.get("/me", headers=headers).json()["plan"] == "free"
 
 
-def test_me_reports_unverified_then_verified(unverified_client, user_store):
-    assert unverified_client.get("/me").json()["email_verified"] is False
+def test_me_never_contains_a_code_or_a_verification_flag(client, sender):
+    code = sender.last_code("ana@example.com")
 
-    user_store.mark_email_verified(unverified_client.get("/me").json()["id"], 0, 0)
+    text = client.get("/me").text
 
-    assert unverified_client.get("/me").json()["email_verified"] is True
-
-
-def test_me_never_contains_a_code(unverified_client, sender):
-    code = sender.last_code("una@example.com")
-
-    assert code not in unverified_client.get("/me").text
+    assert code not in text
+    assert "email_verified" not in text
 
 
 def _google_sign_in(client, google_verifier, subject="g-1", email="gina@example.com"):

@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from typing import Callable, Optional
 
 import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from PIL import Image
 
 from image_edit_server.core.identity_verifier import (
@@ -40,8 +41,15 @@ DEFAULT_PASSWORD = "correct horse battery"
 
 
 def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> dict:
-    """Register an account and return headers carrying its bearer token."""
+    """Register and confirm through the API with the emailed code; returns bearer headers."""
+    from image_edit_server.api.deps import get_auth_service
+
+    sender = client.app.dependency_overrides[get_auth_service]()._sender
     resp = client.post("/auth/register", json={"email": email, "password": password})
+    assert resp.status_code == 202, resp.text
+    resp = client.post(
+        "/auth/register/confirm", json={"email": email, "code": sender.last_code(email)}
+    )
     assert resp.status_code == 201, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
 
@@ -76,18 +84,6 @@ class FakeClock:
         self.now += timedelta(**kwargs)
 
 
-def register_and_verify_through_api(
-    client, sender: RecordingSender, email: str, password: str = DEFAULT_PASSWORD
-) -> dict:
-    """Register, then submit the emailed code, as a real client would."""
-    headers = register_headers(client, email, password)
-    resp = client.post(
-        "/auth/verify-email", json={"code": sender.last_code(email)}, headers=headers
-    )
-    assert resp.status_code == 200, resp.text
-    return headers
-
-
 def forget_recent_sends(client) -> None:
     """Stand in for a minute passing on a real-clock app, so the next code email is not limited."""
     from image_edit_server.api.deps import get_user_store
@@ -95,21 +91,6 @@ def forget_recent_sends(client) -> None:
     users = client.app.dependency_overrides[get_user_store]()
     users._conn.execute("DELETE FROM email_sends")
     users._conn.commit()
-
-
-def verify_account(user_store, email: str) -> None:
-    """Mark an account's email verified directly in the store."""
-    user = user_store.get_by_email(email)
-    user_store.mark_email_verified(user.id, 0, 0)
-
-
-def register_verified_headers(
-    client, user_store, email: str, password: str = DEFAULT_PASSWORD
-) -> dict:
-    """Register an account, verify it through the store, and return its bearer headers."""
-    headers = register_headers(client, email, password)
-    verify_account(user_store, email)
-    return headers
 
 
 def grant_bonus(user_store, user_id: str, credits: int) -> None:
@@ -132,13 +113,18 @@ def make_rsa_key() -> rsa.RSAPrivateKey:
 class FakeJwksClient:
     """Stands in for PyJWKClient: serves local public keys by kid, or fails like a dead endpoint."""
 
-    def __init__(self, keys: dict, unreachable: bool = False) -> None:
+    def __init__(
+        self, keys: dict, unreachable: bool = False, error: Optional[Exception] = None
+    ) -> None:
         self._keys = keys
         self.unreachable = unreachable
+        self.error = error
 
     def get_signing_key_from_jwt(self, token: str):
         if self.unreachable:
             raise jwt.PyJWKClientConnectionError("fetch failed")
+        if self.error:
+            raise self.error
         kid = jwt.get_unverified_header(token).get("kid")
         if kid not in self._keys:
             raise jwt.PyJWKClientError("Unable to find a signing key that matches")
@@ -169,16 +155,22 @@ def google_claims(
     return claims
 
 
+MISSING = object()
+
+
 def apple_claims(
     subject: str = "a-1",
     email: Optional[str] = "ana@example.com",
     raw_nonce: Optional[str] = "raw-nonce",
+    email_verified: object = "true",
     **overrides,
 ) -> dict:
+    """Apple sends email_verified as a string; pass MISSING to leave the claim out."""
     import hashlib
 
     claims = _base_claims("https://appleid.apple.com", APPLE_BUNDLE, subject, email)
-    claims["email_verified"] = "true"
+    if email_verified is not MISSING:
+        claims["email_verified"] = email_verified
     if raw_nonce is not None:
         claims["nonce"] = hashlib.sha256(raw_nonce.encode()).hexdigest()
     claims.update(overrides)
@@ -239,3 +231,16 @@ class FakeAppleClient:
         self.revoked.append(token)
         if self.revoke_error:
             raise self.revoke_error
+
+
+def write_apple_key_file(path: Path) -> Path:
+    """Write a fresh P-256 private key in the PKCS8 PEM form Apple's .p8 files use."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return path

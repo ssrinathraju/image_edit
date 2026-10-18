@@ -19,6 +19,7 @@ from image_edit_server.api.deps import (
     get_settings,
     get_user_store,
 )
+from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router as generations_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
@@ -154,6 +155,7 @@ def create_app(
         user_store.close()
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)
+    install_validation_error_handler(app)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cfg.CORS_ORIGINS,

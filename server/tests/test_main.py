@@ -18,11 +18,11 @@ def test_create_app_fails_on_duplicate_template_id(tmp_path):
 def test_session_survives_an_app_restart_on_the_same_storage_root(tmp_path, templates_dir):
     from fastapi.testclient import TestClient
 
-    from tests.helpers import register_headers
+    from tests.helpers import RecordingSender, register_headers
 
     settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
 
-    with TestClient(create_app(settings)) as first:
+    with TestClient(create_app(settings, sender=RecordingSender())) as first:
         headers = register_headers(first, "ana@example.com")
     assert (tmp_path / "s" / "app.db").exists()
 
@@ -53,10 +53,10 @@ def test_generations_lost_to_a_restart_are_refunded_at_startup(tmp_path, templat
     from fastapi.testclient import TestClient
 
     from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
-    from tests.helpers import register_headers
+    from tests.helpers import RecordingSender, register_headers
 
     settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
-    with TestClient(create_app(settings)) as first:
+    with TestClient(create_app(settings, sender=RecordingSender())) as first:
         headers = register_headers(first, "ana@example.com")
         user_id = first.get("/me", headers=headers).json()["id"]
 
@@ -191,15 +191,47 @@ def test_an_injected_sender_receives_the_registration_email(tmp_path, templates_
     assert sender.count_for("ana@example.com") == 1
 
 
-def test_without_smtp_the_code_is_in_the_server_log(tmp_path, templates_dir, caplog):
+def test_without_smtp_the_registration_code_is_in_the_server_log(
+    tmp_path, templates_dir, caplog
+):
     from fastapi.testclient import TestClient
-
-    from tests.helpers import register_headers
 
     settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
 
     with caplog.at_level("INFO"), TestClient(create_app(settings)) as client:
-        register_headers(client, "ana@example.com")
+        resp = client.post(
+            "/auth/register",
+            json={"email": "ana@example.com", "password": "correct horse battery"},
+        )
 
+    assert resp.status_code == 202
     assert "ana@example.com" in caplog.text
-    assert "verification code is" in caplog.text
+    assert "registration code is" in caplog.text
+
+
+def test_a_validation_error_never_echoes_the_secrets_that_were_sent(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    secrets = ["identity-token-secret", "auth-code-secret", "password-secret", "provider-token-secret"]
+
+    with TestClient(create_app(settings, sender=RecordingSender())) as client:
+        headers = register_headers(client, "ana@example.com")
+        apple = client.post(
+            "/auth/oauth/apple",
+            json={"identity_token": secrets[0], "authorization_code": secrets[1]},
+        )
+        delete = client.request(
+            "DELETE",
+            "/me",
+            json={"password": secrets[2], "provider": "google", "token": secrets[3]},
+            headers=headers,
+        )
+
+    assert (apple.status_code, delete.status_code) == (422, 422)
+    assert apple.json()["detail"][0]["loc"] == ["body", "nonce"]
+    for resp in (apple, delete):
+        for secret in secrets:
+            assert secret not in resp.text

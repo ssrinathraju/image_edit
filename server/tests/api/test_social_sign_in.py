@@ -11,6 +11,7 @@ from tests.helpers import (
     GOOGLE_AUDIENCE,
     TEST_KID,
     FakeJwksClient,
+    MISSING,
     apple_claims,
     google_claims,
     make_rsa_key,
@@ -61,8 +62,8 @@ def test_response_shape_has_the_session_fields_and_created(anon_client, google_v
 
     body = _google(anon_client).json()
 
-    assert set(body) == {"token", "id", "email", "email_verified", "created"}
-    assert (body["created"], body["email_verified"]) == (True, True)
+    assert set(body) == {"token", "id", "email", "created"}
+    assert body["created"] is True
 
 
 @pytest.fixture
@@ -183,7 +184,7 @@ def test_apple_relay_email_becomes_the_account_email(anon_client, apple_verifier
 # ── Accounts reached through a provider are verified ────────────────────
 
 
-def test_new_provider_account_is_verified_passwordless_and_can_generate(
+def test_new_provider_account_is_passwordless_and_can_generate(
     anon_client, google_verifier
 ):
     google_verifier.add("g-tok", "g-1")
@@ -194,33 +195,77 @@ def test_new_provider_account_is_verified_passwordless_and_can_generate(
         "/generations", data={"prompt": VALID_PROMPT}, files=[_face()], headers=headers
     )
 
-    assert (me["email_verified"], me["has_password"]) == (True, False)
+    assert me["has_password"] is False
     assert submit.status_code == 202
 
 
-def test_linking_verifies_an_unverified_account(unverified_client, google_verifier):
-    google_verifier.add("g-tok", "g-1", email="una@example.com")
+def test_linking_leaves_password_login_working(client, google_verifier):
+    google_verifier.add("g-tok", "g-1", email="ana@example.com")
+    resp = _google(client)
 
-    resp = _google(unverified_client)
+    login = client.post(
+        "/auth/login",
+        json={"email": "ana@example.com", "password": "correct horse battery"},
+    )
 
-    assert unverified_client.get("/me", headers=_bearer(resp)).json()["email_verified"] is True
+    assert resp.status_code == 200
+    assert login.status_code == 200
+    assert login.json()["id"] == resp.json()["id"]
 
 
 # ── Require a provider-verified email ───────────────────────────────────
 
 
 def test_unverified_google_email_is_400_and_writes_nothing(
-    unverified_client, google_verifier, user_store
+    client, google_verifier, user_store
 ):
-    google_verifier.add("g-tok", "g-1", email="una@example.com", verified=False)
+    google_verifier.add("g-tok", "g-1", email="ana@example.com", verified=False)
     users_before = _user_count(user_store)
 
-    resp = _google(unverified_client)
+    resp = _google(client)
 
     assert resp.status_code == 400
     assert resp.json()["detail"]["error"] == "provider_email_unverified"
     assert _user_count(user_store) == users_before
-    assert user_store.list_providers(user_store.get_by_email("una@example.com").id) == []
+    assert user_store.list_providers(user_store.get_by_email("ana@example.com").id) == []
+
+
+@pytest.mark.parametrize("claim", [MISSING, False, "false", "True", 1, "yes"])
+def test_apple_email_without_a_verified_claim_is_refused_and_writes_nothing(
+    anon_client, real_verifiers, user_store, claim
+):
+    token = sign_token(real_verifiers, apple_claims(email_verified=claim))
+
+    resp = _apple(anon_client, token)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "provider_email_unverified"
+    assert "apple" in resp.json()["detail"]["detail"]
+    assert _user_count(user_store) == 0
+    assert user_store._conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("claim", ["true", True])
+def test_apple_true_claim_in_either_form_creates_an_account(
+    anon_client, real_verifiers, user_store, claim
+):
+    token = sign_token(real_verifiers, apple_claims(email_verified=claim))
+
+    resp = _apple(anon_client, token)
+
+    assert (resp.status_code, resp.json()["created"]) == (200, True)
+    assert _user_count(user_store) == 1
+
+
+def test_an_unverified_apple_email_does_not_link_to_a_password_account(
+    client, real_verifiers, user_store
+):
+    token = sign_token(real_verifiers, apple_claims(email_verified="false"))
+
+    resp = _apple(client, token)
+
+    assert resp.status_code == 400
+    assert user_store.list_providers(user_store.get_by_email("ana@example.com").id) == []
 
 
 def test_apple_token_without_an_email_for_an_unknown_identity_is_400(

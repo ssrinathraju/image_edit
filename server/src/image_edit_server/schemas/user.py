@@ -26,7 +26,6 @@ class User:
     bonus_credits: int = 0
     referral_code: str = ""
     referral_rewards: int = 0
-    email_verified: bool = False
     has_password: bool = True
 
 
@@ -51,7 +50,6 @@ class AuthResponse(BaseModel):
     token: str
     id: str
     email: str
-    email_verified: bool
 
 
 class SocialAuthResponse(AuthResponse):
@@ -72,12 +70,9 @@ class ReferralRedeemRequest(BaseModel):
     code: str = Field(max_length=MAX_REFERRAL_CODE_CHARS)
 
 
-class VerifyEmailRequest(BaseModel):
+class RegistrationConfirm(BaseModel):
+    email: str = Field(max_length=MAX_EMAIL_CHARS)
     code: str = Field(max_length=MAX_CODE_CHARS)
-
-
-class VerifyEmailResponse(BaseModel):
-    email_verified: bool
 
 
 class ResetRequest(BaseModel):
@@ -110,7 +105,6 @@ class MeResponse(BaseModel):
     id: str
     email: str
     created_at: str
-    email_verified: bool
     plan: str
     usage: UsageResponse
     referral: ReferralResponse
