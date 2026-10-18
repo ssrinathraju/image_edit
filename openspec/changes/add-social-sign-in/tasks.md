@@ -151,10 +151,64 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - `invalid_provider_token` showing the message;
   - a password account still using the password dialog.
 
-## 10. Integration and hand-off
+## 10. Server: registration before the account exists (added after round-1 review)
 
-- [x] 10.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
-- [ ] 10.2 **Manual. Needs the Google Cloud OAuth clients, the Apple Developer App ID and key, and final bundle IDs.** Configure the server settings, the app `.env` and the xcconfig, then check:
+Groups 10 to 12 implement design Decisions 10 and 11 and the revised specs. Earlier ticked tasks stay ticked. Where their tests cover behaviour these groups remove, the tests are rewritten or deleted here.
+
+- [ ] 10.1 Schema: add `pending_registrations`, recreate `email_codes` and `email_sends` keyed by email (purposes `registration` and `password_reset`), and mark unverified accounts verified, all in the v4 migration (design Decision 2). New users keep writing `email_verified = 1`. Account deletion removes that email's code and send rows in the same transaction. Verify that `tests/repos/test_user_store_migration.py` covers:
+  - a v3 database with an unverified account, which comes out verified and can log in;
+  - the code tables recreated in their new shape;
+  - running the migration twice changing nothing;
+
+  and that `tests/repos/test_user_store_codes.py` is updated so codes and limits are per email, including the 5-per-hour cap counting registration and reset together.
+- [ ] 10.2 Store operations `start_registration(...)` and `confirm_registration(...)`, following Decision 10. Verify that `tests/repos/test_user_store_registration.py` covers:
+  - start storing a pending row and a code;
+  - a second start after 60 s replacing both;
+  - a second start within 60 s being limited and keeping the first;
+  - confirm creating a verified user with the pending password and deleting the pending row;
+  - a wrong code counting an attempt;
+  - an expired code, and confirming with no pending row;
+  - an email taken meanwhile giving `email_taken` and deleting the pending row;
+  - the referral paid to both at creation;
+  - a referrer deleted meanwhile paying only the new account;
+  - two threads confirming the same registration creating exactly one account;
+  - old pending rows pruned after 24 hours.
+- [ ] 10.3 Endpoints: change `POST /auth/register` to the pending flow (202, or 429 with `Retry-After`), add `POST /auth/register/confirm` (201 with `AuthResponse`), and drop `email_verified` from `AuthResponse`. Verify that `tests/api/test_auth.py` covers every scenario of "Start a registration" and "Complete registration with the emailed code", using the recording sender to read codes, and that no response contains a code.
+- [ ] 10.4 Provider linking: remove the verification transition from `sign_in_with_identity` (Decision 3), delete any pending registration for an email when a provider creates its account, and apply the `email_verified` rule to Apple, accepting the boolean `true` or the string `"true"` only. Verify that:
+  - `tests/services/identity/test_apple_verifier.py` covers the claim being missing, `false`, `"false"`, `true` and `"true"`;
+  - `tests/api/test_social_sign_in.py` covers "Apple email without a verified claim is refused" and "Apple string claim is accepted";
+  - `tests/api/test_auth.py` covers a pending registration confirmed after Google created the account giving 409, with the Google account unchanged.
+
+## 11. Server: remove the unverified-account machinery
+
+- [ ] 11.1 Delete `POST /auth/verify-email` and `/resend`, the `email_not_verified` gate in `generation_service.submit`, `mark_email_verified` and the `referral_bonus_pending` logic, `email_verified` in `MeResponse`, and the verification step in password reset (Decision 11). Update `tests/conftest.py` fixtures and `tests/helpers.py` so accounts are created through the store or through register-then-confirm. Delete or rewrite the tests of removed behaviour, including `tests/api/test_email_verification.py` and `tests/api/test_generations_verified.py`. Verify:
+  - `grep -rn "email_not_verified\|verify-email\|mark_email_verified\|referral_bonus_pending" server/src` finds nothing except the schema column definition;
+  - the full suite passes;
+  - `tests/integration/test_referral_flow.py` and `test_account_recovery_flow.py` pass against the new registration flow.
+- [ ] 11.2 Update `server/README.md`: the two-step registration with curl examples, the removed endpoints and fields, codes keyed per address, the v4 migration note (unverified accounts become verified, and back up `app.db` before upgrading because a rollback needs the backup). Verify by running the register and confirm curl examples against a local server in log mode. Start it on a port you choose and stop only that process.
+
+## 12. App: confirm registration and removals
+
+- [ ] 12.1 Client and schemas: `register` returns nothing on 202, add `confirmRegistration(email, code)` returning the session, remove `verifyEmail` and `resendVerification`, and remove `emailVerified` from `Session` and `UserProfile`. Remove the `email_not_verified` and `already_verified` codes. Verify with `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart`.
+- [ ] 12.2 Add `registrationDraftProvider` (in memory), `features/auth/confirm_registration_screen.dart`, and the `/confirm-registration` route (allowed while signed out, and redirecting to `/register` without a draft). Change `register_screen.dart` to push it on success. Remove `justRegistered`, `verify_email_screen.dart` and its route. Follow the states in the Decision 9 table. Verify:
+  - `test/features/auth/confirm_registration_screen_test.dart` covers every scenario of "Confirm registration with the emailed code", including Back keeping the values;
+  - `test/router_test.dart` covers registration landing on `/confirm-registration` with no session, and a session after confirm landing on `/`.
+- [ ] 12.3 Remove the home banner and the `email_not_verified` handling in `features/common/submit_flow.dart`. Make the `provider_email_unverified` message in `provider_buttons.dart` name the provider used. Verify:
+  - the home and submit-flow tests are updated;
+  - `test/features/auth/provider_buttons_test.dart` covers the Apple message naming Apple;
+  - `grep -rn "emailVerified\|verify-email\|email_not_verified" app/lib` finds nothing.
+
+## 13. Integration and hand-off
+
+- [ ] 13.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
+- [ ] 13.2 **Manual, no consoles needed.** On the iOS simulator against a local server in log mode, started on a copy of an existing `app.db` that holds an unverified account:
+  - The unverified account signs in and can generate.
+  - Register a new email with a referral code: the Confirm registration screen opens with no session. Back shows the values kept. Resend shows the countdown.
+  - Enter the code from the server log: home opens and both accounts show +5.
+  - A wrong code shows "Code is incorrect".
+
+  This box stays unticked until someone runs every step.
+- [ ] 13.3 **Manual. Needs the Google Cloud OAuth clients, the Apple Developer App ID and key, and final bundle IDs.** Configure the server settings, the app `.env` and the xcconfig, then check:
   - iOS simulator or device:
     - Continue with Google creates an account and shows the referral prompt.
     - Skip goes home.
@@ -165,4 +219,4 @@ Work on branch `feat/add-social-sign-in`. Do not push to `main`. Server tasks ru
   - A Google sign-in whose email matches an existing password account links to it, and the profile shows "Signed in with Google".
 
   This box stays unticked until someone runs every step. Name any skipped step in the PR.
-- [x] 10.3 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.
+- [ ] 13.4 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.

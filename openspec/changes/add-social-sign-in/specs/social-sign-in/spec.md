@@ -6,7 +6,7 @@ Lets people sign in with an identity they already have at Google or Apple instea
 
 ### Requirement: Sign in with Google
 
-The system SHALL expose `POST /auth/oauth/google` taking an `id_token`. It SHALL accept the token only when Google's published keys verify its signature, its issuer is Google, its audience is one of the configured Google client IDs, and it has not expired. On success it SHALL respond with HTTP 200 and a body containing a session `token`, the user's `id`, `email`, `email_verified`, and `created`, which is true only when the request created the account. A token that fails any check SHALL get HTTP 401 with error `invalid_provider_token`.
+The system SHALL expose `POST /auth/oauth/google` taking an `id_token`. It SHALL accept the token only when Google's published keys verify its signature, its issuer is Google, its audience is one of the configured Google client IDs, and it has not expired. On success it SHALL respond with HTTP 200 and a body containing a session `token`, the user's `id` and `email`, and `created`, which is true only when the request created the account. A token that fails any check SHALL get HTTP 401 with error `invalid_provider_token`.
 
 #### Scenario: Valid Google token signs in
 
@@ -68,30 +68,36 @@ For an accepted provider token the system SHALL sign in to the account already l
 - **WHEN** a new Apple identity signs in with a private relay email address
 - **THEN** a new account is created with that relay address as its email
 
-### Requirement: Accounts reached through a provider are verified
+### Requirement: Accounts created through a provider
 
-An account created through a provider SHALL have a verified email, no password, and a referral code. Linking a provider identity to an unverified account SHALL mark its email verified.
+An account created through a provider SHALL have no password and a referral code, and SHALL be able to submit generations straight away.
 
-#### Scenario: New provider account is verified
+#### Scenario: New provider account can generate
 
 - **WHEN** a new account is created through Google
-- **THEN** `GET /me` reports `email_verified` true and `has_password` false
+- **THEN** `GET /me` reports `has_password` false
 - **AND** the account can submit a generation
-
-#### Scenario: Linking verifies an unverified account
-
-- **WHEN** an unverified password account is linked by signing in with Google using the same email
-- **THEN** `GET /me` reports `email_verified` true
 
 ### Requirement: Require a provider-verified email
 
-The system SHALL NOT create or link an account from a Google token whose `email_verified` claim is not true, and SHALL respond with HTTP 400 and error `provider_email_unverified`. An Apple identity that is not linked to any account and whose token carries no email SHALL get HTTP 400 with error `provider_email_missing`.
+For a provider identity that is not linked to any account, the system SHALL NOT create or link an account unless the token's `email_verified` claim is true (the boolean `true` or the string `"true"`). This SHALL apply to Google and Apple alike. A missing or false claim SHALL get HTTP 400 with error `provider_email_unverified`. An Apple identity that is not linked to any account and whose token carries no email SHALL get HTTP 400 with error `provider_email_missing`.
 
 #### Scenario: Unverified Google email is refused
 
 - **WHEN** a Google token that is otherwise valid has `email_verified` false and no account is linked to that identity
 - **THEN** the system responds with HTTP 400 and error `provider_email_unverified`
 - **AND** no account is created or linked
+
+#### Scenario: Apple email without a verified claim is refused
+
+- **WHEN** an Apple token that is otherwise valid carries an email and its `email_verified` claim is missing, false, or the string `"false"`, and no account is linked to that identity
+- **THEN** the system responds with HTTP 400 and error `provider_email_unverified`
+- **AND** no account is created or linked
+
+#### Scenario: Apple string claim is accepted
+
+- **WHEN** a new Apple identity's token carries an email and `email_verified` set to the string `"true"`
+- **THEN** an account is created
 
 #### Scenario: Apple token without email for an unknown identity
 

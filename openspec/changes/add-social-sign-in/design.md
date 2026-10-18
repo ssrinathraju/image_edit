@@ -8,7 +8,9 @@ See `proposal.md` for the motivation and `specs/` for the behaviour contract. Th
   - `users.password_hash` is `TEXT NOT NULL`.
   - `_migrate()` adds missing columns by checking `PRAGMA table_info`, in one transaction.
   - Every store method runs under `self._lock` in a single transaction.
-- **Verification and referrals.** `mark_email_verified` pays a pending referral on the first 0→1 transition (the `add-email-verification-and-reset` design, Decision 5).
+- **Verification and referrals.** Registration today creates an unverified account with a session. `POST /auth/verify-email` and `/resend` verify it, `generation_service.submit` refuses unverified accounts with 403, and the app shows a Verify email screen and a home banner. `mark_email_verified` pays a pending referral on the first 0→1 transition (the `add-email-verification-and-reset` design, Decision 5).
+- **Email codes.** `email_codes` and `email_sends` are keyed by `user_id`, so a code can only be issued to an existing account.
+- **Why this change also reworks registration.** Round-1 review found that linking a provider to an unverified account handed the account to whoever had registered that email first. With the user, the fix chosen is to make unverified accounts impossible: registration now creates the account only after the emailed code is confirmed (Decision 10).
 - **Passwords.** `core/passwords.verify_password` returns `False` for a stored value it cannot parse, including the empty string.
 - **Auth handlers.** These are plain `def` functions run in the thread pool. Account deletion goes through `AuthService.delete_account(user, password)` and the purge callback.
 - **App sign-in state.** `SessionNotifier` already exposes `justRegistered`, and `router.dart` uses it to send a new registration to `/verify-email`. `AccountNotifier` loads `/me`.
@@ -38,6 +40,8 @@ There are two implementations under `services/identity/`:
 - **`google_verifier.py`:** uses the JWKS at `https://www.googleapis.com/oauth2/v3/certs`. The issuer must be `accounts.google.com` or `https://accounts.google.com`, and the audience must be in `GOOGLE_CLIENT_IDS`.
 - **`apple_verifier.py`:** uses the JWKS at `https://appleid.apple.com/auth/keys`. The issuer must be `https://appleid.apple.com`, the audience must be `APPLE_BUNDLE_ID`, and the `nonce` claim must equal `sha256(raw_nonce).hexdigest()`.
 
+Both verifiers report `email_verified` as true only for the boolean `true` or the string `"true"`, because Apple sends the claim as a string. A missing claim counts as false.
+
 Both use `jwt.PyJWKClient` with caching (keys are refetched on an unknown `kid`), a 5-second fetch timeout, RS256 only and 60 seconds of clock leeway. A failed fetch raises `ProviderUnavailable`, which becomes 503. Any decode or claim failure raises `InvalidProviderToken`, which becomes 401 at sign-in and 403 at deletion.
 
 For tests, the verifiers take the JWKS client as a constructor argument. The tests build tokens with a locally generated RSA key and a fake JWKS client, so there is no network.
@@ -56,6 +60,9 @@ For tests, the verifiers take the JWKS client as a constructor argument. The tes
 - **`users.created_via TEXT NOT NULL DEFAULT 'password'`.** Set to `google` or `apple` for accounts created through a provider. Existing rows get `password`.
 - **`users.referral_redeemed INTEGER NOT NULL DEFAULT 0`.** Set by post-sign-up redemption (Decision 6).
 - **An account without a password** stores `password_hash = ''`. `verify_password` already returns `False` for it, so password login and password-confirmed deletion fail exactly as for a wrong password. `has_password` is `password_hash != ''`. A password reset writes a real hash, which gives the account a password.
+- **`pending_registrations`.** Columns: `email` (primary key, lowercased), `password_hash`, `referral_code` (nullable, normalised), `created_at`. One row per email. Re-registering replaces it, confirming deletes it, and each insert deletes rows older than 24 hours.
+- **`email_codes` and `email_sends` are re-keyed by email address.** `email_codes` gets `PRIMARY KEY (email, purpose)` and `email_sends` an index on `(email, sent_at)`, with purposes `registration` and `password_reset`. Neither table references `users`, since a registration code exists before its account. Account deletion therefore deletes that email's rows explicitly in the same transaction. The migration drops and recreates both tables. They only hold codes valid for 15 minutes and send times kept for an hour, so at worst a reset code in flight during the upgrade has to be requested again.
+- **Existing unverified accounts.** The v4 migration runs `UPDATE users SET email_verified = 1 WHERE email_verified = 0` (the user's decision; see Risks). `email_verified` and `referral_bonus_pending` then stay in the table, because dropping a column in SQLite means rebuilding a table that others reference. No code reads them after this change. New accounts still write `email_verified = 1`, so a rollback to the version-3 server does not treat them as unverified.
 - **`SCHEMA_VERSION = 4`.** The column and table checks decide what runs, as before.
 
 - **Alternative rejected: rebuilding `users` to make `password_hash` nullable.** SQLite cannot drop `NOT NULL` without copying the table, and several tables reference `users` with foreign keys. An empty-string sentinel is safe because the verifier already treats it as invalid.
@@ -63,16 +70,17 @@ For tests, the verifiers take the JWKS client as a constructor argument. The tes
 ### 3. Find, link or create in one store transaction
 `sign_in_with_identity(identity, now, bonus, max_rewards) -> (User, created)` runs under the lock in one transaction:
 1. If `(provider, subject)` exists, return its user. The account's email is not changed.
-2. Otherwise, if no account is linked and the token has no email, raise `ProviderEmailMissing`. If Google's `email_verified` is not true, raise `ProviderEmailUnverified`. These checks happen before any write.
+2. Otherwise, if the token has no email, raise `ProviderEmailMissing`. If its `email_verified` is not true (Google or Apple), raise `ProviderEmailUnverified`. These checks happen before any write.
 3. If a user has that email (lowercased):
    - If they already have an identity of this provider, raise `ProviderAlreadyLinked`.
-   - Otherwise insert the identity, run the verification transition (Decision 5 of the email-verification design, which may pay a pending referral), and return them with `created=False`.
+   - Otherwise insert the identity and return them with `created=False`. Every account's email is proven (Decision 10), so linking changes nothing else about the account.
 4. Otherwise insert a user with:
    - the lowercased email;
    - `password_hash = ''`;
-   - `email_verified = 1`;
    - `created_via = provider`;
    - a new referral code.
+
+   Also delete any pending registration for that email, so a stale code can't later collide with the new account (confirming it would answer 409 anyway).
 
    Then insert the identity and return it with `created=True`.
 
@@ -121,6 +129,30 @@ Deleting a user cascades to `identities`. Apple revocation follows Decision 4.
 
 The account is already verified, so the reward is paid immediately rather than through `referral_bonus_pending`. The 24-hour window is a constant in `core/`, not a setting.
 
+### 10. Registration creates the account only after the code is confirmed
+- **`POST /auth/register`** runs these steps:
+  1. Validate the format, then the referral code (400 if unknown), then that no account has the email (409).
+  2. Hash the password outside the lock.
+  3. Under the lock, in one transaction, check the per-email limits. If one applies, answer 429 with `Retry-After` and keep the old pending row and code.
+  4. Otherwise upsert `pending_registrations`, upsert the `registration` code and insert a send row.
+  5. Schedule the email after the response, as today, and answer 202 `{}`.
+- **`POST /auth/register/confirm`** runs in one transaction:
+  1. Consume the `registration` code for the email: `wrong` gives 400 `invalid_code`, and `expired` (including no pending row) gives 400 `code_expired`.
+  2. If an account now has the email, delete the pending row and answer 409 `email_taken`.
+  3. Otherwise insert the user from the pending row with `email_verified = 1` and `created_via = 'password'`. If the pending referral code still belongs to an account, link it and pay both sides under the cap. If that account was deleted meanwhile, pay only the new account.
+  4. Delete the pending row and create a session. The response is `AuthResponse` with 201.
+- **Code rules stay as they are:** the TTL, attempts, 60-second and 5-per-hour limits now apply per email address. Password-reset codes are keyed by the account's email.
+- **Alternative rejected: keep creating the account at registration and take it over cleanly at link time** (wipe the password and revoke sessions). It fixes the takeover, but anyone can still squat someone else's email and block their registration, and the unverified-account machinery (gate, banner, deferred referral) stays.
+- **Alternative rejected: a separate change first.** The user chose to keep one feature in flight.
+
+### 11. Removing the unverified-account machinery
+Because no account can be unverified, this change deletes the following:
+- **Server:** `POST /auth/verify-email` and `/resend`, the `email_not_verified` gate in `generation_service.submit`, `mark_email_verified`, the `referral_bonus_pending` logic, `email_verified` in `AuthResponse` and `MeResponse`, and the verification step in password reset.
+- **App:** the Verify email screen and route, the home banner, `email_not_verified` handling in `submit_flow.dart`, `emailVerified` in `Session` and `UserProfile`, and `justRegistered`.
+- **Tests:** the tests for these are deleted or rewritten. The conftest `client` fixtures create accounts through the store or through register-then-confirm.
+
+No compatibility shims are kept, because the project has no users.
+
 ### 7. Settings and startup checks
 New settings, with their defaults:
 
@@ -144,7 +176,9 @@ The server refuses to start in these cases:
 ### 8. API surface
 - **`POST /auth/oauth/google`** takes `{id_token}`.
 - **`POST /auth/oauth/apple`** takes `{identity_token, nonce, authorization_code}`.
-- **Both** return `AuthResponse` plus `created: bool`. Login and register keep their current shape.
+- **Both** return `AuthResponse` plus `created: bool`.
+- **`POST /auth/register`** takes `{email, password, referral_code?}` and returns 202 `{}`. **`POST /auth/register/confirm`** takes `{email, code}` and returns 201 `AuthResponse`.
+- **`AuthResponse`** is `{token, id, email}` everywhere (register-confirm, login, password-reset confirm and the provider endpoints, which add `created`). `email_verified` is gone.
 - **`POST /me/referral`** takes `{code}` and returns 200 `{}`.
 - **`MeResponse`** gains `providers: list[str]` (sorted) and `has_password: bool`.
 
@@ -159,6 +193,9 @@ All new handlers are plain `def`. Error mapping:
 | `ProviderEmailMissing` | 400 | `provider_email_missing` |
 | `ProviderAlreadyLinked` | 409 | `provider_already_linked` |
 | `ReferralNotAllowed` | 409 | `referral_not_allowed` |
+| Registration limited | 429 + `Retry-After` | `too_many_requests` |
+| Registration code wrong or expired | 400 | `invalid_code` or `code_expired` |
+| Email registered meanwhile | 409 | `email_taken` |
 
 ### 9. App: provider sign-in behind an injectable interface
 `core/provider_sign_in.dart` defines `ProviderSignIn.signIn() -> ProviderCredential?`, which returns null when the user cancels. There are two implementations:
@@ -176,9 +213,16 @@ Native setup:
 - **Android:** no code change. The SHA-1 is registered in the console.
 
 Routing:
-- `SessionNotifier` gains `signInWithProvider(credential)` and `justCreatedViaProvider`. The redirect sends that state to `/referral-prompt`, using the same mechanism as `justRegistered`.
-- The prompt screen clears the flag in `initState`.
-- `api_errors.dart` adds the seven new codes.
+- `SessionNotifier` gains `signInWithProvider(credential)` and `justCreatedViaProvider`. The redirect sends that state to `/referral-prompt`. The prompt screen clears the flag in `initState`.
+- **Registration:**
+  - `register_screen.dart` calls `register(...)`. On 202 it stores the entered values in a `registrationDraftProvider` (in memory only, never persisted) and pushes `/confirm-registration`. No session is created yet.
+  - The new `confirm_registration_screen.dart` reads the email from the draft. Confirm calls `confirmRegistration(email, code)`; on success the session is stored, the draft is cleared, and the redirect lands on `/`.
+  - Resend calls `register(...)` again with the draft's values.
+  - Back pops to the registration screen, which still has its values.
+  - `/confirm-registration` is allowed while signed out. If there is no draft, it redirects to `/register`.
+- **Error codes:** `api_errors.dart` adds the seven provider codes. `email_not_verified` and `already_verified` are removed.
+
+The password sits in memory (the draft) only while the Confirm screen is open, so Resend can re-send without asking again. It is never written to disk.
 
 Deletion in the app: when `hasPassword` is false, `profile_screen.dart` runs the linked provider's sign-in. That is Apple if the account is linked to Apple and the app is on iOS, otherwise Google. It then calls `deleteAccount(provider:, token:, nonce:)`. A cancelled sign-in returns to the profile silently.
 
@@ -186,7 +230,9 @@ Screen states:
 
 | Screen | Loading | Empty / initial | Error | Success |
 |---|---|---|---|---|
-| Sign-in and register (provider buttons) | The tapped button shows a spinner, and all submit controls are disabled while in flight | Buttons hidden for unconfigured providers; Apple hidden on Android | `invalid_provider_token`: "Sign-in failed, try again". `provider_email_unverified`: "Verify your Google email first". `provider_email_missing`: "Apple didn't share an email; remove this app in Apple ID settings and try again". `provider_already_linked`: "This account is already linked to another Google account". 503: "Sign-in is unavailable right now". Cancel: nothing shown | Session stored. New account goes to `/referral-prompt`, an existing one to `/` |
+| Register (email form) | Submit shows a spinner and is disabled | Fields empty; inline message for a short password | `email_taken`: "Email already registered". `invalid_referral_code`: "Code not recognised". 429: "Too many codes requested, try again in N s". Values kept in every case | Push `/confirm-registration` |
+| Confirm registration | Confirm and Resend show a spinner and are disabled while in flight | Code field empty, Confirm disabled, Resend countdown from 60 s | `invalid_code`: "Code is incorrect". `code_expired`: "Code has expired, tap Resend". 429 on Resend: message and countdown from `Retry-After`. `email_taken`: "Email already registered" with a "Go to sign-in" action | Session stored, draft cleared, home |
+| Sign-in and register (provider buttons) | The tapped button shows a spinner, and all submit controls are disabled while in flight | Buttons hidden for unconfigured providers; Apple hidden on Android | `invalid_provider_token`: "Sign-in failed, try again". `provider_email_unverified`: "Verify your Google email first" or "Verify your Apple email first", naming the provider used. `provider_email_missing`: "Apple didn't share an email; remove this app in Apple ID settings and try again". `provider_already_linked`: "This account is already linked to another Google account". 503: "Sign-in is unavailable right now". Cancel: nothing shown | Session stored. New account goes to `/referral-prompt`, an existing one to `/` |
 | Referral prompt | Apply shows a spinner and is disabled | Code field empty, Apply disabled | `invalid_referral_code`: "Code not recognised", value kept. `referral_not_allowed`: "This account can't redeem a code", then go home | Account refreshed, go to `/` |
 | Profile provider line | Hidden while the account loads | Hidden when there are no providers | Hidden if the account failed to load | "Signed in with Google" and/or "Signed in with Apple" |
 | Profile, Delete account | Spinner during the provider sign-in and the delete | Confirmation dialog; password field only when `hasPassword` | Wrong password: "Password is incorrect". `invalid_provider_token`: "Couldn't confirm with Google/Apple". Cancel: nothing shown | Session cleared, sign-in screen |
@@ -196,6 +242,7 @@ Screen states:
 - **[What data is stored, and for how long]**
   - An `identities` row per linked provider holds the provider subject, the email reported when it was linked, and for Apple a refresh token. It lives as long as the account and is removed by the cascade on deletion.
   - `created_via` and `referral_redeemed` live as long as the account.
+  - A pending registration holds an email, a password hash and an optional referral code. It lives until it is confirmed, replaced, or pruned 24 hours after it was created. Its code hash follows the usual 15-minute rule.
   - Provider ID tokens and authorization codes are never stored.
 - **[Who can read it]**
   - Only the server process.
@@ -209,19 +256,26 @@ Screen states:
   - Someone holding the database can use it only to get Apple access tokens that identify the user to this app. They already hold everything else.
   - Encrypting it would need a key-management design. → Accepted, and recorded as a follow-up.
 - **[Existing data and migration]**
-  - The first start adds two columns and one table in one transaction, and a re-run changes nothing.
+  - The first start does all of the following in one transaction, and a re-run changes nothing:
+    - adds two columns and the `identities` and `pending_registrations` tables;
+    - recreates `email_codes` and `email_sends` keyed by email;
+    - marks every unverified account verified.
   - Existing accounts keep their passwords and get `created_via = 'password'`.
+  - **Accepted risk, at the user's decision:** accounts that registered but never verified become verified without anyone having proven the email. Today these exist only in development databases (`CLAUDE.md`: no users yet). If this ever ran on real data, someone who squatted an email before the upgrade would keep that account and could then be linked by the real owner's Google sign-in. Before any real launch, check that no account was created between the email-verification release and this one, or delete such accounts by hand.
   - Rollback: the version-3 server ignores the extra table and columns. Provider-only accounts (empty hash) then simply cannot log in until a password reset.
 - **[Linking by email]**
   - Anyone controlling a Google account with a verified address matching an existing account gets into that account. This is the industry-standard trade-off, and it depends on the provider's verification.
-  - Unverified Google emails are refused. Apple relay addresses never match a password account.
+  - Unverified provider emails (Google or Apple) are refused. Apple relay addresses never match a password account.
+  - Every account's email has been proven by a registration code, a provider, or (for old development data) the migration. So a link always joins two parties who proved control of the same address.
+- **[Registration reveals registered emails]** `POST /auth/register` still answers 409 for a taken email, as it did before. This is a known enumeration that the earlier changes accepted. Password reset stays non-revealing.
+- **[Email bombing through registration]** Anyone can make the server send registration codes to an address, capped at 5 an hour per address. This is the same bound as reset. → Accepted.
 - **[Failure and retry]**
   - A provider's key endpoint being down → 503 `provider_unavailable`; the user retries. Cached keys keep sign-in working through short outages.
   - A failed Apple code exchange → sign-in succeeds, and the exchange is retried on the next Apple sign-in.
   - A failed revocation → logged, and the deletion has already completed. It is not retried, because there is no account left to retry from.
 - **[Background tasks when a call raises]** The revocation task's wrapper catches every exception and logs it. It runs after the response and nothing depends on it.
 - **[Thread-safety of shared state]**
-  - Find-link-create, redemption and the provider deletion check all run under `SqliteUserStore._lock` in single transactions.
+  - Find-link-create, redemption, the provider deletion check, starting a registration and confirming one all run under `SqliteUserStore._lock` in single transactions. A provider sign-in and a registration confirm racing for the same email therefore serialise: whichever commits second sees the account and links to it (provider) or answers 409 (confirm).
   - `PyJWKClient`'s key cache is shared across thread-pool workers. PyJWT guards its cache with a lock, and the worst case is a duplicate fetch.
   - The verifiers and the revocation client hold no other mutable state.
 - **[Clock skew]** 60 seconds of leeway on `exp` and `iat`. The 5-minute freshness window for deletion uses the server clock.
@@ -230,7 +284,7 @@ Screen states:
 
 ## Migration Plan
 
-1. Deploy the server. The first start migrates `app.db` to schema version 4.
+1. Deploy the server and the app together. The old app expects registration to return a session, and the new server answers 202. The first start migrates `app.db` to schema version 4.
 2. Until `GOOGLE_CLIENT_IDS` and `APPLE_BUNDLE_ID` are set, the provider endpoints answer 503 and the app hides the buttons (its `.env` keys are blank). Nothing changes for current users.
 3. After the consoles are set up, fill in the server settings and the app's `.env` and xcconfig, and rebuild the app.
-4. Rollback: redeploy the previous server. The extra table and columns are ignored.
+4. Rollback: redeploy the previous server and app. The extra tables and columns are ignored. `email_codes` and `email_sends` would need recreating in their version-3 shape, which `_migrate()` does not do when going backwards. A rollback should therefore restore a backup of `app.db` taken before the upgrade.

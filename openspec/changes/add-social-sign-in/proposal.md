@@ -16,6 +16,12 @@ Signing up with an email and password, then typing a code, is the slowest path i
 - `DELETE /me` accepts either the password or a fresh provider sign-in token (issued within 5 minutes) as confirmation. Deleting an Apple-linked account asks Apple to revoke its token, and a failed revocation is logged without blocking the deletion.
 - New `POST /me/referral`: an account created through a provider can redeem a referral code once, within 24 hours of creation, with the usual rewards and cap.
 - `GET /me` adds `providers` and `has_password`.
+- **Registration verifies the email before the account exists.** This was added after the round-1 review, which showed that linking a provider to an unverified account handed the account to whoever had registered that email first.
+  - `POST /auth/register` now creates no account. It holds the registration as pending, emails a 6-digit code and answers 202.
+  - `POST /auth/register/confirm` creates the account and returns the session.
+  - Unverified accounts can no longer exist, so the verify-email endpoints, the 403 generation gate, the home banner, the Verify email screen and `email_verified` are removed.
+  - Email codes and their sending limits are keyed by email address.
+  - Existing never-verified accounts are marked verified on upgrade (development data only).
 - New server dependency: `pyjwt[crypto]`. New settings: `GOOGLE_CLIENT_IDS` and `APPLE_BUNDLE_ID`, plus `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY_PATH` for revocation.
 - App:
   - **Sign-in and registration screens:** "Continue with Google" on iOS and Android, and "Continue with Apple" on iOS. A button is hidden when its provider is not configured, and cancelling the provider sheet is silent.
@@ -39,11 +45,19 @@ Out of scope:
 ### Modified Capabilities
 - `user-auth`:
   - "Delete an account" accepts a provider confirmation and removes linked providers.
+  - Registration becomes "Start a registration" plus "Complete registration with the emailed code".
+  - Password reset no longer verifies anything or returns `email_verified`.
+  - The upgrade marks never-verified accounts verified.
   - New requirements for accounts without a password and for reporting sign-in methods on `/me`.
-- `referrals`: a new requirement for redeeming a code after a provider sign-up.
+  - Removed: unverified accounts, `email_verified`, and the verify and resend endpoints.
+- `email-codes`: codes and sending limits are per email address, with the purposes registration and password reset.
+- `photo-generation`: the "verified email to generate" gate is removed.
+- `referrals`: rewards are paid when the account is created, plus a new requirement for redeeming a code after a provider sign-up.
 - `account-ui`:
+  - Registration leads to a Confirm registration screen.
   - "Delete the account" asks for the password or a provider sign-in.
-  - New requirements for the provider buttons, the referral prompt and the profile's provider line.
+  - New requirements for the provider buttons (with errors that name the provider), the referral prompt and the profile's provider line.
+  - Removed: the Verify email screen, Postpone, the home banner and "Open verification when refused".
 
 ## Impact
 
@@ -51,7 +65,8 @@ Out of scope:
   - `configs/settings.py`.
   - New `core/identity_verifier.py`, with Google and Apple verifiers under `services/identity/`.
   - New `services/apple_revocation.py`.
-  - `repos/user_store.py`: schema version 4, an `identities` table, and new `created_via` and `referral_redeemed` columns.
+  - `repos/user_store.py`: schema version 4, the `identities` and `pending_registrations` tables, `email_codes` and `email_sends` re-keyed by email, and new `created_via` and `referral_redeemed` columns.
+  - `services/generation_service.py`: the verified-email gate is removed.
   - `services/auth_service.py`, `services/referral_service.py`, `api/auth.py`, `schemas/user.py` and `main.py`.
   - `server/README.md`.
 - **API:**
