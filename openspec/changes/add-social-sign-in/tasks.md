@@ -234,4 +234,4 @@ Groups 10 to 12 implement design Decisions 10 and 11 and the revised specs. Earl
   - A Google sign-in whose email matches an existing password account links to it, and the profile shows "Signed in with Google".
 
   This box stays unticked until someone runs every step. Name any skipped step in the PR.
-- [ ] 14.4 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.
+- [x] 14.4 Push `feat/add-social-sign-in`. Verify with `git log origin/feat/add-social-sign-in -1` that it matches the local HEAD.
