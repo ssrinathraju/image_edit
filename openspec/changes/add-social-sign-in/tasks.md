@@ -200,7 +200,7 @@ Groups 10 to 12 implement design Decisions 10 and 11 and the revised specs. Earl
 
 ## 13. Integration and hand-off
 
-- [ ] 13.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
+- [x] 13.1 Run `uv run pytest -q` in `server/` and `flutter analyze && flutter test` in `app/`. Verify that all pass with zero analyzer warnings and an unchanged storage pollution check. Then run `openspec validate add-social-sign-in --strict`.
 - [ ] 13.2 **Manual, no consoles needed.** On the iOS simulator against a local server in log mode, started on a copy of an existing `app.db` that holds an unverified account:
   - The unverified account signs in and can generate.
   - Register a new email with a referral code: the Confirm registration screen opens with no session. Back shows the values kept. Resend shows the countdown.
