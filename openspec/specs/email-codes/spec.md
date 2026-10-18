@@ -5,19 +5,19 @@ One-time codes sent by email that prove a user controls their address. Used to v
 
 ## Requirements
 
-### Requirement: Issue one-time codes per account and purpose
+### Requirement: Issue one-time codes per email address and purpose
 
-The system SHALL issue codes of exactly 6 decimal digits, chosen at random, each for one account and one purpose: email verification or password reset. Issuing a code SHALL invalidate any earlier code of the same account and purpose. A code SHALL be accepted at most once.
+The system SHALL issue codes of exactly 6 decimal digits, chosen at random, each for one email address and one purpose: registration or password reset. Issuing a code SHALL invalidate any earlier code of the same email address and purpose. A code SHALL be accepted at most once.
 
 #### Scenario: A new code replaces the old one
 
-- **WHEN** an account is issued a verification code and then a second verification code
+- **WHEN** an email address is issued a registration code and then a second registration code
 - **THEN** the first code is rejected
 - **AND** the second code is accepted
 
 #### Scenario: Purposes are independent
 
-- **WHEN** an account holds both a verification code and a password reset code
+- **WHEN** an email address holds both a registration code and a password reset code
 - **THEN** each code is accepted only for its own purpose
 
 #### Scenario: A used code cannot be reused
@@ -41,11 +41,11 @@ A code SHALL be accepted only within 15 minutes (configurable) of being issued.
 
 ### Requirement: Limit wrong attempts per code
 
-After 5 (configurable) wrong submissions against an account's code for a purpose, the system SHALL invalidate that code. Any later submission for that account and purpose, including the correct code, SHALL be rejected until a new code is issued.
+After 5 (configurable) wrong submissions against an email address's code for a purpose, the system SHALL invalidate that code. Any later submission for that email address and purpose, including the correct code, SHALL be rejected until a new code is issued.
 
 #### Scenario: Sixth submission is refused even when correct
 
-- **WHEN** 5 wrong codes are submitted for an account's verification code
+- **WHEN** 5 wrong codes are submitted for an email address's registration code
 - **AND** then the correct code is submitted
 - **THEN** the correct code is rejected as expired
 
@@ -56,37 +56,37 @@ After 5 (configurable) wrong submissions against an account's code for a purpose
 
 ### Requirement: Limit how often codes are emailed
 
-The system SHALL NOT email a code to an account within 60 seconds (configurable) of the previous code email to that account, and SHALL NOT send more than 5 (configurable) code emails to one account in any 60-minute window, counting both purposes together. When a limit applies, no new code SHALL be issued and the existing code SHALL stay valid.
+The system SHALL NOT email a code to an email address within 60 seconds (configurable) of the previous code email to that address, and SHALL NOT send more than 5 (configurable) code emails to one address in any 60-minute window, counting both purposes together. When a limit applies, no new code SHALL be issued and the existing code SHALL stay valid.
 
 #### Scenario: A second email within a minute is not sent
 
-- **WHEN** a code is emailed to an account and another is requested 30 seconds later
+- **WHEN** a code is emailed to an address and another is requested 30 seconds later
 - **THEN** no second email is sent
 - **AND** the first code is still accepted
 
 #### Scenario: Hourly cap counts both purposes
 
-- **WHEN** an account has been sent 3 verification emails and 2 password reset emails in the last hour, each more than 60 seconds apart
+- **WHEN** an address has been sent 3 registration emails and 2 password reset emails in the last hour, each more than 60 seconds apart
 - **AND** another code of either purpose is requested
 - **THEN** no email is sent
 
 #### Scenario: Cap frees up after an hour
 
-- **WHEN** 61 minutes have passed since the oldest of 5 code emails to an account
-- **THEN** a new code can be emailed to that account
+- **WHEN** 61 minutes have passed since the oldest of 5 code emails to an address
+- **THEN** a new code can be emailed to that address
 
 ### Requirement: Deliver codes by email
 
-When an SMTP server is configured, the system SHALL send each code as a plain-text email to the account's address, stating the code, what it is for, and how many minutes it is valid. When no SMTP server is configured, the system SHALL instead write the recipient, the purpose, and the code to the server log, and SHALL log a warning at startup that emails are not being delivered. A delivery failure SHALL be logged and SHALL NOT change the response of the request that issued the code.
+When an SMTP server is configured, the system SHALL send each code as a plain-text email to the address it was issued for, stating the code, what it is for, and how many minutes it is valid. When no SMTP server is configured, the system SHALL instead write the recipient, the purpose, and the code to the server log, and SHALL log a warning at startup that emails are not being delivered. A delivery failure SHALL be logged and SHALL NOT change the response of the request that issued the code.
 
 #### Scenario: Configured SMTP sends an email
 
-- **WHEN** SMTP is configured and a verification code is issued
-- **THEN** one email is sent to the account's address containing the 6-digit code and its validity in minutes
+- **WHEN** SMTP is configured and a registration code is issued
+- **THEN** one email is sent to that address containing the 6-digit code and its validity in minutes
 
 #### Scenario: Without SMTP the code is logged
 
-- **WHEN** no SMTP server is configured and a verification code is issued
+- **WHEN** no SMTP server is configured and a registration code is issued
 - **THEN** the server log contains the recipient, the purpose, and the code
 - **AND** the startup log contains a warning that emails are not delivered
 
@@ -107,5 +107,5 @@ The system SHALL store only a hash of each code, SHALL NOT return a code in any 
 
 #### Scenario: Responses never contain the code
 
-- **WHEN** a client registers, resends a verification code, or requests a password reset
+- **WHEN** a client registers, registers again, or requests a password reset
 - **THEN** no response body or header contains the issued code

@@ -165,7 +165,7 @@ No compatibility shims are kept, because the project has no users.
   - `email_sends` rows older than the one-hour send window;
   - `pending_registrations` rows older than 24 hours.
 
-  The server also runs the same pruning at startup, next to the existing retention sweep. That bounds how long an abandoned address stays, even if nobody registers afterwards: until the next registration, reset request or restart, and never longer than the next sweep.
+  The server also runs the same pruning at startup, next to the existing retention sweep. That bounds how long an abandoned address stays, even if nobody registers afterwards: until the next registration, code issue or reset request, or the next server start. The periodic retention sweep does not prune these rows.
 - **No database at import (closes S3).** `main.py` no longer creates a module-level `app = create_app()`. The server is started with `uvicorn --factory image_edit_server.main:create_app`. Tests already build apps from `create_app(settings)` on temporary paths, so importing `image_edit_server.main` no longer opens or migrates `server/storage/app.db`.
   - **Alternative rejected: a separate `asgi.py` entry module.** It is one more file for no gain over the factory flag uvicorn already supports.
 
@@ -295,7 +295,7 @@ Screen states:
 - **[Background tasks when a call raises]** The revocation task's wrapper catches every exception and logs it. It runs after the response and nothing depends on it.
 - **[Thread-safety of shared state]**
   - Find-link-create, redemption, the provider deletion check, starting a registration and confirming one all run under `SqliteUserStore._lock` in single transactions. A provider sign-in and a registration confirm racing for the same email therefore serialise: whichever commits second sees the account and links to it (provider) or answers 409 (confirm).
-  - Confirm's password check runs between two transactions. The commit step re-reads the pending row and compares `created_at` and `password_hash`, so a re-registration landing in that gap gives `registration_changed` and never an account with the wrong password. Two confirms of the same registration still create exactly one account, because the commit step deletes the pending row and the second finds none (`code_expired`).
+  - Confirm's password check runs between two transactions. The commit step re-reads the pending row and compares `created_at` and `password_hash`, so a re-registration landing in that gap gives `registration_changed` and never an account with the wrong password. Two concurrent confirms of the same registration still create exactly one account. The second gets 409 `email_taken` if both pass the code check before either commits, or `code_expired` if the first has already deleted the pending row.
   - `PyJWKClient`'s key cache is shared across thread-pool workers. PyJWT guards its cache with a lock, and the worst case is a duplicate fetch.
   - The verifiers and the revocation client hold no other mutable state.
 - **[Clock skew]** 60 seconds of leeway on `exp` and `iat`. The 5-minute freshness window for deletion uses the server clock.
