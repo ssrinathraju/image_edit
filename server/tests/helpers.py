@@ -48,10 +48,22 @@ def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> di
     resp = client.post("/auth/register", json={"email": email, "password": password})
     assert resp.status_code == 202, resp.text
     resp = client.post(
-        "/auth/register/confirm", json={"email": email, "code": sender.last_code(email)}
+        "/auth/register/confirm",
+        json={"email": email, "code": sender.last_code(email), "password": password},
     )
     assert resp.status_code == 201, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+def confirm_in_store(users, email, code, at, max_attempts, bonus, max_rewards, password_ok=True):
+    """Both confirm steps against a store; returns (result, user) with user None unless ok."""
+    from image_edit_server.core.email_codes import ConsumeResult
+
+    result, pending = users.check_registration_code(email, code, at, max_attempts)
+    if result is not ConsumeResult.OK:
+        return result, None
+    user = users.complete_registration(email, pending, password_ok, at, bonus, max_rewards)
+    return result, user
 
 
 class RecordingSender:

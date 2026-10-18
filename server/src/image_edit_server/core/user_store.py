@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Protocol
 
@@ -15,6 +16,18 @@ from image_edit_server.schemas.user import UsageSnapshot, User
 
 class EmailTakenError(Exception):
     """Raised when creating a user whose email already has an account."""
+
+
+class RegistrationChanged(Exception):
+    """Raised when the pending registration no longer matches what the caller checked."""
+
+
+@dataclass(frozen=True)
+class PendingRegistration:
+    """The pending row as read when its code was accepted."""
+
+    password_hash: str
+    created_at: str
 
 
 class QuotaExceeded(Exception):
@@ -66,20 +79,36 @@ class UserStore(Protocol):
         """
         ...
 
-    def confirm_registration(
+    def check_registration_code(
+        self, email: str, code: str, now: datetime, max_attempts: int
+    ) -> tuple[ConsumeResult, Optional[PendingRegistration]]:
+        """Check the registration code without using it up.
+
+        Returns (ok, pending) or (wrong | expired, None). A correct code with no
+        pending row counts as expired, unless an account has the email: then
+        EmailTakenError is raised.
+        """
+        ...
+
+    def complete_registration(
         self,
         email: str,
-        code: str,
+        checked: PendingRegistration,
+        password_matches: bool,
         now: datetime,
-        max_attempts: int,
         bonus: int,
         max_rewards: int,
-    ) -> tuple[ConsumeResult, Optional[User]]:
-        """Check the registration code and, when it is right, create the verified account.
+    ) -> User:
+        """Create the verified account if the pending row is still `checked` and the password matched.
 
-        Returns (ok, user), or (wrong | expired, None). Raises EmailTakenError, after
-        discarding the pending registration, when an account took the email meanwhile.
+        Raises RegistrationChanged, after discarding the pending row and its code, on a
+        mismatch or a changed row. Raises EmailTakenError, after discarding the pending
+        row, when an account has the email.
         """
+        ...
+
+    def prune_email_rows(self, now: datetime) -> None:
+        """Delete expired codes, send rows past the send window and stale pending registrations."""
         ...
 
     def issue_code(

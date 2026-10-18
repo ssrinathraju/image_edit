@@ -235,3 +235,38 @@ def test_a_validation_error_never_echoes_the_secrets_that_were_sent(tmp_path, te
     for resp in (apple, delete):
         for secret in secrets:
             assert secret not in resp.text
+
+
+def test_importing_main_creates_nothing_under_the_default_storage(tmp_path):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import image_edit_server.main as m; assert not hasattr(m, 'app')"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_startup_prunes_email_rows_and_survives_a_failure(tmp_path, templates_dir, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from image_edit_server.repos.user_store import SqliteUserStore
+
+    calls = []
+
+    def broken_prune(self, now):
+        calls.append(now)
+        raise RuntimeError("db locked")
+
+    monkeypatch.setattr(SqliteUserStore, "prune_email_rows", broken_prune)
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/templates").status_code == 200
+
+    assert len(calls) == 1

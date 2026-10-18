@@ -11,7 +11,7 @@ uv sync
 ## Run
 
 ```bash
-uv run uvicorn image_edit_server.main:app --reload --port 8000
+uv run uvicorn --factory image_edit_server.main:create_app --reload --port 8000
 ```
 
 OpenAPI schema: http://localhost:8000/openapi.json
@@ -32,10 +32,11 @@ curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "ana@example.com", "password": "correct horse battery"}'
 
-# Step 2: confirm with the emailed code → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+# Step 2: confirm with the emailed code and the same password → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
+# A password that differs from the pending registration's is a 409 registration_changed and discards it
 curl -X POST http://localhost:8000/auth/register/confirm \
   -H "Content-Type: application/json" \
-  -d '{"email": "ana@example.com", "code": "123456"}'
+  -d '{"email": "ana@example.com", "code": "123456", "password": "correct horse battery"}'
 
 # Log in → 200 with a new token; the same error for a wrong password and an unknown email
 curl -X POST http://localhost:8000/auth/login \
@@ -62,7 +63,8 @@ curl -X DELETE http://localhost:8000/me \
 
 Registering the same email again before confirming replaces the pending registration (and its
 code), subject to the sending limits. A pending registration that is never confirmed is discarded
-after 24 hours.
+after 24 hours. Expired codes, send records older than an hour and stale pending registrations are
+also pruned for every address on each registration, each code request and at server start.
 
 Errors: `401 unauthorized` (missing, unknown, expired or revoked token), `409 email_taken`,
 `400 invalid_credentials_format` (malformed email or a password outside 8-128 characters),
@@ -419,14 +421,14 @@ Start the server with Sana on CPU (slow, useful for smoke testing):
 
 ```bash
 IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cpu \
-  uv run uvicorn image_edit_server.main:app --reload --port 8000
+  uv run uvicorn --factory image_edit_server.main:create_app --reload --port 8000
 ```
 
 For GPU (recommended):
 
 ```bash
 IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cuda IMAGE_EDIT_SANA_TORCH_DTYPE=float16 \
-  uv run uvicorn image_edit_server.main:app --port 8000
+  uv run uvicorn --factory image_edit_server.main:create_app --port 8000
 ```
 
 ## Tests

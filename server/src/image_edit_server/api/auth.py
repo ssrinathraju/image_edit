@@ -55,7 +55,7 @@ def register(body: Credentials, auth: AuthServiceDep, background: BackgroundTask
     response_model=AuthResponse,
 )
 def confirm_registration(body: RegistrationConfirm, auth: AuthServiceDep) -> AuthResponse:
-    token, user = auth.confirm_registration(body.email, body.code)
+    token, user = auth.confirm_registration(body.email, body.code, body.password)
     return _auth_response(token, user)
 
 

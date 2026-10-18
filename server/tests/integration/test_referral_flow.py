@@ -32,7 +32,8 @@ def _start(client, email, code=None) -> None:
 
 def _confirm(client, sender, email) -> dict:
     resp = client.post(
-        "/auth/register/confirm", json={"email": email, "code": sender.last_code(email)}
+        "/auth/register/confirm",
+        json={"email": email, "code": sender.last_code(email), "password": DEFAULT_PASSWORD},
     )
     assert resp.status_code == 201, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}

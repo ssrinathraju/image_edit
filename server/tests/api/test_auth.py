@@ -8,10 +8,10 @@ def _register(client, email="ana@example.com", password=DEFAULT_PASSWORD, **extr
     return client.post("/auth/register", json=body)
 
 
-def _confirm(client, sender, email="ana@example.com", code=None):
+def _confirm(client, sender, email="ana@example.com", code=None, password=DEFAULT_PASSWORD):
     return client.post(
         "/auth/register/confirm",
-        json={"email": email, "code": code or sender.last_code(email)},
+        json={"email": email, "code": code or sender.last_code(email), "password": password},
     )
 
 
@@ -71,7 +71,9 @@ def test_registering_again_after_a_minute_replaces_the_pending_registration(
     assert sender.count_for("ana@example.com") == 2
     stale = _confirm(anon_client, sender, code="111111")
     assert (stale.status_code, stale.json()["detail"]["error"]) == (400, "invalid_code")
-    assert _confirm(anon_client, sender, code="222222").status_code == 201
+    assert _confirm(
+        anon_client, sender, code="222222", password="second password 2"
+    ).status_code == 201
     assert _login(anon_client, password="second password 2").status_code == 200
     assert _login(anon_client, password="first password 1").status_code == 401
 
@@ -135,7 +137,7 @@ def test_an_expired_code_is_400_and_creates_no_account(anon_client, sender, cloc
 
 def test_confirming_an_email_that_never_registered_is_code_expired(anon_client):
     resp = anon_client.post(
-        "/auth/register/confirm", json={"email": "nobody@example.com", "code": "123456"}
+        "/auth/register/confirm", json={"email": "nobody@example.com", "code": "123456", "password": DEFAULT_PASSWORD}
     )
 
     assert (resp.status_code, resp.json()["detail"]["error"]) == (400, "code_expired")
@@ -452,3 +454,64 @@ def test_password_reset_gives_a_google_account_a_password(
     assert (again.status_code, again.json()["id"]) == (200, google_id)
     me = anon_client.get("/me", headers={"Authorization": f"Bearer {login.json()['token']}"})
     assert me.json()["has_password"] is True
+
+
+def test_someone_elses_reregistration_cannot_set_the_password(anon_client, sender, clock):
+    victim, attacker = "victim password 1", "attacker password 2"
+    _register(anon_client, password=victim)
+    clock.advance(seconds=61)
+    assert _register(anon_client, password=attacker).status_code == 202
+
+    resp = _confirm(anon_client, sender, password=victim)
+
+    assert (resp.status_code, resp.json()["detail"]["error"]) == (409, "registration_changed")
+    assert _login(anon_client, password=victim).status_code == 401
+    assert _login(anon_client, password=attacker).status_code == 401
+    again = _confirm(anon_client, sender, code=sender.last_code("ana@example.com"), password=attacker)
+    assert (again.status_code, again.json()["detail"]["error"]) == (400, "code_expired")
+    assert _login(anon_client, password=attacker).status_code == 401
+
+
+def test_the_password_is_checked_only_after_the_code(anon_client, sender):
+    _register(anon_client)
+    right = sender.last_code("ana@example.com")
+    wrong = "000000" if right != "000000" else "111111"
+
+    resp = _confirm(anon_client, sender, code=wrong, password="not the password 9")
+
+    assert (resp.status_code, resp.json()["detail"]["error"]) == (400, "invalid_code")
+    assert _confirm(anon_client, sender).status_code == 201
+
+
+def test_a_wrong_password_with_the_right_code_discards_the_registration(anon_client, sender):
+    _register(anon_client)
+
+    resp = _confirm(anon_client, sender, password="not the password 9")
+
+    assert (resp.status_code, resp.json()["detail"]["error"]) == (409, "registration_changed")
+    retry = _confirm(anon_client, sender)
+    assert (retry.status_code, retry.json()["detail"]["error"]) == (400, "code_expired")
+    assert _login(anon_client).status_code == 401
+
+
+def test_a_reregistration_between_the_password_check_and_the_commit_is_registration_changed(
+    anon_client, sender, clock, monkeypatch
+):
+    from image_edit_server.services import auth_service
+
+    _register(anon_client)
+    real_verify = auth_service.verify_password
+
+    def verify_then_reregister(password, stored):
+        matched = real_verify(password, stored)
+        clock.advance(seconds=61)
+        assert _register(anon_client, password="attacker password 2").status_code == 202
+        return matched
+
+    monkeypatch.setattr(auth_service, "verify_password", verify_then_reregister)
+
+    resp = _confirm(anon_client, sender)
+
+    assert (resp.status_code, resp.json()["detail"]["error"]) == (409, "registration_changed")
+    assert _login(anon_client).status_code == 401
+    assert _login(anon_client, password="attacker password 2").status_code == 401

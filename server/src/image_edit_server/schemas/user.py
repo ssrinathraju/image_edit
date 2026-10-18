@@ -73,6 +73,7 @@ class ReferralRedeemRequest(BaseModel):
 class RegistrationConfirm(BaseModel):
     email: str = Field(max_length=MAX_EMAIL_CHARS)
     code: str = Field(max_length=MAX_CODE_CHARS)
+    password: str = Field(max_length=MAX_PASSWORD_CHARS)
 
 
 class ResetRequest(BaseModel):

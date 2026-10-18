@@ -24,6 +24,7 @@ from image_edit_server.core.user_store import (
     ProviderAlreadyLinked,
     ProviderEmailMissing,
     ProviderEmailUnverified,
+    RegistrationChanged,
     UserStore,
 )
 from image_edit_server.schemas.api import ErrorBody
@@ -121,24 +122,41 @@ class AuthService:
             raise _too_many_codes(result.retry_after_seconds)
         self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, background)
 
-    def confirm_registration(self, email: str, code: str) -> tuple[str, User]:
-        """Create the account for a pending registration whose emailed code is right."""
+    def confirm_registration(self, email: str, code: str, password: str) -> tuple[str, User]:
+        """Create the account for a pending registration whose emailed code and password are right."""
         normalized = normalize_email(email)
         try:
-            result, user = self._users.confirm_registration(
+            result, pending = self._users.check_registration_code(
                 normalized,
                 code.strip(),
                 self._clock(),
                 self._settings.EMAIL_CODE_MAX_ATTEMPTS,
-                self._settings.REFERRAL_BONUS,
-                self._settings.REFERRAL_MAX_REWARDS,
             )
         except EmailTakenError:
             raise _error(409, "email_taken", "this email is already registered")
         if result is ConsumeResult.WRONG:
             raise _error(400, "invalid_code", "the code is incorrect")
-        if result is ConsumeResult.EXPIRED or user is None:
+        if result is ConsumeResult.EXPIRED or pending is None:
             raise _error(400, "code_expired", "the code has expired; register again")
+        # The slow hash check runs outside the store lock.
+        password_matches = verify_password(password, pending.password_hash)
+        try:
+            user = self._users.complete_registration(
+                normalized,
+                pending,
+                password_matches,
+                self._clock(),
+                self._settings.REFERRAL_BONUS,
+                self._settings.REFERRAL_MAX_REWARDS,
+            )
+        except EmailTakenError:
+            raise _error(409, "email_taken", "this email is already registered")
+        except RegistrationChanged:
+            raise _error(
+                409,
+                "registration_changed",
+                "the registration changed since the code was sent; register again",
+            )
         return self._start_session(user), user
 
     def request_password_reset(self, email: str, background: BackgroundTasks) -> None:

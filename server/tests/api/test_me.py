@@ -58,7 +58,8 @@ def test_a_client_cannot_choose_its_plan(anon_client, sender):
     )
     confirmed = anon_client.post(
         "/auth/register/confirm",
-        json={"email": "eve@example.com", "code": sender.last_code("eve@example.com")},
+        json={"email": "eve@example.com", "code": sender.last_code("eve@example.com"),
+              "password": "correct horse battery"},
     )
     headers = {"Authorization": f"Bearer {confirmed.json()['token']}"}
 

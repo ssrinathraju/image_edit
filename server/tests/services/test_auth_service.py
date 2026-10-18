@@ -31,7 +31,9 @@ def _start(auth, email, password, referral_code=None):
 def _register(auth, email, password, referral_code=None):
     """Register and confirm with the emailed code; returns (session token, user)."""
     _start(auth, email, password, referral_code)
-    return auth.confirm_registration(email, auth._sender.last_code(email.strip().lower()))
+    return auth.confirm_registration(
+        email, auth._sender.last_code(email.strip().lower()), password
+    )
 
 
 @pytest.fixture
@@ -90,7 +92,7 @@ def test_confirm_with_a_wrong_code_is_400_invalid_code(auth, users):
     wrong = "000000" if right != "000000" else "111111"
 
     with pytest.raises(HTTPException) as excinfo:
-        auth.confirm_registration("ana@example.com", wrong)
+        auth.confirm_registration("ana@example.com", wrong, PASSWORD)
 
     assert _error(excinfo) == (400, "invalid_code")
     assert users.get_by_email("ana@example.com") is None

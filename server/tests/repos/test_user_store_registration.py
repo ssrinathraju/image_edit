@@ -10,8 +10,9 @@ from image_edit_server.core.email_codes import (
     hash_code,
 )
 from image_edit_server.core.identity_verifier import ProviderIdentity
-from image_edit_server.core.user_store import EmailTakenError
+from image_edit_server.core.user_store import EmailTakenError, RegistrationChanged
 from image_edit_server.repos.user_store import SqliteUserStore
+from tests.helpers import confirm_in_store
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 LIMITS = CodeLimits(
@@ -34,8 +35,8 @@ def _start(users, code="111111", password_hash="hash-1", at=T0, email=EMAIL):
     )
 
 
-def _confirm(users, code="111111", at=T0, email=EMAIL):
-    return users.confirm_registration(email, code, at, 5, BONUS, MAX)
+def _confirm(users, code="111111", at=T0, email=EMAIL, password_ok=True):
+    return confirm_in_store(users, email, code, at, 5, BONUS, MAX, password_ok)
 
 
 def _count(users, table) -> int:
@@ -184,7 +185,10 @@ def test_two_threads_confirming_the_same_registration_create_one_account(users):
 
     def run():
         barrier.wait()
-        results.append(_confirm(users)[0])
+        try:
+            results.append(_confirm(users)[0])
+        except (EmailTakenError, RegistrationChanged) as error:
+            results.append(error)
 
     threads = [threading.Thread(target=run) for _ in range(6)]
     for t in threads:
@@ -194,6 +198,7 @@ def test_two_threads_confirming_the_same_registration_create_one_account(users):
 
     assert _count(users, "users") == 1
     assert results.count(ConsumeResult.OK) == 1
+    assert len(results) == 6
 
 
 def test_pending_rows_older_than_24_hours_are_pruned_by_the_next_start(users):
@@ -206,3 +211,87 @@ def test_pending_rows_older_than_24_hours_are_pruned_by_the_next_start(users):
         row[0] for row in users._conn.execute("SELECT email FROM pending_registrations")
     }
     assert emails == {"mid@example.com", "new@example.com"}
+
+
+def test_a_wrong_password_discards_the_pending_row_and_its_code(users):
+    _start(users)
+
+    with pytest.raises(RegistrationChanged):
+        _confirm(users, password_ok=False)
+
+    assert _count(users, "pending_registrations") == 0
+    assert _count(users, "email_codes") == 0
+    assert users.get_by_email(EMAIL) is None
+
+
+def test_a_replaced_pending_row_between_check_and_commit_is_registration_changed(users):
+    _start(users, code="111111", password_hash="hash-1")
+    result, checked = users.check_registration_code(EMAIL, "111111", T0, 5)
+    assert result is ConsumeResult.OK
+    _start(users, code="222222", password_hash="hash-2", at=T0 + timedelta(seconds=61))
+
+    with pytest.raises(RegistrationChanged):
+        users.complete_registration(EMAIL, checked, True, T0, BONUS, MAX)
+
+    assert users.get_by_email(EMAIL) is None
+    assert _count(users, "pending_registrations") == 0
+    assert _count(users, "email_codes") == 0
+
+
+def test_a_second_completion_of_the_same_registration_creates_no_second_account(users):
+    _start(users)
+    _, checked = users.check_registration_code(EMAIL, "111111", T0, 5)
+    users.complete_registration(EMAIL, checked, True, T0, BONUS, MAX)
+
+    with pytest.raises(EmailTakenError):
+        users.complete_registration(EMAIL, checked, True, T0, BONUS, MAX)
+
+    assert _count(users, "users") == 1
+
+
+def _rows_for(users, email) -> int:
+    return sum(
+        users._conn.execute(f"SELECT COUNT(*) FROM {table} WHERE email = ?", (email,)).fetchone()[0]
+        for table in ("pending_registrations", "email_codes", "email_sends")
+    )
+
+
+def test_an_abandoned_address_is_gone_after_30_days_and_another_registration(users):
+    _start(users, email="abandoned@example.com")
+    assert _rows_for(users, "abandoned@example.com") == 3
+
+    _start(users, email="other@example.com", at=T0 + timedelta(days=30))
+
+    assert _rows_for(users, "abandoned@example.com") == 0
+    assert _rows_for(users, "other@example.com") == 3
+
+
+def test_an_abandoned_address_is_gone_after_a_restart_with_no_other_activity(tmp_path):
+    path = str(tmp_path / "app.db")
+    first = SqliteUserStore(path)
+    _start(first, email="abandoned@example.com")
+    first.close()
+
+    restarted = SqliteUserStore(path)
+    restarted.prune_email_rows(T0 + timedelta(days=30))
+
+    assert _rows_for(restarted, "abandoned@example.com") == 0
+
+
+def test_issuing_a_reset_code_also_prunes_other_addresses(users):
+    _start(users, email="abandoned@example.com")
+    users.create_user(EMAIL, "hash")
+
+    users.issue_code(
+        EMAIL, CodePurpose.PASSWORD_RESET, "reset-hash", T0 + timedelta(days=30), LIMITS
+    )
+
+    assert _rows_for(users, "abandoned@example.com") == 0
+
+
+def test_pruning_keeps_live_rows(users):
+    _start(users)
+
+    users.prune_email_rows(T0 + timedelta(minutes=5))
+
+    assert _rows_for(users, EMAIL) == 3

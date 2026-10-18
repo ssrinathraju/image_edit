@@ -26,11 +26,13 @@ from image_edit_server.core.referral_codes import generate_code, normalize_code
 from image_edit_server.core.user_store import (
     EmailTakenError,
     InvalidReferralCode,
+    PendingRegistration,
     ProviderAlreadyLinked,
     ProviderEmailMissing,
     ProviderEmailUnverified,
     QuotaExceeded,
     ReferralNotAllowed,
+    RegistrationChanged,
     UserNotFound,
 )
 from image_edit_server.schemas.user import UsageSnapshot, User
@@ -369,6 +371,7 @@ class SqliteUserStore:
         limits: CodeLimits,
     ) -> IssueResult:
         with self._lock, self._conn:
+            self._prune_email_rows(now)
             wait = self._seconds_until_allowed(self._recent_sends(email, now), now, limits)
             if wait > 0:
                 return IssueResult(issued=False, retry_after_seconds=wait)
@@ -436,6 +439,7 @@ class SqliteUserStore:
         code: str,
         now: datetime,
         max_attempts: int,
+        keep_on_ok: bool = False,
     ) -> ConsumeResult:
         row = self._conn.execute(
             "SELECT code_hash, expires_at, attempts FROM email_codes"
@@ -453,10 +457,11 @@ class SqliteUserStore:
                 (email, purpose.value),
             )
             return ConsumeResult.WRONG
-        self._conn.execute(
-            "DELETE FROM email_codes WHERE email = ? AND purpose = ?",
-            (email, purpose.value),
-        )
+        if not keep_on_ok:
+            self._conn.execute(
+                "DELETE FROM email_codes WHERE email = ? AND purpose = ?",
+                (email, purpose.value),
+            )
         return ConsumeResult.OK
 
     def reset_password(
@@ -498,13 +503,10 @@ class SqliteUserStore:
             self._find_referrer(wanted)
             if self._email_has_account(email):
                 raise EmailTakenError(email)
+            self._prune_email_rows(now)
             wait = self._seconds_until_allowed(self._recent_sends(email, now), now, limits)
             if wait > 0:
                 return IssueResult(issued=False, retry_after_seconds=wait)
-            self._conn.execute(
-                "DELETE FROM pending_registrations WHERE created_at <= ?",
-                ((now - PENDING_REGISTRATION_MAX_AGE).isoformat(),),
-            )
             self._conn.execute(
                 "INSERT OR REPLACE INTO pending_registrations"
                 " (email, password_hash, referral_code, created_at) VALUES (?, ?, ?, ?)",
@@ -513,36 +515,94 @@ class SqliteUserStore:
             self._store_code(email, CodePurpose.REGISTRATION, code_hash, now, limits)
         return IssueResult(issued=True)
 
-    def confirm_registration(
-        self,
-        email: str,
-        code: str,
-        now: datetime,
-        max_attempts: int,
-        bonus: int,
-        max_rewards: int,
-    ) -> tuple[ConsumeResult, Optional[User]]:
+    def check_registration_code(
+        self, email: str, code: str, now: datetime, max_attempts: int
+    ) -> tuple[ConsumeResult, Optional[PendingRegistration]]:
         with self._lock, self._conn:
-            result = self._consume(email, CodePurpose.REGISTRATION, code, now, max_attempts)
+            result = self._consume(
+                email, CodePurpose.REGISTRATION, code, now, max_attempts, keep_on_ok=True
+            )
             if result is not ConsumeResult.OK:
                 return result, None
-            pending = self._conn.execute(
-                "SELECT password_hash, referral_code FROM pending_registrations"
-                " WHERE email = ?",
-                (email,),
-            ).fetchone()
+            pending = self._read_pending(email)
+            if pending is not None:
+                return ConsumeResult.OK, pending
+            if self._email_has_account(email):
+                self._discard_pending(email)
+                raise EmailTakenError(email)
+            return ConsumeResult.EXPIRED, None
+
+    def complete_registration(
+        self,
+        email: str,
+        checked: PendingRegistration,
+        password_matches: bool,
+        now: datetime,
+        bonus: int,
+        max_rewards: int,
+    ) -> User:
+        with self._lock, self._conn:
             taken = self._email_has_account(email)
-            if not taken and pending is None:
-                return ConsumeResult.EXPIRED, None
-            self._conn.execute(
-                "DELETE FROM pending_registrations WHERE email = ?", (email,)
-            )
-            if not taken:
+            current = self._read_pending(email)
+            outcome = self._registration_outcome(taken, current, checked, password_matches)
+            referral = self._pending_referral_code(email)
+            self._discard_pending(email)
+            if outcome is None:
                 user_id = self._create_confirmed_user(
-                    email, pending[0], pending[1], now, bonus, max_rewards
+                    email, checked.password_hash, referral, now, bonus, max_rewards
                 )
-                return ConsumeResult.OK, self._load_user(user_id)
-        raise EmailTakenError(email)
+                return self._load_user(user_id)
+        # Raised outside the `with` so that the discard above commits first.
+        raise outcome(email)
+
+    @staticmethod
+    def _registration_outcome(
+        taken: bool,
+        current: Optional[PendingRegistration],
+        checked: PendingRegistration,
+        password_matches: bool,
+    ):
+        if taken:
+            return EmailTakenError
+        if current != checked or not password_matches:
+            return RegistrationChanged
+        return None
+
+    def _read_pending(self, email: str) -> Optional[PendingRegistration]:
+        row = self._conn.execute(
+            "SELECT password_hash, created_at FROM pending_registrations WHERE email = ?",
+            (email,),
+        ).fetchone()
+        return PendingRegistration(row[0], row[1]) if row else None
+
+    def _pending_referral_code(self, email: str) -> Optional[str]:
+        row = self._conn.execute(
+            "SELECT referral_code FROM pending_registrations WHERE email = ?", (email,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def _discard_pending(self, email: str) -> None:
+        self._conn.execute("DELETE FROM pending_registrations WHERE email = ?", (email,))
+        self._conn.execute(
+            "DELETE FROM email_codes WHERE email = ? AND purpose = ?",
+            (email, CodePurpose.REGISTRATION.value),
+        )
+
+    def prune_email_rows(self, now: datetime) -> None:
+        with self._lock, self._conn:
+            self._prune_email_rows(now)
+
+    def _prune_email_rows(self, now: datetime) -> None:
+        self._conn.execute(
+            "DELETE FROM email_codes WHERE expires_at < ?", (now.isoformat(),)
+        )
+        self._conn.execute(
+            "DELETE FROM email_sends WHERE sent_at <= ?", ((now - SEND_WINDOW).isoformat(),)
+        )
+        self._conn.execute(
+            "DELETE FROM pending_registrations WHERE created_at <= ?",
+            ((now - PENDING_REGISTRATION_MAX_AGE).isoformat(),),
+        )
 
     def _create_confirmed_user(
         self,

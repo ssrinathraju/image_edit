@@ -17,6 +17,7 @@ from image_edit_server.core.user_store import (
     UserNotFound,
 )
 from image_edit_server.repos.user_store import SqliteUserStore
+from tests.helpers import confirm_in_store
 
 BONUS = 5
 MAX = 10
@@ -40,7 +41,7 @@ def _start(users, email, code=None):
 
 
 def _confirm(users, email, max_rewards=MAX):
-    return users.confirm_registration(email, CODE, T0, 5, BONUS, max_rewards)
+    return confirm_in_store(users, email, CODE, T0, 5, BONUS, max_rewards)
 
 
 def _register(users, email, code=None, max_rewards=MAX):

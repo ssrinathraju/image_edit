@@ -136,6 +136,11 @@ def create_app(
         except Exception:
             logger.exception("Startup retention sweep failed")
 
+        try:
+            user_store.prune_email_rows(datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Startup pruning of email-keyed rows failed")
+
         workers = [
             asyncio.create_task(run_worker(
                 store,
@@ -184,5 +189,3 @@ def create_app(
 
     return app
 
-
-app = create_app()

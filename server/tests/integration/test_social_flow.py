@@ -45,7 +45,8 @@ def _register_confirmed(client, sender, email) -> dict:
     resp = client.post("/auth/register", json={"email": email, "password": DEFAULT_PASSWORD})
     assert resp.status_code == 202, resp.text
     confirm = client.post(
-        "/auth/register/confirm", json={"email": email, "code": sender.last_code(email)}
+        "/auth/register/confirm",
+        json={"email": email, "code": sender.last_code(email), "password": DEFAULT_PASSWORD},
     )
     assert confirm.status_code == 201, confirm.text
     return _bearer(confirm)
