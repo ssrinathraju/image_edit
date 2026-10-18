@@ -60,7 +60,7 @@ The app SHALL provide a registration screen reachable from the sign-in screen, t
 
 ### Requirement: Confirm registration with the emailed code
 
-The app SHALL provide a Confirm registration screen that names the email the code was sent to and takes a 6-digit code. The submit control SHALL be disabled while the field does not hold exactly 6 digits and while a request is in flight. On success the app SHALL store the returned session and show the home screen. A wrong code SHALL be reported as incorrect, and an expired code SHALL be reported as expired with a pointer to Resend. Resend SHALL send the registration again with the values the user entered, and SHALL be disabled with a visible countdown for 60 seconds after the screen opens and after each successful resend. A server refusal for sending too often SHALL be shown. Going back SHALL return to the registration screen with the entered values kept.
+The app SHALL provide a Confirm registration screen that names the email the code was sent to and takes a 6-digit code. The submit control SHALL be disabled while the field does not hold exactly 6 digits and while a request is in flight. Confirming SHALL send the code together with the email and password the user registered with. On success the app SHALL store the returned session and show the home screen. A wrong code SHALL be reported as incorrect, and an expired code SHALL be reported as expired with a pointer to Resend. Resend SHALL send the registration again with the values the user entered, and SHALL be disabled with a visible countdown for 60 seconds after the screen opens and after each successful resend. A server refusal for sending too often SHALL be shown. Going back SHALL return to the registration screen with the entered values kept.
 
 #### Scenario: Correct code signs in
 
@@ -87,6 +87,12 @@ The app SHALL provide a Confirm registration screen that names the email the cod
 
 - **WHEN** the server answers the confirmation with error `email_taken`
 - **THEN** the screen says the email is already registered and offers to go to sign-in
+
+#### Scenario: Changed registration sends the user back to register
+
+- **WHEN** the server answers the confirmation with error `registration_changed`
+- **THEN** the app returns to the registration screen with the entered values kept
+- **AND** says the registration changed and must be submitted again
 
 #### Scenario: Back keeps the entered values
 

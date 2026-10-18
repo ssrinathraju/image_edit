@@ -136,11 +136,17 @@ The account is already verified, so the reward is paid immediately rather than t
   3. Under the lock, in one transaction, check the per-email limits. If one applies, answer 429 with `Retry-After` and keep the old pending row and code.
   4. Otherwise upsert `pending_registrations`, upsert the `registration` code and insert a send row.
   5. Schedule the email after the response, as today, and answer 202 `{}`.
-- **`POST /auth/register/confirm`** runs in one transaction:
-  1. Consume the `registration` code for the email: `wrong` gives 400 `invalid_code`, and `expired` (including no pending row) gives 400 `code_expired`.
-  2. If an account now has the email, delete the pending row and answer 409 `email_taken`.
-  3. Otherwise insert the user from the pending row with `email_verified = 1` and `created_via = 'password'`. If the pending referral code still belongs to an account, link it and pay both sides under the cap. If that account was deleted meanwhile, pay only the new account.
-  4. Delete the pending row and create a session. The response is `AuthResponse` with 201.
+- **`POST /auth/register/confirm`** takes `{email, code, password}`. It runs in two steps so the slow password check never holds the store lock:
+  1. **Check the code (one transaction under the lock).** Run the `consume_code` logic for the `registration` code, without deleting the code on `ok`. `wrong` gives 400 `invalid_code`, and `expired` (including no pending row) gives 400 `code_expired`. On `ok`, return the pending row's `password_hash` and `created_at`.
+  2. **Check the password, outside the lock.** Run `verify_password(password, pending_hash)`.
+  3. **Commit (one transaction under the lock).** Re-read the pending row and require the same `created_at` and `password_hash` as in step 1, so a re-registration in between is caught.
+     - On a password mismatch or a changed row, delete the pending row and its code and answer 409 `registration_changed`.
+     - If an account now has the email, delete the pending row and answer 409 `email_taken`.
+     - Otherwise insert the user from the pending row with `email_verified = 1` and `created_via = 'password'`. If the pending referral code still belongs to an account, link it and pay both sides under the cap. If that account was deleted meanwhile, pay only the new account. Delete the pending row and its code, and create a session. The response is `AuthResponse` with 201.
+- **Why the password is checked on confirm.** Round-2 review showed that anyone could register the same email a minute after the real owner, with their own password, and the owner would then confirm the newest code from their inbox and get an account with the stranger's password. Requiring the registering password at confirm means the account is only created when the same person holds both the inbox (the code) and the password. A stranger's re-registration can then only make the owner's confirm fail with `registration_changed`, after which the owner registers again.
+  - **Alternative rejected: refusing to replace a pending registration while its code is live.** A stranger could still win after the 15 minutes if the owner is slow, and could block the owner for 15 minutes.
+  - **Alternative rejected: accepting the risk.** It reopens the takeover this change exists to close.
+- **Order of checks.** The code is checked before the password, so someone without the inbox learns nothing about the password and always gets `invalid_code` or `code_expired`. A wrong password with a correct code discards the registration rather than counting attempts, so nobody can guess passwords against a valid code.
 - **Code rules stay as they are:** the TTL, attempts, 60-second and 5-per-hour limits now apply per email address. Password-reset codes are keyed by the account's email.
 - **Alternative rejected: keep creating the account at registration and take it over cleanly at link time** (wipe the password and revoke sessions). It fixes the takeover, but anyone can still squat someone else's email and block their registration, and the unverified-account machinery (gate, banner, deferred referral) stays.
 - **Alternative rejected: a separate change first.** The user chose to keep one feature in flight.
@@ -152,6 +158,16 @@ Because no account can be unverified, this change deletes the following:
 - **Tests:** the tests for these are deleted or rewritten. The conftest `client` fixtures create accounts through the store or through register-then-confirm.
 
 No compatibility shims are kept, because the project has no users.
+
+### 12. Housekeeping for email-keyed rows, and no database access at import
+- **Pruning (closes round-2 review finding S2).** `email_codes` and `email_sends` are no longer tied to an account, so they would otherwise keep the addresses of people who never registered. Every `start_registration` and every `issue_code` call deletes, in the same transaction and for all addresses:
+  - `email_codes` rows past `expires_at`;
+  - `email_sends` rows older than the one-hour send window;
+  - `pending_registrations` rows older than 24 hours.
+
+  The server also runs the same pruning at startup, next to the existing retention sweep. That bounds how long an abandoned address stays, even if nobody registers afterwards: until the next registration, reset request or restart, and never longer than the next sweep.
+- **No database at import (closes S3).** `main.py` no longer creates a module-level `app = create_app()`. The server is started with `uvicorn --factory image_edit_server.main:create_app`. Tests already build apps from `create_app(settings)` on temporary paths, so importing `image_edit_server.main` no longer opens or migrates `server/storage/app.db`.
+  - **Alternative rejected: a separate `asgi.py` entry module.** It is one more file for no gain over the factory flag uvicorn already supports.
 
 ### 7. Settings and startup checks
 New settings, with their defaults:
@@ -196,6 +212,7 @@ All new handlers are plain `def`. Error mapping:
 | Registration limited | 429 + `Retry-After` | `too_many_requests` |
 | Registration code wrong or expired | 400 | `invalid_code` or `code_expired` |
 | Email registered meanwhile | 409 | `email_taken` |
+| Correct code, password does not match the pending registration (or it was replaced mid-confirm) | 409 | `registration_changed` |
 
 ### 9. App: provider sign-in behind an injectable interface
 `core/provider_sign_in.dart` defines `ProviderSignIn.signIn() -> ProviderCredential?`, which returns null when the user cancels. There are two implementations:
@@ -216,7 +233,7 @@ Routing:
 - `SessionNotifier` gains `signInWithProvider(credential)` and `justCreatedViaProvider`. The redirect sends that state to `/referral-prompt`. The prompt screen clears the flag in `initState`.
 - **Registration:**
   - `register_screen.dart` calls `register(...)`. On 202 it stores the entered values in a `registrationDraftProvider` (in memory only, never persisted) and pushes `/confirm-registration`. No session is created yet.
-  - The new `confirm_registration_screen.dart` reads the email from the draft. Confirm calls `confirmRegistration(email, code)`; on success the session is stored, the draft is cleared, and the redirect lands on `/`.
+  - The new `confirm_registration_screen.dart` reads the email from the draft. Confirm calls `confirmRegistration(email, code, password)` with the draft's password. On success the session is stored, the draft is cleared, and the redirect lands on `/`. On `registration_changed` the app pops back to the registration screen with the values kept and a message to submit again.
   - Resend calls `register(...)` again with the draft's values.
   - Back pops to the registration screen, which still has its values.
   - `/confirm-registration` is allowed while signed out. If there is no draft, it redirects to `/register`.
@@ -231,7 +248,7 @@ Screen states:
 | Screen | Loading | Empty / initial | Error | Success |
 |---|---|---|---|---|
 | Register (email form) | Submit shows a spinner and is disabled | Fields empty; inline message for a short password | `email_taken`: "Email already registered". `invalid_referral_code`: "Code not recognised". 429: "Too many codes requested, try again in N s". Values kept in every case | Push `/confirm-registration` |
-| Confirm registration | Confirm and Resend show a spinner and are disabled while in flight | Code field empty, Confirm disabled, Resend countdown from 60 s | `invalid_code`: "Code is incorrect". `code_expired`: "Code has expired, tap Resend". 429 on Resend: message and countdown from `Retry-After`. `email_taken`: "Email already registered" with a "Go to sign-in" action | Session stored, draft cleared, home |
+| Confirm registration | Confirm and Resend show a spinner and are disabled while in flight | Code field empty, Confirm disabled, Resend countdown from 60 s | `invalid_code`: "Code is incorrect". `code_expired`: "Code has expired, tap Resend". 429 on Resend: message and countdown from `Retry-After`. `email_taken`: "Email already registered" with a "Go to sign-in" action. `registration_changed`: pop to the registration screen, values kept, "Your registration changed. Submit it again." | Session stored, draft cleared, home |
 | Sign-in and register (provider buttons) | The tapped button shows a spinner, and all submit controls are disabled while in flight | Buttons hidden for unconfigured providers; Apple hidden on Android | `invalid_provider_token`: "Sign-in failed, try again". `provider_email_unverified`: "Verify your Google email first" or "Verify your Apple email first", naming the provider used. `provider_email_missing`: "Apple didn't share an email; remove this app in Apple ID settings and try again". `provider_already_linked`: "This account is already linked to another Google account". 503: "Sign-in is unavailable right now". Cancel: nothing shown | Session stored. New account goes to `/referral-prompt`, an existing one to `/` |
 | Referral prompt | Apply shows a spinner and is disabled | Code field empty, Apply disabled | `invalid_referral_code`: "Code not recognised", value kept. `referral_not_allowed`: "This account can't redeem a code", then go home | Account refreshed, go to `/` |
 | Profile provider line | Hidden while the account loads | Hidden when there are no providers | Hidden if the account failed to load | "Signed in with Google" and/or "Signed in with Apple" |
@@ -242,7 +259,9 @@ Screen states:
 - **[What data is stored, and for how long]**
   - An `identities` row per linked provider holds the provider subject, the email reported when it was linked, and for Apple a refresh token. It lives as long as the account and is removed by the cascade on deletion.
   - `created_via` and `referral_redeemed` live as long as the account.
-  - A pending registration holds an email, a password hash and an optional referral code. It lives until it is confirmed, replaced, or pruned 24 hours after it was created. Its code hash follows the usual 15-minute rule.
+  - A pending registration holds an email, a password hash and an optional referral code. It lives until it is confirmed, replaced or discarded (`registration_changed`). Otherwise it is pruned once it is more than 24 hours old, at the next registration, code issue or server start (Decision 12).
+  - Code and send rows for an address hold that address. Expired codes, and send rows older than an hour, are pruned on the same triggers. An address that never registers therefore stays only until the next such event.
+  - The app's registration draft holds the plain password in memory only. It is cleared on a successful confirm and whenever the user leaves the registration flow (signing in, or leaving the register screen).
   - Provider ID tokens and authorization codes are never stored.
 - **[Who can read it]**
   - Only the server process.
@@ -276,6 +295,7 @@ Screen states:
 - **[Background tasks when a call raises]** The revocation task's wrapper catches every exception and logs it. It runs after the response and nothing depends on it.
 - **[Thread-safety of shared state]**
   - Find-link-create, redemption, the provider deletion check, starting a registration and confirming one all run under `SqliteUserStore._lock` in single transactions. A provider sign-in and a registration confirm racing for the same email therefore serialise: whichever commits second sees the account and links to it (provider) or answers 409 (confirm).
+  - Confirm's password check runs between two transactions. The commit step re-reads the pending row and compares `created_at` and `password_hash`, so a re-registration landing in that gap gives `registration_changed` and never an account with the wrong password. Two confirms of the same registration still create exactly one account, because the commit step deletes the pending row and the second finds none (`code_expired`).
   - `PyJWKClient`'s key cache is shared across thread-pool workers. PyJWT guards its cache with a lock, and the worst case is a duplicate fetch.
   - The verifiers and the revocation client hold no other mutable state.
 - **[Clock skew]** 60 seconds of leeway on `exp` and `iat`. The 5-minute freshness window for deletion uses the server clock.

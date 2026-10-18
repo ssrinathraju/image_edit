@@ -87,13 +87,32 @@ The system SHALL accept `POST /auth/register` with an `email`, a `password`, and
 
 ### Requirement: Complete registration with the emailed code
 
-The system SHALL expose `POST /auth/register/confirm`, without authentication, taking an `email` and a `code`. When the code matches the email's current registration code, the system SHALL create the account from the pending registration, with a verified email and the pending password and referral code, and respond with HTTP 201 and a body containing a session `token` and the user's `id` and `email`. A wrong code SHALL get HTTP 400 with error `invalid_code`. A code that is expired, already used, invalidated, or was never issued for that email SHALL get HTTP 400 with error `code_expired`. When an account with that email was created after the registration was requested, the system SHALL respond with HTTP 409 and error `email_taken` and discard the pending registration.
+The system SHALL expose `POST /auth/register/confirm`, without authentication, taking an `email`, a `code`, and the `password` the registration was made with. The system SHALL create the account only when the code matches the email's current registration code and the password matches the pending registration's password. It SHALL then create the account from the pending registration, with a verified email and the pending password and referral code, and respond with HTTP 201 and a body containing a session `token` and the user's `id` and `email`.
+
+Failures:
+- A wrong code SHALL get HTTP 400 with error `invalid_code`.
+- A code that is expired, already used, invalidated, or was never issued for that email SHALL get HTTP 400 with error `code_expired`.
+- A correct code with a password that does not match the pending registration SHALL get HTTP 409 with error `registration_changed`. The system SHALL then discard the pending registration and its code, and SHALL NOT create an account.
+- When an account with that email was created after the registration was requested, the system SHALL respond with HTTP 409 and error `email_taken` and discard the pending registration.
 
 #### Scenario: Correct code creates the account and signs in
 
-- **WHEN** a client confirms a pending registration with the emailed code
+- **WHEN** a client confirms a pending registration with the emailed code and the password it registered with
 - **THEN** the system responds with HTTP 201 and a `token` that authorizes `GET /me`
 - **AND** logging in with the registered email and password succeeds
+
+#### Scenario: Someone else's re-registration cannot set the password
+
+- **WHEN** a victim registers `una@example.com`, a third party registers the same email more than 60 seconds later with a different password, and the victim confirms with the newest emailed code and the victim's own password
+- **THEN** the system responds with HTTP 409 and error `registration_changed`
+- **AND** no account exists for that email
+- **AND** confirming afterwards with the same code and the third party's password gets HTTP 400 with error `code_expired`
+
+#### Scenario: Password is checked only after the code
+
+- **WHEN** a client confirms with a wrong code and a wrong password
+- **THEN** the system responds with HTTP 400 and error `invalid_code`
+- **AND** the pending registration is kept
 
 #### Scenario: Wrong code creates nothing
 
