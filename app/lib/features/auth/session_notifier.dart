@@ -7,6 +7,7 @@ import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
 import '../common/submit_controller.dart';
 import '../home/home_notifier.dart';
+import 'registration_draft.dart';
 
 final sessionStorageProvider =
     Provider<SessionStorage>((_) => SecureSessionStorage());
@@ -25,19 +26,6 @@ final sessionTokenHolderProvider =
 /// saved session is being checked, and an error means it could not be checked.
 class SessionNotifier extends AsyncNotifier<Session?> {
   bool _restoring = false;
-  bool _justRegistered = false;
-
-  /// True between registering and the Verify email screen opening, so the
-  /// router can send a new account there instead of home.
-  bool get justRegistered => _justRegistered;
-
-  /// Reads and clears [justRegistered]; the Verify screen calls it when it opens.
-  bool takeJustRegistered() {
-    final value = _justRegistered;
-    _justRegistered = false;
-    return value;
-  }
-
   bool _justCreatedViaProvider = false;
 
   /// True between a provider sign-in that created the account and the
@@ -81,18 +69,46 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await _start(session);
   }
 
-  Future<void> register({
+  /// Asks the server to email a registration code and keeps what was entered
+  /// as the draft. No account or session exists until [confirmRegistration].
+  Future<void> startRegistration({
     required String email,
     required String password,
     String? referralCode,
   }) async {
-    final session = await ref.read(apiClientProvider).register(
+    await ref.read(apiClientProvider).register(
           email: email,
           password: password,
           referralCode: referralCode,
         );
-    _justRegistered = true;
+    ref.read(registrationDraftProvider.notifier).state = RegistrationDraft(
+      email: email,
+      password: password,
+      referralCode: referralCode,
+    );
+  }
+
+  /// Sends the draft's registration again, for Resend; a refusal throws.
+  Future<void> resendRegistrationCode() async {
+    final draft = ref.read(registrationDraftProvider);
+    if (draft == null) return;
+    await ref.read(apiClientProvider).register(
+          email: draft.email,
+          password: draft.password,
+          referralCode: draft.referralCode,
+        );
+  }
+
+  /// Creates the account with the emailed code and signs in; a rejected code
+  /// throws and leaves the draft in place.
+  Future<void> confirmRegistration({required String code}) async {
+    final draft = ref.read(registrationDraftProvider);
+    if (draft == null) return;
+    final session = await ref
+        .read(apiClientProvider)
+        .confirmRegistration(email: draft.email, code: code);
     await _start(session);
+    ref.read(registrationDraftProvider.notifier).state = null;
   }
 
   /// Signs in with what a Google or Apple sheet returned; the server links,

@@ -192,35 +192,51 @@ void main() {
       expect(fired, 0);
     });
 
-    test('register and login post credentials and parse the session', () async {
-      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
-      final client = _client(adapter);
+    test('register posts the credentials and returns nothing', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
 
-      final registered =
-          await client.register(email: 'a@b.co', password: 'password-1');
+      await _client(adapter).register(email: 'a@b.co', password: 'password-1');
+
       expect(adapter.last!.method, 'POST');
       expect(adapter.last!.path, '/auth/register');
       expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
-      expect(registered.token, 't');
-      expect(registered.userId, 'u');
-
-      await client.login(email: 'a@b.co', password: 'password-1');
-      expect(adapter.last!.path, '/auth/login');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
     });
 
-    test('verifyEmail and resendVerification post to the documented routes', () async {
+    test('register sends a trimmed referral code and omits a blank one', () async {
       final adapter = _FakeAdapter(<String, dynamic>{});
       final client = _client(adapter);
 
-      await client.verifyEmail(code: '123456');
-      expect(adapter.last!.method, 'POST');
-      expect(adapter.last!.path, '/auth/verify-email');
-      expect(adapter.last!.data, {'code': '123456'});
+      await client.register(
+        email: 'a@b.co',
+        password: 'password-1',
+        referralCode: '  k7m2qx9p ',
+      );
+      expect(adapter.last!.data['referral_code'], 'k7m2qx9p');
 
-      await client.resendVerification();
+      await client.register(email: 'a@b.co', password: 'password-1', referralCode: '  ');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+    });
+
+    test('confirmRegistration posts the code and parses the session', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+
+      final session =
+          await _client(adapter).confirmRegistration(email: 'a@b.co', code: '123456');
+
       expect(adapter.last!.method, 'POST');
-      expect(adapter.last!.path, '/auth/verify-email/resend');
+      expect(adapter.last!.path, '/auth/register/confirm');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'code': '123456'});
+      expect((session.token, session.userId, session.email), ('t', 'u', 'a@b.co'));
+    });
+
+    test('login posts credentials and parses the session', () async {
+      final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
+
+      final session = await _client(adapter).login(email: 'a@b.co', password: 'password-1');
+
+      expect(adapter.last!.path, '/auth/login');
+      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      expect(session.token, 't');
     });
 
     test('requestPasswordReset posts the email', () async {
@@ -237,7 +253,6 @@ void main() {
         'token': 'fresh',
         'id': 'u',
         'email': 'a@b.co',
-        'email_verified': true,
       });
 
       final session = await _client(adapter).confirmPasswordReset(
@@ -253,7 +268,7 @@ void main() {
         'new_password': 'new password 1',
       });
       expect(session.token, 'fresh');
-      expect(session.emailVerified, isTrue);
+      expect(session.email, 'a@b.co');
     });
 
     test('logout, fetchMe and deleteAccount hit the documented routes', () async {

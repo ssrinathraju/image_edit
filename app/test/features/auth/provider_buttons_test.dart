@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/schemas/session.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fake_api_client.dart';
@@ -14,7 +15,7 @@ late FakeApiClient client;
 late FakeSessionStorage storage;
 
 final _googleButton = find.widgetWithText(OutlinedButton, 'Continue with Google');
-final _appleButton = find.widgetWithText(OutlinedButton, 'Continue with Apple');
+final _appleButton = find.byType(SignInWithAppleButton);
 
 const _existing = ProviderSession(
   session: Session(token: 'token-g', userId: 'user-2', email: 'gina@example.com'),
@@ -184,6 +185,39 @@ void main() {
       expect(storage.saved, isNull);
     });
   }
+
+  testWidgets('an unverified Apple email names Apple, not Google', (tester) async {
+    client.onSignInWithApple = (_, _, _) async =>
+        throw apiError(400, 'provider_email_unverified', 'server wording');
+    await pumpApp(
+      tester,
+      client: client,
+      storage: storage,
+      apple: FakeProviderSignIn.apple(),
+      platform: TargetPlatform.iOS,
+    );
+
+    await tester.tap(_appleButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Verify your Apple email first'), findsOneWidget);
+    expect(find.textContaining('Google'), findsNothing);
+  });
+
+  testWidgets('the Apple button follows Apple\'s style and wording', (tester) async {
+    await pumpApp(
+      tester,
+      client: client,
+      storage: storage,
+      apple: FakeProviderSignIn.apple(),
+      platform: TargetPlatform.iOS,
+    );
+
+    final button = tester.widget<SignInWithAppleButton>(_appleButton);
+    expect(button.text, 'Continue with Apple');
+    expect(button.style, SignInWithAppleButtonStyle.black);
+    expect(find.text('Continue with Apple'), findsOneWidget);
+  });
 
   testWidgets('an unexpected failure shows the generic message', (tester) async {
     client.onSignInWithGoogle = (_) async => throw StateError('offline');

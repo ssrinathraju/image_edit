@@ -16,10 +16,15 @@ abstract class GenerationApiClient {
   Future<Uint8List> fetchImageBytes(String url);
   String resolveUrl(String path);
 
-  Future<Session> register({
+  /// Starts a registration: the server emails a code and creates no account.
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
+  });
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
   });
   Future<Session> login({required String email, required String password});
   Future<void> logout();
@@ -39,8 +44,6 @@ abstract class GenerationApiClient {
   });
   Future<void> redeemReferral({required String code});
 
-  Future<void> verifyEmail({required String code});
-  Future<void> resendVerification();
   Future<void> requestPasswordReset({required String email});
   Future<Session> confirmPasswordReset({
     required String email,
@@ -168,18 +171,32 @@ class DioApiClient implements GenerationApiClient {
   String resolveUrl(String path) => '$_baseUrl$path';
 
   @override
-  Future<Session> register({
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
   }) {
     final code = referralCode?.trim();
-    return _authenticate(
+    return _dio.post<void>(
       _registerPath,
-      email,
-      password,
-      referralCode: code == null || code.isEmpty ? null : code,
+      data: {
+        'email': email,
+        'password': password,
+        'referral_code': ?(code == null || code.isEmpty ? null : code),
+      },
     );
+  }
+
+  @override
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/auth/register/confirm',
+      data: {'email': email, 'code': code},
+    );
+    return Session.fromJson(response.data!);
   }
 
   @override
@@ -241,14 +258,6 @@ class DioApiClient implements GenerationApiClient {
   }
 
   @override
-  Future<void> verifyEmail({required String code}) =>
-      _dio.post<void>('/auth/verify-email', data: {'code': code});
-
-  @override
-  Future<void> resendVerification() =>
-      _dio.post<void>('/auth/verify-email/resend');
-
-  @override
   Future<void> requestPasswordReset({required String email}) =>
       _dio.post<void>('/auth/password-reset/request', data: {'email': email});
 
@@ -265,19 +274,10 @@ class DioApiClient implements GenerationApiClient {
     return Session.fromJson(response.data!);
   }
 
-  Future<Session> _authenticate(
-    String path,
-    String email,
-    String password, {
-    String? referralCode,
-  }) async {
+  Future<Session> _authenticate(String path, String email, String password) async {
     final response = await _dio.post<Map<String, dynamic>>(
       path,
-      data: {
-        'email': email,
-        'password': password,
-        'referral_code': ?referralCode,
-      },
+      data: {'email': email, 'password': password},
     );
     return Session.fromJson(response.data!);
   }

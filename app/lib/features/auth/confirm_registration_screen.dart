@@ -3,34 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_errors.dart';
-import '../../services/generation_providers.dart';
 import '../common/error_message.dart';
-import '../plans/account_notifier.dart';
 import 'code_field.dart';
+import 'registration_draft.dart';
 import 'resend_code_button.dart';
 import 'session_notifier.dart';
 
 const String _invalidCodeMessage = 'Code is incorrect';
 const String _expiredCodeMessage = 'Code has expired, tap Resend';
+const String _emailTakenMessage = 'Email already registered';
 
-class VerifyEmailScreen extends ConsumerStatefulWidget {
-  const VerifyEmailScreen({super.key});
+/// Asks for the code emailed at registration. Going back returns to the
+/// registration screen underneath, which still holds what was typed.
+class ConfirmRegistrationScreen extends ConsumerStatefulWidget {
+  const ConfirmRegistrationScreen({super.key});
 
   @override
-  ConsumerState<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
+  ConsumerState<ConfirmRegistrationScreen> createState() =>
+      _ConfirmRegistrationScreenState();
 }
 
-class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
+class _ConfirmRegistrationScreenState
+    extends ConsumerState<ConfirmRegistrationScreen> {
   final _code = TextEditingController();
-  late final bool _justRegistered;
   bool _submitting = false;
   String? _failure;
-
-  @override
-  void initState() {
-    super.initState();
-    _justRegistered = ref.read(sessionProvider.notifier).takeJustRegistered();
-  }
+  bool _emailTaken = false;
 
   @override
   void dispose() {
@@ -44,35 +42,40 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     setState(() {
       _submitting = true;
       _failure = null;
+      _emailTaken = false;
     });
     try {
-      await ref.read(apiClientProvider).verifyEmail(code: _code.text);
-      await _finish();
+      await ref
+          .read(sessionProvider.notifier)
+          .confirmRegistration(code: _code.text);
     } catch (error) {
       if (!mounted) return;
-      if (isAlreadyVerified(error)) return _finish();
-      setState(() => _failure = _messageFor(error));
+      setState(() {
+        _failure = _messageFor(error);
+        _emailTaken = isEmailTaken(error);
+      });
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  Future<void> _finish() async {
-    await ref.read(accountProvider.notifier).refresh();
-    if (mounted) _leave(context);
-  }
-
   String _messageFor(Object error) {
     if (isInvalidCode(error)) return _invalidCodeMessage;
     if (isCodeExpired(error)) return _expiredCodeMessage;
+    if (isEmailTaken(error)) return _emailTakenMessage;
     return describeError(error);
+  }
+
+  void _goToSignIn() {
+    ref.read(registrationDraftProvider.notifier).state = null;
+    context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
-    final email = ref.watch(sessionProvider).valueOrNull?.email ?? '';
+    final email = ref.watch(registrationDraftProvider)?.email ?? '';
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify email')),
+      appBar: AppBar(title: const Text('Confirm registration')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -82,7 +85,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'We sent a 6-digit code to $email. Enter it to verify your email.',
+                  'We sent a 6-digit code to $email. Enter it to create your account.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
@@ -95,6 +98,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                     style: TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ],
+                if (_emailTaken)
+                  TextButton(
+                    onPressed: _goToSignIn,
+                    child: const Text('Go to sign-in'),
+                  ),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: _canSubmit ? _submit : null,
@@ -104,17 +112,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                           width: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Verify'),
+                      : const Text('Confirm'),
                 ),
                 const SizedBox(height: 12),
                 ResendCodeButton(
-                  startCounting: _justRegistered,
-                  onResend: ref.read(apiClientProvider).resendVerification,
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => _leave(context),
-                  child: const Text('Later'),
+                  startCounting: true,
+                  onResend:
+                      ref.read(sessionProvider.notifier).resendRegistrationCode,
                 ),
               ],
             ),
@@ -122,15 +126,5 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         ),
       ),
     );
-  }
-}
-
-/// Returns to the screen underneath (a form that must keep its input, or
-/// home); right after registration there is none, so go home.
-void _leave(BuildContext context) {
-  if (context.canPop()) {
-    context.pop();
-  } else {
-    context.go('/');
   }
 }

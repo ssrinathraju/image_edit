@@ -42,26 +42,16 @@ void main() {
     expect(profile.referral, isNull);
   });
 
-  test('email_verified is read when present and defaults to true when absent', () {
-    final unverified = UserProfile.fromJson(
+  test('a profile and a session ignore a leftover email_verified field', () {
+    final profile = UserProfile.fromJson(
       {'id': 'u1', 'email': 'ana@example.com', 'email_verified': false},
     );
-    final verified = UserProfile.fromJson(
-      {'id': 'u1', 'email': 'ana@example.com', 'email_verified': true},
+    final session = Session.fromJson(
+      {'token': 't', 'id': 'u1', 'email': 'ana@example.com', 'email_verified': false},
     );
-    final oldServer = UserProfile.fromJson({'id': 'u1', 'email': 'ana@example.com'});
 
-    expect(unverified.emailVerified, isFalse);
-    expect(verified.emailVerified, isTrue);
-    expect(oldServer.emailVerified, isTrue);
-  });
-
-  test('a session parses email_verified and defaults it to true when absent', () {
-    final base = {'token': 't', 'id': 'u1', 'email': 'ana@example.com'};
-
-    expect(Session.fromJson({...base, 'email_verified': false}).emailVerified, isFalse);
-    expect(Session.fromJson({...base, 'email_verified': true}).emailVerified, isTrue);
-    expect(Session.fromJson(base).emailVerified, isTrue);
+    expect(profile.email, 'ana@example.com');
+    expect(session.toJson(), {'token': 't', 'id': 'u1', 'email': 'ana@example.com'});
   });
 
   test('an unknown plan reads as free', () {

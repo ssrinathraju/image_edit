@@ -31,15 +31,14 @@ void main() {
     );
   });
 
-  test('each verification and reset error code is recognised', () {
+  test('each registration and reset error code is recognised', () {
     Object coded(String code) => _error({
           'detail': {'error': code, 'detail': 'x'},
         }, status: 400);
 
-    expect(isEmailNotVerified(coded('email_not_verified')), isTrue);
+    expect(isEmailTaken(coded('email_taken')), isTrue);
     expect(isInvalidCode(coded('invalid_code')), isTrue);
     expect(isCodeExpired(coded('code_expired')), isTrue);
-    expect(isAlreadyVerified(coded('already_verified')), isTrue);
     expect(isTooManyRequests(coded('too_many_requests')), isTrue);
     expect(isInvalidCode(coded('code_expired')), isFalse);
     expect(isTooManyRequests(StateError('boom')), isFalse);

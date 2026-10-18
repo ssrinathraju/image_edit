@@ -60,7 +60,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('this referral code was not recognised'), findsOneWidget);
+    expect(find.text('Code not recognised'), findsOneWidget);
     String textOf(String label) =>
         tester.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
     expect(textOf('Email'), 'new@example.com');
@@ -68,7 +68,7 @@ void main() {
     expect(textOf('Referral code (optional)'), 'NOSUCH22');
   });
 
-  testWidgets('a rewarded signup shows the bonus on the home screen after verifying', (tester) async {
+  testWidgets('a rewarded signup shows the bonus on the home screen after confirming', (tester) async {
     client.onFetchMe = () async => fakeProfile(bonusCredits: 5);
     await _openRegister(tester);
 
@@ -77,9 +77,26 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Code'), '123456');
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Confirm'));
     await tester.pumpAndSettle();
 
+    expect(client.referralCodes, ['K7M2QX9P']);
     expect(find.text('8 generations left today'), findsOneWidget);
+  });
+
+  testWidgets('a refused resend of the registration shows the countdown message', (tester) async {
+    client.onRegister = (_, _) async => throw apiError(
+          429,
+          'too_many_requests',
+          'too many codes requested; retry in 40 seconds',
+        );
+    await _openRegister(tester);
+
+    await _fill(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Too many codes requested, try again later'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
   });
 }

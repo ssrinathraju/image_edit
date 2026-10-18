@@ -17,9 +17,13 @@ class FakeApiClient implements GenerationApiClient {
   Future<Uint8List> Function(String url) onFetchBytes =
       (_) async => Uint8List.fromList([1, 2, 3]);
 
-  Future<Session> Function(String email, String password) onRegister =
+  Future<void> Function(String email, String password) onRegister =
+      (_, _) async {};
+  Future<Session> Function(String email, String code) onConfirmRegistration =
       (email, _) async => Session(token: 'token-new', userId: 'user-1', email: email);
   final referralCodes = <String?>[];
+  final registrationPasswords = <String>[];
+  final confirmedRegistrations = <List<String>>[];
   Future<Session> Function(String email, String password) onLogin =
       (email, _) async => Session(token: 'token-1', userId: 'user-1', email: email);
   Future<void> Function() onLogout = () async {};
@@ -42,8 +46,6 @@ class FakeApiClient implements GenerationApiClient {
         created: false,
       );
   Future<void> Function(String code) onRedeemReferral = (_) async {};
-  Future<void> Function(String code) onVerifyEmail = (_) async {};
-  Future<void> Function() onResendVerification = () async {};
   Future<void> Function(String email) onRequestPasswordReset = (_) async {};
   Future<Session> Function(String email, String code, String newPassword)
       onConfirmPasswordReset = (email, _, _) async =>
@@ -58,8 +60,6 @@ class FakeApiClient implements GenerationApiClient {
   final googleTokens = <String>[];
   final appleSignIns = <List<String>>[];
   final redeemedCodes = <String>[];
-  final verifiedWith = <String>[];
-  var resendCalls = 0;
   final resetRequestedFor = <String>[];
   final resetConfirmed = <List<String>>[];
   final submitted = <GenerationRequest>[];
@@ -90,14 +90,24 @@ class FakeApiClient implements GenerationApiClient {
   String resolveUrl(String path) => 'http://fake$path';
 
   @override
-  Future<Session> register({
+  Future<void> register({
     required String email,
     required String password,
     String? referralCode,
   }) {
     registered.add(email);
+    registrationPasswords.add(password);
     referralCodes.add(referralCode);
     return onRegister(email, password);
+  }
+
+  @override
+  Future<Session> confirmRegistration({
+    required String email,
+    required String code,
+  }) {
+    confirmedRegistrations.add([email, code]);
+    return onConfirmRegistration(email, code);
   }
 
   @override
@@ -153,18 +163,6 @@ class FakeApiClient implements GenerationApiClient {
   }
 
   @override
-  Future<void> verifyEmail({required String code}) {
-    verifiedWith.add(code);
-    return onVerifyEmail(code);
-  }
-
-  @override
-  Future<void> resendVerification() {
-    resendCalls++;
-    return onResendVerification();
-  }
-
-  @override
   Future<void> requestPasswordReset({required String email}) {
     resetRequestedFor.add(email);
     return onRequestPasswordReset(email);
@@ -198,14 +196,12 @@ UserProfile fakeProfile({
   int rewards = 0,
   String code = 'K7M2QX9P',
   DateTime? resetsAt,
-  bool emailVerified = true,
   List<String> providers = const [],
   bool hasPassword = true,
 }) =>
     UserProfile(
       id: 'user-1',
       email: 'ana@example.com',
-      emailVerified: emailVerified,
       providers: providers,
       hasPassword: hasPassword,
       plan: plan,

@@ -101,18 +101,18 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('registration signs the user in and shows the Verify email screen', (tester) async {
+    testWidgets('registration shows the Confirm registration screen without a session', (tester) async {
       await openRegister(tester);
 
       await _enter(tester, 'new@example.com', 'password-1');
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Verify email'), findsOneWidget);
+      expect(find.text('Confirm registration'), findsOneWidget);
       expect(find.textContaining('new@example.com'), findsOneWidget);
       expect(find.text('Trending'), findsNothing);
       expect(client.registered, ['new@example.com']);
-      expect(storage.saved?.email, 'new@example.com');
+      expect(storage.saved, isNull);
     });
 
     testWidgets('a short password shows an inline message and blocks submit', (tester) async {
@@ -136,7 +136,8 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 
-      expect(find.text('this email is already registered'), findsOneWidget);
+      expect(find.text('Email already registered'), findsOneWidget);
+      expect(find.text('Confirm registration'), findsNothing);
       expect(find.text('Trending'), findsNothing);
     });
 

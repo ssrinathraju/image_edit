@@ -189,11 +189,11 @@ Groups 10 to 12 implement design Decisions 10 and 11 and the revised specs. Earl
 
 ## 12. App: confirm registration and removals
 
-- [ ] 12.1 Client and schemas: `register` returns nothing on 202, add `confirmRegistration(email, code)` returning the session, remove `verifyEmail` and `resendVerification`, and remove `emailVerified` from `Session` and `UserProfile`. Remove the `email_not_verified` and `already_verified` codes. Verify with `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart`.
-- [ ] 12.2 Add `registrationDraftProvider` (in memory), `features/auth/confirm_registration_screen.dart`, and the `/confirm-registration` route (allowed while signed out, and redirecting to `/register` without a draft). Change `register_screen.dart` to push it on success. Remove `justRegistered`, `verify_email_screen.dart` and its route. Follow the states in the Decision 9 table. Verify:
+- [x] 12.1 Client and schemas: `register` returns nothing on 202, add `confirmRegistration(email, code)` returning the session, remove `verifyEmail` and `resendVerification`, and remove `emailVerified` from `Session` and `UserProfile`. Remove the `email_not_verified` and `already_verified` codes. Verify with `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart`.
+- [x] 12.2 Add `registrationDraftProvider` (in memory), `features/auth/confirm_registration_screen.dart`, and the `/confirm-registration` route (allowed while signed out, and redirecting to `/register` without a draft). Change `register_screen.dart` to push it on success. Remove `justRegistered`, `verify_email_screen.dart` and its route. Follow the states in the Decision 9 table. Verify:
   - `test/features/auth/confirm_registration_screen_test.dart` covers every scenario of "Confirm registration with the emailed code", including Back keeping the values;
   - `test/router_test.dart` covers registration landing on `/confirm-registration` with no session, and a session after confirm landing on `/`.
-- [ ] 12.3 Remove the home banner and the `email_not_verified` handling in `features/common/submit_flow.dart`. Make the `provider_email_unverified` message in `provider_buttons.dart` name the provider used. Verify:
+- [x] 12.3 Remove the home banner and the `email_not_verified` handling in `features/common/submit_flow.dart`. Make the `provider_email_unverified` message in `provider_buttons.dart` name the provider used. Verify:
   - the home and submit-flow tests are updated;
   - `test/features/auth/provider_buttons_test.dart` covers the Apple message naming Apple;
   - `grep -rn "emailVerified\|verify-email\|email_not_verified" app/lib` finds nothing.

@@ -13,8 +13,12 @@ class CredentialsForm extends StatefulWidget {
     this.withReferralCode = false,
     this.emailController,
     this.enabled = true,
+    this.describeFailure = describeError,
     super.key,
   });
+
+  /// Turns a failed submit into the inline message; defaults to the server's own text.
+  final String Function(Object error) describeFailure;
 
   /// Lets the parent read the typed email; the parent owns and disposes it.
   final TextEditingController? emailController;
@@ -79,7 +83,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _failure = describeError(error));
+      setState(() => _failure = widget.describeFailure(error));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

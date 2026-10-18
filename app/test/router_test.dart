@@ -129,8 +129,9 @@ void main() {
     expect(find.text('K7M2QX9P'), findsOneWidget);
   });
 
-  testWidgets('registration lands on the Verify email screen', (tester) async {
-    await pumpApp(tester, client: client, storage: FakeSessionStorage());
+  testWidgets('registration lands on Confirm registration with no session', (tester) async {
+    final storage = FakeSessionStorage();
+    await pumpApp(tester, client: client, storage: storage);
 
     await tester.tap(find.text('Create an account'));
     await tester.pumpAndSettle();
@@ -140,11 +141,33 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Verify email'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsOneWidget);
     expect(find.text('Trending'), findsNothing);
+    expect(storage.saved, isNull);
   });
 
-  testWidgets('signing in lands on home, not the Verify email screen', (tester) async {
+  testWidgets('confirming the code creates the session and lands on home', (tester) async {
+    final storage = FakeSessionStorage();
+    await pumpApp(tester, client: client, storage: storage);
+    await tester.tap(find.text('Create an account'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Code'), '123456');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Confirm'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trending'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
+    expect(storage.saved?.email, 'new@example.com');
+  });
+
+  testWidgets('signing in lands on home, not the Confirm registration screen', (tester) async {
     await pumpApp(tester, client: client, storage: FakeSessionStorage());
 
     await tester.enterText(find.widgetWithText(TextField, 'Email'), 'ana@example.com');
@@ -154,7 +177,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trending'), findsOneWidget);
-    expect(find.text('Verify email'), findsNothing);
+    expect(find.text('Confirm registration'), findsNothing);
   });
 
   testWidgets('a signed-out user may open the forgot and reset password pages', (tester) async {
@@ -170,14 +193,23 @@ void main() {
     expect(find.textContaining('ana@example.com'), findsOneWidget);
   });
 
-  testWidgets('a signed-out visit to Verify email redirects to sign-in', (tester) async {
+  testWidgets('Confirm registration without a draft redirects to the registration screen', (tester) async {
+    final container = await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    container.read(routerProvider).go('/confirm-registration');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Create account'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
+  });
+
+  testWidgets('the removed Verify email page is not reachable', (tester) async {
     final container = await pumpApp(tester, client: client, storage: FakeSessionStorage());
 
     container.read(routerProvider).go('/verify-email');
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
-    expect(find.text('Verify email'), findsNothing);
   });
 
   testWidgets('a signed-in user opening the reset page is sent home', (tester) async {
@@ -232,7 +264,7 @@ void main() {
       expect(find.text('Have a referral code?'), findsNothing);
     });
 
-    testWidgets('email and password registration still lands on Verify email', (tester) async {
+    testWidgets('email and password registration still lands on Confirm registration', (tester) async {
       await pumpApp(
         tester,
         client: client,
@@ -248,7 +280,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Verify email'), findsOneWidget);
+      expect(find.text('Confirm registration'), findsOneWidget);
       expect(find.text('Have a referral code?'), findsNothing);
     });
 

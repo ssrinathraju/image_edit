@@ -53,8 +53,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(
           children: [
-            if (account != null && !account.emailVerified)
-              _VerifyEmailBanner(onTap: () => context.push('/verify-email')),
             const SizedBox(height: 8),
             TextField(
               controller: _searchController,
@@ -99,27 +97,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 String _remainingLabel(int remaining) =>
     remaining == 1 ? '1 generation left today' : '$remaining generations left today';
-
-class _VerifyEmailBanner extends StatelessWidget {
-  const _VerifyEmailBanner({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(top: 8),
-      color: Theme.of(context).colorScheme.secondaryContainer,
-      child: ListTile(
-        leading: const Icon(Icons.mark_email_unread_outlined),
-        title: const Text('Verify your email'),
-        subtitle: const Text('Verify your email to start generating'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
-  }
-}
 
 class _CreateOwnCard extends StatelessWidget {
   const _CreateOwnCard({required this.onTap});

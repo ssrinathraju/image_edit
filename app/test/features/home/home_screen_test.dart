@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/home/home_notifier.dart';
 import 'package:image_edit/features/home/home_screen.dart';
-import 'package:image_edit/schemas/session.dart';
 import 'package:image_edit/schemas/template.dart';
 import 'package:image_edit/services/generation_providers.dart';
 
@@ -26,7 +23,6 @@ Future<GoRouter> _pump(
         path: '/template/:id',
         builder: (_, state) => Text('template:${state.pathParameters['id']}'),
       ),
-      GoRoute(path: '/verify-email', builder: (_, _) => const Text('verify-screen')),
       GoRoute(
         path: '/create',
         builder: (_, state) =>
@@ -118,63 +114,13 @@ void main() {
     expect(find.text('Beach'), findsOneWidget);
   });
 
-  group('verification banner', () {
-    final signedIn = [
+  testWidgets('shows no email verification prompt', (tester) async {
+    final client = FakeApiClient()..onFetchMe = () async => fakeProfile();
+    await _pump(tester, client, overrides: [
       sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
-    ];
+    ]);
 
-    testWidgets('is shown for an unverified account and opens Verify email', (tester) async {
-      final client = FakeApiClient()
-        ..onFetchMe = () async => fakeProfile(emailVerified: false);
-      await _pump(tester, client, overrides: signedIn);
-
-      expect(find.text('Verify your email'), findsOneWidget);
-
-      await tester.tap(find.text('Verify your email'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('verify-screen'), findsOneWidget);
-    });
-
-    testWidgets('is hidden for a verified account', (tester) async {
-      final client = FakeApiClient()..onFetchMe = () async => fakeProfile();
-      await _pump(tester, client, overrides: signedIn);
-
-      expect(find.text('Verify your email'), findsNothing);
-    });
-
-    testWidgets('is hidden while the account is loading', (tester) async {
-      final pending = Completer<UserProfile>();
-      final client = FakeApiClient()..onFetchMe = () => pending.future;
-      await _pumpWithoutSettling(tester, client, signedIn);
-
-      expect(find.text('Verify your email'), findsNothing);
-
-      pending.complete(fakeProfile(emailVerified: false));
-      await tester.pumpAndSettle();
-      expect(find.text('Verify your email'), findsOneWidget);
-    });
+    expect(find.text('Verify your email'), findsNothing);
+    expect(find.text('Trending'), findsOneWidget);
   });
-}
-
-Future<void> _pumpWithoutSettling(
-  WidgetTester tester,
-  FakeApiClient client,
-  List<Override> overrides,
-) async {
-  final router = GoRouter(
-    routes: [GoRoute(path: '/', builder: (_, _) => const HomeScreen())],
-  );
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        apiClientProvider.overrideWithValue(client),
-        homeDebounceProvider.overrideWithValue(const Duration(milliseconds: 10)),
-        ...overrides,
-      ],
-      child: MaterialApp.router(routerConfig: router),
-    ),
-  );
-  await tester.pump();
-  await tester.pump();
 }

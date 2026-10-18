@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_edit/features/auth/registration_draft.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/generation_request.dart';
 import 'package:image_edit/features/common/submit_controller.dart';
@@ -115,6 +116,69 @@ void main() {
     );
     expect(container.read(sessionProvider).value, isNull);
     expect(storage.saved, isNull);
+  });
+
+  test('startRegistration keeps a draft and creates no session', () async {
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+
+    await container.read(sessionProvider.notifier).startRegistration(
+          email: 'new@example.com',
+          password: 'password-1',
+          referralCode: 'K7M2QX9P',
+        );
+
+    final draft = container.read(registrationDraftProvider)!;
+    expect((draft.email, draft.password, draft.referralCode),
+        ('new@example.com', 'password-1', 'K7M2QX9P'));
+    expect(container.read(sessionProvider).value, isNull);
+    expect(storage.saved, isNull);
+  });
+
+  test('a refused startRegistration leaves no draft', () async {
+    client.onRegister = (_, _) async => throw _status(409);
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+
+    await expectLater(
+      container
+          .read(sessionProvider.notifier)
+          .startRegistration(email: 'a@b.co', password: 'password-1'),
+      throwsA(isA<DioException>()),
+    );
+    expect(container.read(registrationDraftProvider), isNull);
+  });
+
+  test('confirmRegistration signs in and clears the draft', () async {
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+    final notifier = container.read(sessionProvider.notifier);
+    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+
+    await notifier.confirmRegistration(code: '123456');
+
+    expect(client.confirmedRegistrations, [
+      ['new@example.com', '123456'],
+    ]);
+    expect(container.read(sessionProvider).value!.email, 'new@example.com');
+    expect(storage.saved?.email, 'new@example.com');
+    expect(container.read(registrationDraftProvider), isNull);
+  });
+
+  test('a rejected confirmation keeps the draft and the user signed out', () async {
+    client.onConfirmRegistration = (_, _) async => throw _status(400);
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+    final notifier = container.read(sessionProvider.notifier);
+    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+
+    await expectLater(
+      notifier.confirmRegistration(code: '000000'),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(container.read(registrationDraftProvider)!.email, 'new@example.com');
+    expect(container.read(sessionProvider).value, isNull);
   });
 
   test('signOut works offline and still clears the local session', () async {

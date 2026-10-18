@@ -143,7 +143,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       context: context,
       builder: (_) => _DeleteAccountDialog(confirmWith: provider),
     );
-    if (confirmation == null) return;
+    // The profile can be gone by now (say the session expired behind the dialog).
+    if (confirmation == null || !mounted) return;
     setState(() => _deleting = true);
     try {
       final notifier = ref.read(sessionProvider.notifier);

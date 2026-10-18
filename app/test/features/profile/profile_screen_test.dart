@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/profile/profile_screen.dart';
+import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_edit/features/profile/profile_providers.dart';
 
 import '../../support/app_harness.dart';
@@ -162,6 +167,47 @@ void main() {
       expect(client.deletedWith, ['password-1']);
       expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
       expect(storage.saved, isNull);
+    });
+
+    testWidgets('confirming after the profile screen has gone does nothing and does not crash', (
+      tester,
+    ) async {
+      // The dialog stays on the navigator while the screen underneath is removed.
+      final showProfile = ValueNotifier<bool>(true);
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => ValueListenableBuilder<bool>(
+              valueListenable: showProfile,
+              builder: (_, show, _) =>
+                  show ? const ProfileScreen() : const Scaffold(body: Text('elsewhere')),
+            ),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(client),
+            sessionStorageProvider.overrideWithValue(storage),
+            appVersionProvider.overrideWith((_) async => '1.2.3 (45)'),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openDialog(tester);
+      await tester.enterText(find.byType(TextField), 'password-1');
+      await tester.pump();
+
+      showProfile.value = false;
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(client.deletedWith, isEmpty);
     });
 
     testWidgets('a wrong password keeps the user on the profile with a message', (tester) async {
