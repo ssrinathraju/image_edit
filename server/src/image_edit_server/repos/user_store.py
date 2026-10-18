@@ -527,10 +527,11 @@ class SqliteUserStore:
             pending = self._read_pending(email)
             if pending is not None:
                 return ConsumeResult.OK, pending
-            if self._email_has_account(email):
-                self._discard_pending(email)
-                raise EmailTakenError(email)
-            return ConsumeResult.EXPIRED, None
+            if not self._email_has_account(email):
+                return ConsumeResult.EXPIRED, None
+            self._discard_pending(email)
+        # Raised outside the `with` so that the discard above commits first.
+        raise EmailTakenError(email)
 
     def complete_registration(
         self,
@@ -561,7 +562,7 @@ class SqliteUserStore:
         current: Optional[PendingRegistration],
         checked: PendingRegistration,
         password_matches: bool,
-    ):
+    ) -> Optional[type[Exception]]:
         if taken:
             return EmailTakenError
         if current != checked or not password_matches:

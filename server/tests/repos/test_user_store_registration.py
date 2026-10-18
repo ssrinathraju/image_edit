@@ -174,6 +174,7 @@ def test_a_provider_creating_the_account_discards_the_pending_row(users):
     assert _count(users, "pending_registrations") == 0
     with pytest.raises(EmailTakenError):
         _confirm(users)
+    assert _count(users, "email_codes") == 0
     assert users.get_by_email(EMAIL).id == user.id
     assert users.get_password_hash(user.id) == ""
 
