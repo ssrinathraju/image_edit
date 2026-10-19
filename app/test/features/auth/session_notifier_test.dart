@@ -40,6 +40,8 @@ ProviderContainer _container(
   return container;
 }
 
+final _dob = DateTime(1990, 1, 31);
+
 void main() {
   late FakeApiClient client;
   late FakeSessionStorage storage;
@@ -133,6 +135,7 @@ void main() {
     await container.read(sessionProvider.notifier).startRegistration(
           email: 'new@example.com',
           password: 'password-1',
+          dateOfBirth: _dob,
           referralCode: 'K7M2QX9P',
         );
 
@@ -143,6 +146,36 @@ void main() {
     expect(storage.saved, isNull);
   });
 
+  test('the draft keeps the date so Resend sends the registration again with it', () async {
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+    final notifier = container.read(sessionProvider.notifier);
+    await notifier.startRegistration(
+      email: 'new@example.com',
+      password: 'password-1',
+      dateOfBirth: _dob,
+    );
+
+    await notifier.resendRegistrationCode();
+
+    expect(client.registeredDates, [_dob, _dob]);
+  });
+
+  test('a provider sign-in passes the date of birth through', () async {
+    final container = _container(client, storage);
+    await container.read(sessionProvider.future);
+    const credential = ProviderCredential(
+      provider: SignInProvider.google,
+      token: 'g-tok',
+    );
+
+    await container
+        .read(sessionProvider.notifier)
+        .signInWithProvider(credential, dateOfBirth: _dob);
+
+    expect(client.googleDates, [_dob]);
+  });
+
   test('a refused startRegistration leaves no draft', () async {
     client.onRegister = (_, _) async => throw _status(409);
     final container = _container(client, storage);
@@ -151,7 +184,11 @@ void main() {
     await expectLater(
       container
           .read(sessionProvider.notifier)
-          .startRegistration(email: 'a@b.co', password: 'password-1'),
+          .startRegistration(
+            email: 'a@b.co',
+            password: 'password-1',
+            dateOfBirth: _dob,
+          ),
       throwsA(isA<DioException>()),
     );
     expect(container.read(registrationDraftProvider), isNull);
@@ -161,7 +198,11 @@ void main() {
     final container = _container(client, storage);
     await container.read(sessionProvider.future);
     final notifier = container.read(sessionProvider.notifier);
-    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+    await notifier.startRegistration(
+      email: 'new@example.com',
+      password: 'password-1',
+      dateOfBirth: _dob,
+    );
 
     await notifier.confirmRegistration(code: '123456');
 
@@ -177,7 +218,11 @@ void main() {
     final container = _container(client, storage);
     await container.read(sessionProvider.future);
     final notifier = container.read(sessionProvider.notifier);
-    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+    await notifier.startRegistration(
+      email: 'new@example.com',
+      password: 'password-1',
+      dateOfBirth: _dob,
+    );
 
     await notifier.signIn(email: 'a@b.co', password: 'password-1');
 
@@ -189,7 +234,11 @@ void main() {
     final container = _container(client, storage);
     await container.read(sessionProvider.future);
     final notifier = container.read(sessionProvider.notifier);
-    await notifier.startRegistration(email: 'new@example.com', password: 'password-1');
+    await notifier.startRegistration(
+      email: 'new@example.com',
+      password: 'password-1',
+      dateOfBirth: _dob,
+    );
 
     await expectLater(
       notifier.confirmRegistration(code: '000000'),

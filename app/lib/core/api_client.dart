@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../configs/app_config.dart';
+import 'date_of_birth.dart';
 import '../features/common/generation_request.dart';
 import '../schemas/job.dart';
 import '../schemas/session.dart';
@@ -20,6 +21,7 @@ abstract class GenerationApiClient {
   Future<void> register({
     required String email,
     required String password,
+    required DateTime dateOfBirth,
     String? referralCode,
   });
   Future<Session> confirmRegistration({
@@ -37,12 +39,20 @@ abstract class GenerationApiClient {
     String? nonce,
   });
 
-  Future<ProviderSession> signInWithGoogle({required String idToken});
+  /// [dateOfBirth] is sent only after the server answered `age_required`.
+  Future<ProviderSession> signInWithGoogle({
+    required String idToken,
+    DateTime? dateOfBirth,
+  });
   Future<ProviderSession> signInWithApple({
     required String identityToken,
     required String nonce,
     required String authorizationCode,
+    DateTime? dateOfBirth,
   });
+  Future<void> confirmAge({required DateTime dateOfBirth});
+  Future<void> acceptConsent({required String version});
+  Future<void> withdrawConsent();
   Future<void> redeemReferral({required String code});
 
   Future<void> requestPasswordReset({required String email});
@@ -175,6 +185,7 @@ class DioApiClient implements GenerationApiClient {
   Future<void> register({
     required String email,
     required String password,
+    required DateTime dateOfBirth,
     String? referralCode,
   }) {
     final code = referralCode?.trim();
@@ -183,6 +194,7 @@ class DioApiClient implements GenerationApiClient {
       data: {
         'email': email,
         'password': password,
+        'date_of_birth': formatIsoDate(dateOfBirth),
         'referral_code': ?(code == null || code.isEmpty ? null : code),
       },
     );
@@ -232,20 +244,41 @@ class DioApiClient implements GenerationApiClient {
       );
 
   @override
-  Future<ProviderSession> signInWithGoogle({required String idToken}) =>
-      _signInWithProvider(_googlePath, {'id_token': idToken});
+  Future<ProviderSession> signInWithGoogle({
+    required String idToken,
+    DateTime? dateOfBirth,
+  }) =>
+      _signInWithProvider(_googlePath, {
+        'id_token': idToken,
+        'date_of_birth': ?_formatOptional(dateOfBirth),
+      });
 
   @override
   Future<ProviderSession> signInWithApple({
     required String identityToken,
     required String nonce,
     required String authorizationCode,
+    DateTime? dateOfBirth,
   }) =>
       _signInWithProvider(_applePath, {
         'identity_token': identityToken,
         'nonce': nonce,
         'authorization_code': authorizationCode,
+        'date_of_birth': ?_formatOptional(dateOfBirth),
       });
+
+  @override
+  Future<void> confirmAge({required DateTime dateOfBirth}) => _dio.post<void>(
+        '/me/age',
+        data: {'date_of_birth': formatIsoDate(dateOfBirth)},
+      );
+
+  @override
+  Future<void> acceptConsent({required String version}) =>
+      _dio.post<void>('/me/consent', data: {'version': version});
+
+  @override
+  Future<void> withdrawConsent() => _dio.delete<void>('/me/consent');
 
   @override
   Future<void> redeemReferral({required String code}) =>
@@ -284,6 +317,9 @@ class DioApiClient implements GenerationApiClient {
     return Session.fromJson(response.data!);
   }
 }
+
+String? _formatOptional(DateTime? date) =>
+    date == null ? null : formatIsoDate(date);
 
 String _imageMimeType(XFile photo) {
   final declared = photo.mimeType;

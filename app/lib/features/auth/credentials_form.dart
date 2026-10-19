@@ -13,9 +13,17 @@ class CredentialsForm extends StatefulWidget {
     this.withReferralCode = false,
     this.emailController,
     this.enabled = true,
+    this.extraField,
+    this.extraFieldReady = true,
     this.describeFailure = describeError,
     super.key,
   });
+
+  /// A field the parent owns, shown below the password (the date of birth).
+  final Widget? extraField;
+
+  /// False while the parent's [extraField] still lacks a value; keeps submit disabled.
+  final bool extraFieldReady;
 
   /// Turns a failed submit into the inline message; defaults to the server's own text.
   final String Function(Object error) describeFailure;
@@ -65,6 +73,7 @@ class _CredentialsFormState extends State<CredentialsForm> {
 
   bool get _canSubmit =>
       widget.enabled &&
+      widget.extraFieldReady &&
       !_submitting &&
       _email.text.trim().isNotEmpty &&
       _password.text.isNotEmpty &&
@@ -120,6 +129,10 @@ class _CredentialsFormState extends State<CredentialsForm> {
             if (_canSubmit) _submit();
           },
         ),
+        if (widget.extraField != null) ...[
+          const SizedBox(height: 12),
+          widget.extraField!,
+        ],
         if (widget.withReferralCode) ...[
           const SizedBox(height: 12),
           TextField(

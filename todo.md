@@ -64,3 +64,7 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-on-device-history
 
 - [ ] **Manual passes never recorded for add-on-device-history** — tasks 3.2 (Android build and merged-manifest check, no Android SDK), 8.2 (simulator/emulator pass) and 8.3 (backup-exclusion check) were never run.
+
+## From add-age-gate-and-face-consent
+
+- [ ] **Legal review of the consent wording** — have the face-photo consent text (`features/consent/consent_text.dart`) and the privacy policy reviewed for GDPR and BIPA before launch; bump `CONSENT_VERSION` when the text changes.

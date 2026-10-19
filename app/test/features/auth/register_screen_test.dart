@@ -7,15 +7,25 @@ import '../../support/fake_session_storage.dart';
 
 late FakeApiClient client;
 
-Future<void> _openRegister(WidgetTester tester) async {
-  await pumpApp(tester, client: client, storage: FakeSessionStorage());
+Future<void> _openRegister(WidgetTester tester, {DateTime? birthDate}) async {
+  await pumpApp(
+    tester,
+    client: client,
+    storage: FakeSessionStorage(),
+    birthDate: birthDate,
+  );
   await tester.tap(find.text('Create an account'));
   await tester.pumpAndSettle();
 }
 
-Future<void> _fill(WidgetTester tester, {String code = ''}) async {
+Future<void> _fill(
+  WidgetTester tester, {
+  String code = '',
+  bool withDate = true,
+}) async {
   await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
   await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+  if (withDate) await chooseDateOfBirth(tester);
   if (code.isNotEmpty) {
     await tester.enterText(
       find.widgetWithText(TextField, 'Referral code (optional)'),
@@ -98,5 +108,66 @@ void main() {
 
     expect(find.text('Too many codes requested, try again later'), findsOneWidget);
     expect(find.text('Confirm registration'), findsNothing);
+  });
+
+  testWidgets('submit stays disabled until a date of birth is chosen', (tester) async {
+    await _openRegister(tester);
+
+    await _fill(tester, withDate: false);
+    FilledButton submit() => tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Create account'),
+        );
+    expect(submit().onPressed, isNull);
+
+    await chooseDateOfBirth(tester);
+    expect(submit().onPressed, isNotNull);
+    expect(find.text('1990-01-31'), findsOneWidget);
+  });
+
+  testWidgets('the date is sent to the server as chosen', (tester) async {
+    await _openRegister(tester, birthDate: DateTime(2001, 3, 4));
+
+    await _fill(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(client.registeredDates, [DateTime(2001, 3, 4)]);
+  });
+
+  testWidgets('under_age shows the message and keeps every entry', (tester) async {
+    client.onRegister = (_, _) async => throw apiError(
+          400,
+          'under_age',
+          'you must be 18 or older to use this app',
+        );
+    await _openRegister(tester);
+
+    await _fill(tester, code: 'K7M2QX9P');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('You must be 18 or older to use this app'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
+    String textOf(String label) =>
+        tester.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
+    expect(textOf('Email'), 'new@example.com');
+    expect(textOf('Password'), 'password-1');
+    expect(textOf('Referral code (optional)'), 'K7M2QX9P');
+    expect(find.text('1990-01-31'), findsOneWidget);
+  });
+
+  testWidgets('invalid_date_of_birth asks for a valid date', (tester) async {
+    client.onRegister = (_, _) async => throw apiError(
+          400,
+          'invalid_date_of_birth',
+          'date of birth is not a real calendar date',
+        );
+    await _openRegister(tester);
+
+    await _fill(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter a valid date of birth'), findsOneWidget);
   });
 }

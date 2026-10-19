@@ -105,6 +105,7 @@ void main() {
       await openRegister(tester);
 
       await _enter(tester, 'new@example.com', 'password-1');
+      await chooseDateOfBirth(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 
@@ -133,6 +134,7 @@ void main() {
       await openRegister(tester);
 
       await _enter(tester, 'ana@example.com', 'password-1');
+      await chooseDateOfBirth(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
       await tester.pumpAndSettle();
 

@@ -55,11 +55,14 @@ class UserProfile {
     this.referral,
     this.providers = const [],
     this.hasPassword = true,
+    this.ageConfirmed = true,
+    this.consent,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final usage = json['usage'];
     final referral = json['referral'];
+    final consent = json['consent'];
     return UserProfile(
       id: json['id'] as String,
       email: json['email'] as String,
@@ -72,6 +75,10 @@ class UserProfile {
           name as String,
       ],
       hasPassword: json['has_password'] as bool? ?? true,
+      ageConfirmed: json['age_confirmed'] as bool? ?? true,
+      consent: consent is Map<String, dynamic>
+          ? ConsentState.fromJson(consent)
+          : null,
     );
   }
 
@@ -86,4 +93,10 @@ class UserProfile {
 
   /// Reads as true when absent, so an old server never sends the user to a provider flow.
   final bool hasPassword;
+
+  /// Reads as true when absent, so an old server never sends the user to the age screen.
+  final bool ageConfirmed;
+
+  /// Null when the server predates consent; nothing is then asked or shown.
+  final ConsentState? consent;
 }

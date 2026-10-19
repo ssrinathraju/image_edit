@@ -37,6 +37,29 @@ class Usage {
   final Map<String, int> planLimits;
 }
 
+/// Whether the account accepted the face-photo consent the server currently asks for.
+class ConsentState {
+  const ConsentState({
+    required this.currentVersion,
+    this.acceptedVersion,
+    this.acceptedAt,
+  });
+
+  factory ConsentState.fromJson(Map<String, dynamic> json) => ConsentState(
+        currentVersion: json['current_version'] as String,
+        acceptedVersion: json['accepted_version'] as String?,
+        acceptedAt: json['accepted_at'] == null
+            ? null
+            : DateTime.parse(json['accepted_at'] as String),
+      );
+
+  final String currentVersion;
+  final String? acceptedVersion;
+  final DateTime? acceptedAt;
+
+  bool get isCurrentVersionAccepted => acceptedVersion == currentVersion;
+}
+
 class Referral {
   const Referral({
     required this.code,

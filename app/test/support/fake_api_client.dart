@@ -51,6 +51,17 @@ class FakeApiClient implements GenerationApiClient {
       onConfirmPasswordReset = (email, _, _) async =>
           Session(token: 'token-reset', userId: 'user-1', email: email);
 
+  Future<void> Function(DateTime dateOfBirth) onConfirmAge = (_) async {};
+  Future<void> Function(String version) onAcceptConsent = (_) async {};
+  Future<void> Function() onWithdrawConsent = () async {};
+
+  final registeredDates = <DateTime>[];
+  final googleDates = <DateTime?>[];
+  final appleDates = <DateTime?>[];
+  final confirmedAges = <DateTime>[];
+  final acceptedConsents = <String>[];
+  var withdrawnConsents = 0;
+
   final queries = <String?>[];
   final registered = <String>[];
   final loggedIn = <String>[];
@@ -93,9 +104,11 @@ class FakeApiClient implements GenerationApiClient {
   Future<void> register({
     required String email,
     required String password,
+    required DateTime dateOfBirth,
     String? referralCode,
   }) {
     registered.add(email);
+    registeredDates.add(dateOfBirth);
     registrationPasswords.add(password);
     referralCodes.add(referralCode);
     return onRegister(email, password);
@@ -142,8 +155,12 @@ class FakeApiClient implements GenerationApiClient {
   }
 
   @override
-  Future<ProviderSession> signInWithGoogle({required String idToken}) {
+  Future<ProviderSession> signInWithGoogle({
+    required String idToken,
+    DateTime? dateOfBirth,
+  }) {
     googleTokens.add(idToken);
+    googleDates.add(dateOfBirth);
     return onSignInWithGoogle(idToken);
   }
 
@@ -152,9 +169,29 @@ class FakeApiClient implements GenerationApiClient {
     required String identityToken,
     required String nonce,
     required String authorizationCode,
+    DateTime? dateOfBirth,
   }) {
     appleSignIns.add([identityToken, nonce, authorizationCode]);
+    appleDates.add(dateOfBirth);
     return onSignInWithApple(identityToken, nonce, authorizationCode);
+  }
+
+  @override
+  Future<void> confirmAge({required DateTime dateOfBirth}) {
+    confirmedAges.add(dateOfBirth);
+    return onConfirmAge(dateOfBirth);
+  }
+
+  @override
+  Future<void> acceptConsent({required String version}) {
+    acceptedConsents.add(version);
+    return onAcceptConsent(version);
+  }
+
+  @override
+  Future<void> withdrawConsent() {
+    withdrawnConsents++;
+    return onWithdrawConsent();
   }
 
   @override
@@ -199,12 +236,22 @@ UserProfile fakeProfile({
   DateTime? resetsAt,
   List<String> providers = const [],
   bool hasPassword = true,
+  bool ageConfirmed = true,
+  bool consentGiven = true,
+  String acceptedConsentVersion = '1',
+  String currentConsentVersion = '1',
 }) =>
     UserProfile(
       id: 'user-1',
       email: 'ana@example.com',
       providers: providers,
       hasPassword: hasPassword,
+      ageConfirmed: ageConfirmed,
+      consent: ConsentState(
+        currentVersion: currentConsentVersion,
+        acceptedVersion: consentGiven ? acceptedConsentVersion : null,
+        acceptedAt: consentGiven ? DateTime.utc(2026, 10, 19, 12) : null,
+      ),
       plan: plan,
       usage: Usage(
         dailyLimit: dailyLimit,

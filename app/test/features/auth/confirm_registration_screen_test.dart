@@ -23,6 +23,7 @@ Future<void> _openConfirmScreen(WidgetTester tester) async {
     find.widgetWithText(TextField, 'Referral code (optional)'),
     'K7M2QX9P',
   );
+  await chooseDateOfBirth(tester);
   await tester.pump();
   await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
   await tester.pumpAndSettle();

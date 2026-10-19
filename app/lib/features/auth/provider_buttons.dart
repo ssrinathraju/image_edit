@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../core/api_errors.dart';
 import '../../core/provider_sign_in.dart';
 import '../common/error_message.dart';
+import '../consent/age_messages.dart';
+import '../consent/provider_age_screen.dart';
 import 'session_notifier.dart';
 
 const String _invalidTokenMessage = 'Sign-in failed, try again';
@@ -53,13 +56,32 @@ class _ProviderButtonsState extends ConsumerState<ProviderButtons> {
     try {
       final credential = await ref.read(signInProviderFor(provider)).signIn();
       if (credential == null) return;
-      await ref.read(sessionProvider.notifier).signInWithProvider(credential);
+      await _signInOrAskAge(credential);
     } catch (error) {
       if (!mounted) return;
       setState(() => _failure = describeProviderSignInError(error, provider));
     } finally {
       if (mounted) setState(() => _inFlight = null);
       widget.onBusyChanged?.call(false);
+    }
+  }
+
+  /// A new account must give a date of birth: the age screen signs in again with
+  /// the same credential and hands back `underAge` when it was refused.
+  Future<void> _signInOrAskAge(ProviderCredential credential) async {
+    final notifier = ref.read(sessionProvider.notifier);
+    try {
+      await notifier.signInWithProvider(credential);
+    } catch (error) {
+      if (!isAgeRequired(error)) rethrow;
+      if (!mounted) return;
+      final outcome = await context.push<ProviderAgeOutcome>(
+        '/age',
+        extra: credential,
+      );
+      if (outcome == ProviderAgeOutcome.underAge && mounted) {
+        setState(() => _failure = underAgeMessage);
+      }
     }
   }
 

@@ -79,4 +79,20 @@ void main() {
     expect(isInvalidProviderToken(coded('provider_unavailable')), isFalse);
     expect(isReferralNotAllowed(StateError('boom')), isFalse);
   });
+
+  test('each age and consent error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 400);
+
+    expect(isInvalidDateOfBirth(coded('invalid_date_of_birth')), isTrue);
+    expect(isUnderAge(coded('under_age')), isTrue);
+    expect(isAgeRequired(coded('age_required')), isTrue);
+    expect(isAgeAlreadyConfirmed(coded('age_already_confirmed')), isTrue);
+    expect(isConsentVersionMismatch(coded('consent_version_mismatch')), isTrue);
+    expect(isAgeNotConfirmed(coded('age_not_confirmed')), isTrue);
+    expect(isConsentRequired(coded('consent_required')), isTrue);
+    expect(isUnderAge(coded('age_required')), isFalse);
+    expect(isConsentRequired(StateError('boom')), isFalse);
+  });
 }

@@ -35,6 +35,8 @@ class _FakeAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+final _dob = DateTime(1990, 1, 31);
+
 DioApiClient _client(
   _FakeAdapter adapter, {
   String? Function()? tokenProvider,
@@ -186,7 +188,7 @@ void main() {
         throwsA(isA<DioException>()),
       );
       await expectLater(
-        client.register(email: 'a@b.co', password: 'x'),
+        client.register(email: 'a@b.co', password: 'x', dateOfBirth: _dob),
         throwsA(isA<DioException>()),
       );
       expect(fired, 0);
@@ -195,11 +197,19 @@ void main() {
     test('register posts the credentials and returns nothing', () async {
       final adapter = _FakeAdapter(<String, dynamic>{});
 
-      await _client(adapter).register(email: 'a@b.co', password: 'password-1');
+      await _client(adapter).register(
+        email: 'a@b.co',
+        password: 'password-1',
+        dateOfBirth: _dob,
+      );
 
       expect(adapter.last!.method, 'POST');
       expect(adapter.last!.path, '/auth/register');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'password': 'password-1',
+        'date_of_birth': '1990-01-31',
+      });
     });
 
     test('register sends a trimmed referral code and omits a blank one', () async {
@@ -209,12 +219,22 @@ void main() {
       await client.register(
         email: 'a@b.co',
         password: 'password-1',
+        dateOfBirth: _dob,
         referralCode: '  k7m2qx9p ',
       );
       expect(adapter.last!.data['referral_code'], 'k7m2qx9p');
 
-      await client.register(email: 'a@b.co', password: 'password-1', referralCode: '  ');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      await client.register(
+        email: 'a@b.co',
+        password: 'password-1',
+        dateOfBirth: _dob,
+        referralCode: '  ',
+      );
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'password': 'password-1',
+        'date_of_birth': '1990-01-31',
+      });
     });
 
     test('confirmRegistration posts the code and parses the session', () async {
@@ -444,12 +464,14 @@ void main() {
       await _client(adapter).register(
         email: 'a@b.co',
         password: 'password-1',
+        dateOfBirth: _dob,
         referralCode: ' k7m2qx9p ',
       );
 
       expect(adapter.last!.data, {
         'email': 'a@b.co',
         'password': 'password-1',
+        'date_of_birth': '1990-01-31',
         'referral_code': 'k7m2qx9p',
       });
     });
@@ -458,15 +480,109 @@ void main() {
       final adapter = _FakeAdapter({'token': 't', 'id': 'u', 'email': 'a@b.co'});
       final client = _client(adapter);
 
-      await client.register(email: 'a@b.co', password: 'password-1');
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      await client.register(
+        email: 'a@b.co',
+        password: 'password-1',
+        dateOfBirth: _dob,
+      );
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'password': 'password-1',
+        'date_of_birth': '1990-01-31',
+      });
 
       await client.register(
         email: 'a@b.co',
         password: 'password-1',
+        dateOfBirth: _dob,
         referralCode: '   ',
       );
-      expect(adapter.last!.data, {'email': 'a@b.co', 'password': 'password-1'});
+      expect(adapter.last!.data, {
+        'email': 'a@b.co',
+        'password': 'password-1',
+        'date_of_birth': '1990-01-31',
+      });
+    });
+  });
+
+  group('age and consent calls', () {
+    test('register sends the date of birth as YYYY-MM-DD, zero-padded', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).register(
+        email: 'a@b.co',
+        password: 'password-1',
+        dateOfBirth: DateTime(2001, 3, 4),
+      );
+
+      expect(adapter.last!.data['date_of_birth'], '2001-03-04');
+    });
+
+    test('provider sign-ins send the date only when given', () async {
+      final adapter = _FakeAdapter({
+        'token': 'tok',
+        'id': 'u1',
+        'email': 'gina@example.com',
+        'created': true,
+      });
+      final client = _client(adapter);
+
+      await client.signInWithGoogle(idToken: 'g-id');
+      expect(adapter.last!.data, {'id_token': 'g-id'});
+
+      await client.signInWithGoogle(idToken: 'g-id', dateOfBirth: _dob);
+      expect(adapter.last!.data, {'id_token': 'g-id', 'date_of_birth': '1990-01-31'});
+
+      await client.signInWithApple(
+        identityToken: 'a-id',
+        nonce: 'raw',
+        authorizationCode: 'code',
+        dateOfBirth: _dob,
+      );
+      expect(adapter.last!.data, {
+        'identity_token': 'a-id',
+        'nonce': 'raw',
+        'authorization_code': 'code',
+        'date_of_birth': '1990-01-31',
+      });
+    });
+
+    test('confirmAge posts the date to /me/age', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).confirmAge(dateOfBirth: _dob);
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/age');
+      expect(adapter.last!.data, {'date_of_birth': '1990-01-31'});
+    });
+
+    test('acceptConsent posts the version and withdrawConsent deletes', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+      final client = _client(adapter);
+
+      await client.acceptConsent(version: '2');
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/consent');
+      expect(adapter.last!.data, {'version': '2'});
+
+      await client.withdrawConsent();
+      expect(adapter.last!.method, 'DELETE');
+      expect(adapter.last!.path, '/me/consent');
+    });
+
+    test('a 401 from the age and consent calls expires the session', () async {
+      var expired = 0;
+      final client = _client(
+        _FakeAdapter({'detail': {'error': 'unauthorized'}}, status: 401),
+        onUnauthorized: () => expired++,
+      );
+
+      await expectLater(
+        client.confirmAge(dateOfBirth: _dob),
+        throwsA(isA<DioException>()),
+      );
+      expect(expired, 1);
     });
   });
 

@@ -35,28 +35,28 @@ Work on branch `feat/add-age-gate-and-face-consent`. Do not push to `main`. Serv
 
 ## 4. App: client, schemas, errors
 
-- [ ] 4.1 Add `dateOfBirth` to `startRegistration`, the optional date to the provider sign-in calls, and `confirmAge`, `acceptConsent` and `withdrawConsent` to the API client. Add `ageConfirmed` and `ConsentState` to the account schema. Add the seven error codes. Verify with `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart`.
+- [x] 4.1 Add `dateOfBirth` to `startRegistration`, the optional date to the provider sign-in calls, and `confirmAge`, `acceptConsent` and `withdrawConsent` to the API client. Add `ageConfirmed` and `ConsentState` to the account schema. Add the seven error codes. Verify with `test/core/api_client_test.dart`, `test/core/api_errors_test.dart` and `test/schemas/account_test.dart`.
 
 ## 5. App: age screens and routing
 
-- [ ] 5.1 Add the date-of-birth field to `register_screen.dart` (Decision 8). Verify that `test/features/auth/register_screen_test.dart` covers submit disabled without a date, the date sent as `YYYY-MM-DD`, and the `under_age` message keeping the values.
-- [ ] 5.2 Add the provider date-of-birth screen (`/age`) and the `age_required` handling in `provider_buttons.dart`, resending the same credential. Verify that `test/features/consent/provider_age_screen_test.dart` covers:
+- [x] 5.1 Add the date-of-birth field to `register_screen.dart` (Decision 8). Verify that `test/features/auth/register_screen_test.dart` covers submit disabled without a date, the date sent as `YYYY-MM-DD`, and the `under_age` message keeping the values.
+- [x] 5.2 Add the provider date-of-birth screen (`/age`) and the `age_required` handling in `provider_buttons.dart`, resending the same credential. Verify that `test/features/consent/provider_age_screen_test.dart` covers:
   - Google `age_required` leading to the screen, then a resend with the date, then signed in;
   - Apple resending the same identity token, nonce and code;
   - `under_age` returning to sign-in with no session;
   - cancel returning with no session.
-- [ ] 5.3 Add `/confirm-age` and `/age-blocked` and the redirect for accounts whose age isn't confirmed. Verify:
+- [x] 5.3 Add `/confirm-age` and `/age-blocked` and the redirect for accounts whose age isn't confirmed. Verify:
   - `test/router_test.dart` covers an unconfirmed account landing on `/confirm-age` and being kept there from every signed-in route, and a confirmed one landing on `/`;
   - the screen tests cover an adult date going home, under 18 going to `/age-blocked`, and Delete account and Sign out there.
 
 ## 6. App: consent
 
-- [ ] 6.1 Add the consent screen and text (`features/consent/`). Gate `submit_flow.dart` (check the version, accept then continue, decline keeps the form, a server `consent_required` opens the screen and retries once, `age_not_confirmed` goes to `/confirm-age`). Add the profile's consent row with Withdraw. Verify that the tests cover every scenario of "Ask for face-photo consent before the first upload" and "Show and withdraw face-photo consent on the profile", including that nothing is uploaded before Accept (the fake API sees no submit call).
-- [ ] 6.2 Add a `todo.md` item: "Have the face-photo consent text (`features/consent/consent_text.dart`) and the privacy policy reviewed for GDPR and BIPA before launch; bump `CONSENT_VERSION` when the text changes." Verify that the item is present.
+- [x] 6.1 Add the consent screen and text (`features/consent/`). Gate `submit_flow.dart` (check the version, accept then continue, decline keeps the form, a server `consent_required` opens the screen and retries once, `age_not_confirmed` goes to `/confirm-age`). Add the profile's consent row with Withdraw. Verify that the tests cover every scenario of "Ask for face-photo consent before the first upload" and "Show and withdraw face-photo consent on the profile", including that nothing is uploaded before Accept (the fake API sees no submit call).
+- [x] 6.2 Add a `todo.md` item: "Have the face-photo consent text (`features/consent/consent_text.dart`) and the privacy policy reviewed for GDPR and BIPA before launch; bump `CONSENT_VERSION` when the text changes." Verify that the item is present.
 
 ## 7. Integration and hand-off
 
-- [ ] 7.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `server/storage/inputs` count and the `app.db` md5 are unchanged, and that `openspec validate add-age-gate-and-face-consent --strict` passes.
+- [x] 7.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `server/storage/inputs` count and the `app.db` md5 are unchanged, and that `openspec validate add-age-gate-and-face-consent --strict` passes.
 - [ ] 7.2 **Manual. iOS simulator**, against a local log-mode server on a temporary storage root:
   - Register with an under-18 date and see the message.
   - Register with an adult date, confirm the code, generate. The consent screen appears: Decline keeps the form, and Accept continues to the status screen.

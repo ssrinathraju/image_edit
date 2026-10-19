@@ -139,6 +139,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
     await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+    await chooseDateOfBirth(tester);
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
     await tester.pumpAndSettle();
@@ -155,6 +156,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
     await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+    await chooseDateOfBirth(tester);
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
     await tester.pumpAndSettle();
@@ -277,6 +279,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, 'Email'), 'new@example.com');
       await tester.enterText(find.widgetWithText(TextField, 'Password'), 'password-1');
+      await chooseDateOfBirth(tester);
       await tester.pump();
 
       await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
@@ -368,5 +371,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
     expect(find.text('My creations'), findsNothing);
+  });
+
+  group('age gate', () {
+    testWidgets('a confirmed account lands on home', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      await pumpApp(tester, client: client, storage: FakeSessionStorage(savedSession));
+
+      expect(find.text('Trending'), findsOneWidget);
+      expect(find.text('Confirm your age'), findsNothing);
+    });
+
+    testWidgets('an unconfirmed account lands on Confirm your age', (tester) async {
+      client.onFetchMe = () async => fakeProfile(ageConfirmed: false);
+      await pumpApp(tester, client: client, storage: FakeSessionStorage(savedSession));
+
+      expect(find.text('Confirm your age'), findsOneWidget);
+      expect(find.text('Trending'), findsNothing);
+    });
+
+    for (final route in ['/', '/profile', '/creations', '/create', '/invite', '/consent']) {
+      testWidgets('an unconfirmed account cannot open $route', (tester) async {
+        client.onFetchMe = () async => fakeProfile(ageConfirmed: false);
+        final container = await pumpApp(
+          tester,
+          client: client,
+          storage: FakeSessionStorage(savedSession),
+        );
+
+        container.read(routerProvider).go(route);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Confirm your age'), findsOneWidget);
+      });
+    }
+
+    testWidgets('a confirmed account is sent away from Confirm your age', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      final container = await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(savedSession),
+      );
+
+      container.read(routerProvider).go('/confirm-age');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trending'), findsOneWidget);
+    });
+
+    testWidgets('the age screen needs the credential it is opened with', (tester) async {
+      final container = await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+      container.read(routerProvider).go('/age');
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+      expect(find.text('Your date of birth'), findsNothing);
+    });
   });
 }

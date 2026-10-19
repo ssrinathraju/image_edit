@@ -33,8 +33,16 @@ Future<void> submitAndOpenStatus(
   final messenger = ScaffoldMessenger.of(context);
   final account = ref.read(accountProvider.notifier);
   final userId = ref.read(sessionProvider).valueOrNull?.userId;
+  final consent = ref.read(accountProvider).valueOrNull?.consent;
+  // Nothing is uploaded before the user has accepted the current consent text.
+  if (consent != null &&
+      !consent.isCurrentVersionAccepted &&
+      !await _askConsent(router)) {
+    return;
+  }
   try {
-    final jobId = await ref.read(submitControllerProvider.notifier).submit(request);
+    final jobId = await _submitAskingConsentIfRefused(ref, router, account, request);
+    if (jobId == null) return;
     if (userId != null) unawaited(_rememberJob(ref, userId, jobId, request));
     router.go('/status/$jobId');
     unawaited(account.refresh());
@@ -44,12 +52,41 @@ Future<void> submitAndOpenStatus(
     // The reset time comes from the account as last loaded; it only changes
     // at midnight UTC, so a stale value is still right.
     final resetsAt = ref.read(accountProvider).valueOrNull?.usage?.resetsAt;
+    if (isAgeNotConfirmed(error)) {
+      // The router keeps the user on the age screen once the account reads as unconfirmed.
+      await account.refresh();
+      router.go('/confirm-age');
+      return;
+    }
     unawaited(account.refresh());
     if (isQuotaExceeded(error) && context.mounted) {
       await showLimitReachedDialog(context, resetsAt: resetsAt);
       return;
     }
     messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
+  }
+}
+
+Future<bool> _askConsent(GoRouter router) async =>
+    await router.push<bool>('/consent') == true;
+
+/// Submits; when the server answers `consent_required` the consent screen opens
+/// and, once accepted, the same request is sent one more time. Null means the
+/// user declined.
+Future<String?> _submitAskingConsentIfRefused(
+  WidgetRef ref,
+  GoRouter router,
+  AccountNotifier account,
+  GenerationRequest request,
+) async {
+  final controller = ref.read(submitControllerProvider.notifier);
+  try {
+    return await controller.submit(request);
+  } catch (error) {
+    if (!isConsentRequired(error)) rethrow;
+    await account.refresh();
+    if (!await _askConsent(router)) return null;
+    return controller.submit(request);
   }
 }
 

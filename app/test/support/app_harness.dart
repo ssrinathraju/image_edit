@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/consent/date_of_birth_field.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/plans/invite_screen.dart';
@@ -35,6 +36,15 @@ class FakeShare {
   Future<void> call(String text, {Rect? origin}) async => texts.add(text);
 }
 
+/// What the date picker returns in widget tests unless a test chooses another.
+final defaultBirthDate = DateTime(1990, 1, 31);
+
+/// Taps the Date of birth field; the test picker answers at once.
+Future<void> chooseDateOfBirth(WidgetTester tester) async {
+  await tester.tap(find.byType(DateOfBirthField));
+  await tester.pumpAndSettle();
+}
+
 DioException apiError(int status, String code, String detail) => DioException(
       requestOptions: RequestOptions(path: '/x'),
       response: Response(
@@ -63,6 +73,7 @@ Future<ProviderContainer> pumpApp(
   TargetPlatform platform = TargetPlatform.android,
   bool settle = true,
   InMemoryCreationStore? store,
+  DateTime? birthDate,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -72,6 +83,10 @@ Future<ProviderContainer> pumpApp(
     ProviderScope(
       overrides: [
         apiClientProvider.overrideWithValue(client),
+        dateOfBirthPickerProvider.overrideWithValue(
+          (context, {required initialDate, required lastDate}) async =>
+              birthDate ?? defaultBirthDate,
+        ),
         creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
         sessionStorageProvider.overrideWithValue(storage),
         profileLinksProvider.overrideWithValue(links),
