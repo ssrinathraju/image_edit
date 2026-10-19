@@ -51,7 +51,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 5. Catch up
 
-- [ ] 5.1 Add `features/history/history_sync.dart`, following Decision 5: single-flight, running per pending entry in order, using the 24-hour cutoff, and stopping on a network error or 401. Verify that `test/features/history/history_sync_test.dart`, with a fake service and a fake clock, covers:
+- [x] 5.1 Add `features/history/history_sync.dart`, following Decision 5: single-flight, running per pending entry in order, using the 24-hour cutoff, and stopping on a network error or 401. Verify that `test/features/history/history_sync_test.dart`, with a fake service and a fake clock, covers:
   - succeeded being saved;
   - failed being forgotten;
   - 404 being forgotten;
