@@ -156,7 +156,7 @@ The system SHALL expose `POST /auth/password-reset/request`, without authenticat
 
 ### Requirement: Start a registration
 
-The system SHALL accept `POST /auth/register` with an `email`, a `password`, and an optional `referral_code`. It SHALL NOT create an account. It SHALL hold the registration as pending, email a registration code to that address as described by the email-codes capability, and respond with HTTP 202 and an empty body. Emails SHALL be matched case-insensitively and stored in lowercase. Passwords SHALL be between 8 and 128 characters. An unknown `referral_code` SHALL be rejected as described by the referrals capability. Registering the same email again SHALL replace the pending registration and its code. When a sending limit applies, the system SHALL respond with HTTP 429, error `too_many_requests`, and a `Retry-After` header, and keep the previous pending registration.
+The system SHALL accept `POST /auth/register` with an `email`, a `password`, a `date_of_birth`, and an optional `referral_code`. The `date_of_birth` SHALL be checked as described by the age-and-consent capability before anything else is stored or sent. It SHALL NOT create an account. It SHALL hold the registration as pending, email a registration code to that address as described by the email-codes capability, and respond with HTTP 202 and an empty body. Emails SHALL be matched case-insensitively and stored in lowercase. Passwords SHALL be between 8 and 128 characters. An unknown `referral_code` SHALL be rejected as described by the referrals capability. Registering the same email again SHALL replace the pending registration and its code. When a sending limit applies, the system SHALL respond with HTTP 429, error `too_many_requests`, and a `Retry-After` header, and keep the previous pending registration.
 
 #### Scenario: Valid registration sends a code and creates no account
 
@@ -193,6 +193,22 @@ The system SHALL accept `POST /auth/register` with an `email`, a `password`, and
 - **WHEN** a client registers with a valid email and password and a referral code that matches no account
 - **THEN** the system responds with HTTP 400 and error `invalid_referral_code`
 - **AND** no code is sent
+
+#### Scenario: Under-18 registration is refused
+
+- **WHEN** a client registers with a date of birth 17 years and 364 days before today
+- **THEN** the system responds with HTTP 400 and error `under_age`
+- **AND** no code is sent and no pending registration exists for that email
+
+#### Scenario: Missing date of birth is refused
+
+- **WHEN** a client registers without a `date_of_birth`
+- **THEN** the system responds with an error and no code is sent
+
+#### Scenario: Confirmed registration is age-confirmed
+
+- **WHEN** a client registers with a date of birth exactly 18 years before today and confirms the emailed code
+- **THEN** `GET /me` for the new account reports `age_confirmed` true
 
 ### Requirement: Complete registration with the emailed code
 
