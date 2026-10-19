@@ -95,4 +95,4 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
   - **Android:** run `adb shell bmgr backupnow <package>` and confirm, from `adb logcat` or by restoring, that `files/creations/` isn't included.
 
   This box stays unticked until someone runs it.
-- [ ] 8.4 Push `feat/add-on-device-history`. Verify with `git log origin/feat/add-on-device-history -1` that it matches the local HEAD.
+- [x] 8.4 Push `feat/add-on-device-history`. Verify with `git log origin/feat/add-on-device-history -1` that it matches the local HEAD.
