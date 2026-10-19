@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api_errors.dart';
 import '../../core/provider_sign_in.dart';
+import '../../core/date_of_birth.dart';
 import '../../schemas/account.dart';
 import '../../schemas/session.dart';
 import '../auth/session_notifier.dart';
 import '../common/error_message.dart';
+import 'delete_account_flow.dart';
 import '../plans/account_notifier.dart';
 import 'profile_providers.dart';
 
@@ -51,6 +52,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (account != null) _ProviderLines(providers: account.providers),
           if (account?.usage != null) _PlanCard(account: account!),
           const Divider(),
+          if (account?.consent != null) _ConsentRow(consent: account!.consent!),
           ListTile(
             leading: const Icon(Icons.card_giftcard),
             title: const Text('Invite friends'),
@@ -91,7 +93,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
             enabled: !_deleting,
-            onTap: () => _confirmDelete(context, ref, account),
+            onTap: () => runDeleteAccountFlow(
+              context,
+              ref,
+              account,
+              onBusyChanged: (busy) {
+                if (mounted) setState(() => _deleting = busy);
+              },
+            ),
           ),
           if (version != null)
             Padding(
@@ -129,53 +138,64 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       await ref.read(sessionProvider.notifier).signOut();
     }
   }
+}
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    UserProfile? account,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final provider = account != null && !account.hasPassword
-        ? _providerToConfirmWith(account)
-        : null;
-    final confirmation = await showDialog<String>(
-      context: context,
-      builder: (_) => _DeleteAccountDialog(confirmWith: provider),
+/// The Face photo consent row: when it was given and a way to withdraw it.
+class _ConsentRow extends ConsumerWidget {
+  const _ConsentRow({required this.consent});
+
+  final ConsentState consent;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final givenAt = consent.acceptedAt;
+    final given = consent.isCurrentVersionAccepted;
+    return ListTile(
+      leading: const Icon(Icons.face_retouching_natural_outlined),
+      title: const Text('Face photo consent'),
+      subtitle: Text(
+        given
+            ? (givenAt == null
+                ? 'Given'
+                : 'Given on ${formatIsoDate(givenAt.toLocal())}')
+            : 'Not given',
+      ),
+      trailing: given
+          ? TextButton(
+              onPressed: () => _withdraw(context, ref),
+              child: const Text('Withdraw'),
+            )
+          : null,
     );
-    // The profile can be gone by now (say the session expired behind the dialog).
-    if (confirmation == null || !mounted) return;
-    setState(() => _deleting = true);
+  }
+
+  Future<void> _withdraw(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Withdraw consent?'),
+        content: const Text(
+          'We will ask again before your next photo is used.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     try {
-      final notifier = ref.read(sessionProvider.notifier);
-      if (provider == null) {
-        await notifier.deleteAccount(password: confirmation);
-      } else {
-        final credential = await ref.read(signInProviderFor(provider)).signIn();
-        if (credential == null) return;
-        await notifier.deleteAccountWithProvider(credential);
-      }
+      await ref.read(accountProvider.notifier).withdrawConsent();
     } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(_deleteErrorMessage(error, provider))),
-      );
-    } finally {
-      if (mounted) setState(() => _deleting = false);
+      messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
     }
-  }
-
-  /// Apple when the account is linked to it and this is an iPhone, otherwise Google.
-  SignInProvider _providerToConfirmWith(UserProfile account) {
-    final isIos = ref.read(targetPlatformProvider) == TargetPlatform.iOS;
-    final hasApple = account.providers.contains(SignInProvider.apple.apiName);
-    return hasApple && isIos ? SignInProvider.apple : SignInProvider.google;
-  }
-
-  String _deleteErrorMessage(Object error, SignInProvider? provider) {
-    if (provider != null && isInvalidProviderToken(error)) {
-      return "Couldn't confirm with ${provider.label}";
-    }
-    return describeError(error);
   }
 }
 
@@ -291,71 +311,5 @@ class _LinkTile extends ConsumerWidget {
         const SnackBar(content: Text('Could not open the link.')),
       );
     }
-  }
-}
-
-class _DeleteAccountDialog extends StatefulWidget {
-  const _DeleteAccountDialog({this.confirmWith});
-
-  /// Set for an account without a password: it confirms by signing in again with this provider.
-  final SignInProvider? confirmWith;
-
-  @override
-  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
-}
-
-class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
-  final _password = TextEditingController();
-
-  @override
-  void dispose() {
-    _password.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = widget.confirmWith;
-    return AlertDialog(
-      title: const Text('Delete account?'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'This is permanent. Your account, your sign-ins and your '
-            'generated images are deleted and cannot be recovered.',
-          ),
-          const SizedBox(height: 16),
-          if (provider == null)
-            TextField(
-              controller: _password,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (_) => setState(() {}),
-            )
-          else
-            Text("You'll be asked to sign in with ${provider.label} again to confirm."),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-          onPressed: provider == null && _password.text.isEmpty
-              ? null
-              : () => Navigator.of(context).pop(_password.text),
-          child: const Text('Delete account'),
-        ),
-      ],
-    );
   }
 }

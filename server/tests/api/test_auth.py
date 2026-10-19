@@ -1,10 +1,10 @@
 import pytest
 
-from tests.helpers import DEFAULT_PASSWORD, register_headers
+from tests.helpers import ADULT_DOB, DEFAULT_PASSWORD, register_headers
 
 
 def _register(client, email="ana@example.com", password=DEFAULT_PASSWORD, **extra):
-    body = {"email": email, "password": password, **extra}
+    body = {"email": email, "password": password, "date_of_birth": ADULT_DOB, **extra}
     return client.post("/auth/register", json=body)
 
 
@@ -157,7 +157,7 @@ def test_a_registration_confirmed_after_google_created_the_account_is_409(
 ):
     _register(anon_client)
     google_verifier.add("g-tok", "g-1", email="ana@example.com")
-    google = anon_client.post("/auth/oauth/google", json={"id_token": "g-tok"}).json()
+    google = anon_client.post("/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": ADULT_DOB}).json()
 
     resp = _confirm(anon_client, sender)
 
@@ -239,7 +239,7 @@ def test_me_returns_identity_without_password_material(client):
     body = resp.json()
     assert set(body) == {
         "id", "email", "created_at", "plan", "usage", "referral",
-        "providers", "has_password",
+        "providers", "has_password", "age_confirmed", "consent",
     }
     assert "hash" not in resp.text
 
@@ -397,7 +397,7 @@ def test_the_hourly_cap_counts_registration_and_reset_codes_together(
 
 def _google_account(client, google_verifier, email="gina@example.com"):
     google_verifier.add("g-tok", "g-1", email=email)
-    return client.post("/auth/oauth/google", json={"id_token": "g-tok"})
+    return client.post("/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": ADULT_DOB})
 
 
 def test_password_login_on_a_google_account_fails_like_a_wrong_password(
@@ -446,7 +446,7 @@ def test_password_reset_gives_a_google_account_a_password(
         "/auth/login",
         json={"email": "gina@example.com", "password": "a brand new password"},
     )
-    again = anon_client.post("/auth/oauth/google", json={"id_token": "g-tok"})
+    again = anon_client.post("/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": ADULT_DOB})
 
     assert confirm.status_code == 200
     assert login.status_code == 200
@@ -515,3 +515,63 @@ def test_a_reregistration_between_the_password_check_and_the_commit_is_registrat
     assert (resp.status_code, resp.json()["detail"]["error"]) == (409, "registration_changed")
     assert _login(anon_client).status_code == 401
     assert _login(anon_client, password="attacker password 2").status_code == 401
+
+
+# ── Age check on registration ───────────────────────────────────────────
+
+EXACTLY_18 = "2008-01-01"  # the fake clock reads 2026-01-01
+ONE_DAY_SHORT = "2008-01-02"
+
+
+def _pending_count(user_store) -> int:
+    return user_store._conn.execute("SELECT COUNT(*) FROM pending_registrations").fetchone()[0]
+
+
+def test_under_18_registration_sends_no_code_and_leaves_no_pending_row(
+    anon_client, sender, user_store
+):
+    resp = _register(anon_client, date_of_birth=ONE_DAY_SHORT)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "under_age"
+    assert sender.count_for("ana@example.com") == 0
+    assert _pending_count(user_store) == 0
+
+
+def test_registration_without_a_date_of_birth_is_refused_and_sends_no_code(
+    anon_client, sender
+):
+    resp = anon_client.post(
+        "/auth/register", json={"email": "ana@example.com", "password": DEFAULT_PASSWORD}
+    )
+
+    assert resp.status_code == 422
+    assert sender.count_for("ana@example.com") == 0
+
+
+def test_registration_at_exactly_18_is_confirmed_as_an_adult(anon_client, sender):
+    token = _signup(anon_client, sender, date_of_birth=EXACTLY_18).json()["token"]
+
+    me = anon_client.get("/me", headers=_bearer(token)).json()
+
+    assert me["age_confirmed"] is True
+
+
+def test_a_malformed_date_of_birth_is_400_and_sends_no_code(anon_client, sender):
+    resp = _register(anon_client, date_of_birth="2008-13-01")
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_date_of_birth"
+    assert sender.count_for("ana@example.com") == 0
+
+
+def test_the_age_check_runs_before_the_email_is_looked_at(anon_client, sender):
+    resp = _register(anon_client, email="not-an-email", date_of_birth=ONE_DAY_SHORT)
+
+    assert resp.json()["detail"]["error"] == "under_age"
+
+
+def test_login_works_without_a_date_of_birth(anon_client, sender):
+    _signup(anon_client, sender)
+
+    assert _login(anon_client).status_code == 200

@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     REFERRAL_BONUS: int = 5
     REFERRAL_MAX_REWARDS: int = 10
 
+    CONSENT_VERSION: str = Field(default="1", min_length=1)
+
     SMTP_HOST: str = ""  # empty means codes are written to the log instead of emailed
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""

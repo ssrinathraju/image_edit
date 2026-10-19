@@ -11,7 +11,7 @@ def _delete(client, headers=None, **body):
 
 def _google_account(client, google_verifier, subject="g-1", email="gina@example.com"):
     google_verifier.add(f"signin-{subject}", subject, email=email)
-    resp = client.post("/auth/oauth/google", json={"id_token": f"signin-{subject}"})
+    resp = client.post("/auth/oauth/google", json={"id_token": f"signin-{subject}", "date_of_birth": "1990-01-01"})
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
 
@@ -20,7 +20,7 @@ def _apple_account(client, apple_verifier, subject="a-1", email="ann@example.com
     apple_verifier.add(f"signin-{subject}", subject, email=email)
     resp = client.post(
         "/auth/oauth/apple",
-        json={"identity_token": f"signin-{subject}", "nonce": "n", "authorization_code": "c"},
+        json={"identity_token": f"signin-{subject}", "nonce": "n", "authorization_code": "c", "date_of_birth": "1990-01-01"},
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
@@ -57,7 +57,7 @@ def test_google_only_account_deletes_with_a_fresh_token_and_can_sign_up_again(
 
     assert resp.status_code == 204
     assert not _usable(anon_client, headers)
-    again = anon_client.post("/auth/oauth/google", json={"id_token": "signin-g-1"})
+    again = anon_client.post("/auth/oauth/google", json={"id_token": "signin-g-1", "date_of_birth": "1990-01-01"})
     assert again.json()["created"] is True
     assert again.json()["id"] != old_id
 
@@ -186,7 +186,7 @@ def test_a_password_account_linked_to_apple_also_revokes_on_password_delete(
     apple_verifier.add("a", "a-1", email="ana@example.com")
     client.post(
         "/auth/oauth/apple",
-        json={"identity_token": "a", "nonce": "n", "authorization_code": "c"},
+        json={"identity_token": "a", "nonce": "n", "authorization_code": "c", "date_of_birth": "1990-01-01"},
     )
 
     assert _delete(client, password=DEFAULT_PASSWORD).status_code == 204

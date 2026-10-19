@@ -78,16 +78,19 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   Future<void> startRegistration({
     required String email,
     required String password,
+    required DateTime dateOfBirth,
     String? referralCode,
   }) async {
     await ref.read(apiClientProvider).register(
           email: email,
           password: password,
+          dateOfBirth: dateOfBirth,
           referralCode: referralCode,
         );
     ref.read(registrationDraftProvider.notifier).state = RegistrationDraft(
       email: email,
       password: password,
+      dateOfBirth: dateOfBirth,
       referralCode: referralCode,
     );
   }
@@ -99,6 +102,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     await ref.read(apiClientProvider).register(
           email: draft.email,
           password: draft.password,
+          dateOfBirth: draft.dateOfBirth,
           referralCode: draft.referralCode,
         );
   }
@@ -119,17 +123,23 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   }
 
   /// Signs in with what a Google or Apple sheet returned; the server links,
-  /// finds or creates the account.
-  Future<void> signInWithProvider(ProviderCredential credential) async {
+  /// finds or creates the account. [dateOfBirth] is sent after the server
+  /// answered `age_required`, which only a new account gets.
+  Future<void> signInWithProvider(
+    ProviderCredential credential, {
+    DateTime? dateOfBirth,
+  }) async {
     final api = ref.read(apiClientProvider);
     final result = switch (credential.provider) {
       SignInProvider.google => await api.signInWithGoogle(
           idToken: credential.token,
+          dateOfBirth: dateOfBirth,
         ),
       SignInProvider.apple => await api.signInWithApple(
           identityToken: credential.token,
           nonce: credential.nonce!,
           authorizationCode: credential.authorizationCode ?? '',
+          dateOfBirth: dateOfBirth,
         ),
     };
     _justCreatedViaProvider = result.created;

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import DEFAULT_PASSWORD, RecordingSender, forget_recent_sends
+from tests.helpers import DEFAULT_PASSWORD, RecordingSender, forget_recent_sends, grant_consent
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
@@ -23,7 +23,7 @@ def app_client(tmp_path, templates_dir, sender):
 
 
 def _start(client, email, code=None) -> None:
-    body = {"email": email, "password": DEFAULT_PASSWORD}
+    body = {"email": email, "password": DEFAULT_PASSWORD, "date_of_birth": "1990-01-01"}
     if code:
         body["referral_code"] = code
     resp = client.post("/auth/register", json=body)
@@ -53,6 +53,7 @@ def _bonus(client, headers) -> int:
 
 
 def _submit(client, headers):
+    grant_consent(client, headers)
     return client.post(
         "/generations",
         data={"prompt": "a family at sunset"},

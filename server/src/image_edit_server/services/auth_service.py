@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from fastapi import BackgroundTasks, HTTPException
 
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core.age import InvalidDateOfBirth, UnderAge, check_date_of_birth
 from image_edit_server.core.email_codes import CodePurpose, ConsumeResult
 from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.login_throttle import LoginThrottle
@@ -19,12 +20,14 @@ from image_edit_server.core.identity_verifier import (
     ProviderUnavailable,
 )
 from image_edit_server.core.user_store import (
+    AgeRequired,
     EmailTakenError,
     InvalidReferralCode,
     ProviderAlreadyLinked,
     ProviderEmailMissing,
     ProviderEmailUnverified,
     RegistrationChanged,
+    UnderAgeSignUp,
     UserStore,
 )
 from image_edit_server.schemas.api import ErrorBody
@@ -66,6 +69,14 @@ def _invalid_reset_code() -> HTTPException:
     return _error(400, "invalid_code", "code is incorrect or has expired")
 
 
+def _under_age() -> HTTPException:
+    return _error(400, "under_age", "you must be 18 or older to use this app")
+
+
+def _invalid_date_of_birth(error: InvalidDateOfBirth) -> HTTPException:
+    return _error(400, "invalid_date_of_birth", str(error))
+
+
 def normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -95,10 +106,12 @@ class AuthService:
         self,
         email: str,
         password: str,
+        date_of_birth: str,
         referral_code: Optional[str],
         background: BackgroundTasks,
     ) -> None:
-        """Hold a registration as pending and email its code; no account exists until it is confirmed."""
+        """Hold an adult's registration as pending and email its code; no account exists until it is confirmed."""
+        self._require_adult_date_of_birth(date_of_birth)
         normalized = normalize_email(email)
         self._validate_credentials_format(normalized, password)
         password_hash = hash_password(password)
@@ -222,11 +235,24 @@ class AuthService:
         *,
         nonce: Optional[str] = None,
         authorization_code: Optional[str] = None,
+        date_of_birth: Optional[str] = None,
     ) -> tuple[str, User, bool]:
         """Sign in to the account for a provider token, linking or creating it; returns (session, user, created)."""
+        adult_confirmed = self._adult_confirmed(date_of_birth)
         identity = self._verify_provider_token(provider, token, nonce, 401)
         try:
-            user, created = self._users.sign_in_with_identity(identity, self._clock())
+            user, created = self._users.sign_in_with_identity(
+                identity, self._clock(), adult_confirmed
+            )
+        except AgeRequired:
+            raise _error(
+                400,
+                "age_required",
+                "send a date_of_birth (YYYY-MM-DD) to create an account",
+            )
+        except UnderAgeSignUp:
+            logger.info("Refused a provider sign-up: under 18")
+            raise _under_age()
         except ProviderEmailUnverified:
             raise _error(
                 400, "provider_email_unverified", f"the {provider} email is not verified"
@@ -247,6 +273,36 @@ class AuthService:
             self._store_apple_refresh_token(user, authorization_code)
         logger.info("Provider sign-in: user %s via %s created=%s", user.id, provider, created)
         return self._start_session(user), user, created
+
+    def confirm_age(self, user: User, date_of_birth: str) -> None:
+        """Mark the account's age confirmed for an adult date; the date itself is never kept."""
+        if user.age_confirmed:
+            raise _error(409, "age_already_confirmed", "this account's age is already confirmed")
+        try:
+            check_date_of_birth(date_of_birth, self._today())
+        except InvalidDateOfBirth as error:
+            raise _invalid_date_of_birth(error)
+        except UnderAge:
+            logger.info("Refused an age confirmation: under 18")
+            raise _error(403, "under_age", "you must be 18 or older to use this app")
+        self._users.confirm_age(user.id, self._clock())
+        logger.info("Confirmed the age of account %s", user.id)
+
+    def accept_consent(self, user: User, version: str) -> None:
+        """Record acceptance of the current consent version; any other version is refused."""
+        current = self._settings.CONSENT_VERSION
+        if version != current:
+            raise _error(
+                400,
+                "consent_version_mismatch",
+                f"the current consent version is {current!r}, got {version!r}",
+            )
+        self._users.set_consent(user.id, version, self._clock())
+        logger.info("Account %s accepted consent version %s", user.id, version)
+
+    def withdraw_consent(self, user: User) -> None:
+        self._users.clear_consent(user.id)
+        logger.info("Account %s withdrew consent", user.id)
 
     def delete_account(
         self,
@@ -314,6 +370,30 @@ class AuthService:
                 "provider_unavailable",
                 f"{provider} could not be reached; try again shortly",
             )
+
+    def _today(self) -> date:
+        return self._clock().astimezone(timezone.utc).date()
+
+    def _require_adult_date_of_birth(self, date_of_birth: str) -> None:
+        try:
+            check_date_of_birth(date_of_birth, self._today())
+        except InvalidDateOfBirth as error:
+            raise _invalid_date_of_birth(error)
+        except UnderAge:
+            logger.info("Refused a registration: under 18")
+            raise _under_age()
+
+    def _adult_confirmed(self, date_of_birth: Optional[str]) -> Optional[bool]:
+        """None when no date was sent, otherwise whether it shows an adult."""
+        if date_of_birth is None:
+            return None
+        try:
+            check_date_of_birth(date_of_birth, self._today())
+        except InvalidDateOfBirth as error:
+            raise _invalid_date_of_birth(error)
+        except UnderAge:
+            return False
+        return True
 
     def _store_apple_refresh_token(self, user: User, code: Optional[str]) -> None:
         if self._apple_client is None or not code:

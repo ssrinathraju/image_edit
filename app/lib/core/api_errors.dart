@@ -45,6 +45,27 @@ const String providerAlreadyLinkedCode = 'provider_already_linked';
 const String referralNotAllowedCode = 'referral_not_allowed';
 const String invalidReferralCodeCode = 'invalid_referral_code';
 
+const String invalidDateOfBirthCode = 'invalid_date_of_birth';
+const String underAgeCode = 'under_age';
+const String ageRequiredCode = 'age_required';
+const String ageAlreadyConfirmedCode = 'age_already_confirmed';
+const String consentVersionMismatchCode = 'consent_version_mismatch';
+const String ageNotConfirmedCode = 'age_not_confirmed';
+const String consentRequiredCode = 'consent_required';
+
+bool isInvalidDateOfBirth(Object error) =>
+    errorCodeOf(error) == invalidDateOfBirthCode;
+bool isUnderAge(Object error) => errorCodeOf(error) == underAgeCode;
+bool isAgeRequired(Object error) => errorCodeOf(error) == ageRequiredCode;
+bool isAgeAlreadyConfirmed(Object error) =>
+    errorCodeOf(error) == ageAlreadyConfirmedCode;
+bool isConsentVersionMismatch(Object error) =>
+    errorCodeOf(error) == consentVersionMismatchCode;
+bool isAgeNotConfirmed(Object error) =>
+    errorCodeOf(error) == ageNotConfirmedCode;
+bool isConsentRequired(Object error) =>
+    errorCodeOf(error) == consentRequiredCode;
+
 bool isInvalidProviderToken(Object error) =>
     errorCodeOf(error) == invalidProviderTokenCode;
 bool isProviderEmailUnverified(Object error) =>

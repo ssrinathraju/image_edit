@@ -1,6 +1,6 @@
 import hashlib
 import sqlite3
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -173,7 +173,7 @@ def test_fresh_database_has_the_email_keyed_code_schema(tmp_path):
     assert _columns(path, "pending_registrations") == {
         "email", "password_hash", "referral_code", "created_at"
     }
-    assert _user_version(path) == 4
+    assert _user_version(path) == 5
     assert _verified_flags(SqliteUserStore(path)) == {}
     created = store.create_user("ana@example.com", "hash")
     assert _verified_flags(store) == {created.id: 1}
@@ -187,7 +187,7 @@ def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db)
     assert _verified_flags(store) == {"u0": 1, "u1": 1}
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_user_by_session("v2-token").id == "u0"
-    assert _user_version(v2_db) == 4
+    assert _user_version(v2_db) == 5
 
 
 def test_running_the_migration_twice_changes_nothing_for_new_accounts(v2_db):
@@ -271,7 +271,7 @@ def test_fresh_database_has_the_identity_schema(tmp_path):
     assert _columns(path, "identities") >= {
         "provider", "subject", "user_id", "email", "apple_refresh_token", "created_at"
     }
-    assert _user_version(path) == 4
+    assert _user_version(path) == 5
 
 
 def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
@@ -287,7 +287,7 @@ def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
     assert vias == [("password",)]
     assert (a.has_password, b.has_password) == (True, True)
     assert store.list_providers("u0") == []
-    assert _user_version(v3_db) == 4
+    assert _user_version(v3_db) == 5
 
 
 def test_upgrading_a_v3_database_verifies_an_unverified_account_and_it_can_log_in(v3_db):
@@ -344,3 +344,69 @@ def test_running_the_migration_twice_keeps_codes_written_after_the_first_run(v3_
 
     assert second._conn.execute("SELECT COUNT(*) FROM email_codes").fetchone()[0] == 1
     assert _verified_flags(second) == {"u0": 1, "u1": 1, "u2": 1}
+
+
+AGE_AND_CONSENT_COLUMNS = {"age_confirmed_at", "consent_version", "consent_at"}
+
+
+@pytest.fixture
+def v4_db(v3_db) -> str:
+    """A schema-version-4 file: the v3 accounts, migrated, then stripped of the v5 columns."""
+    SqliteUserStore(v3_db).close()
+    conn = sqlite3.connect(v3_db)
+    for column in AGE_AND_CONSENT_COLUMNS:
+        conn.execute(f"ALTER TABLE users DROP COLUMN {column}")
+    conn.execute("PRAGMA user_version = 4")
+    conn.commit()
+    conn.close()
+    return v3_db
+
+
+def test_fresh_database_has_the_age_and_consent_columns(tmp_path):
+    path = str(tmp_path / "fresh.db")
+    SqliteUserStore(path)
+
+    assert AGE_AND_CONSENT_COLUMNS <= _columns(path, "users")
+
+
+def test_upgrading_a_v4_database_leaves_age_and_consent_empty_and_keeps_the_rest(v4_db):
+    assert not AGE_AND_CONSENT_COLUMNS & _columns(v4_db, "users")
+
+    store = SqliteUserStore(v4_db)
+
+    a, b = store.get_by_id("u0"), store.get_by_id("u1")
+    assert AGE_AND_CONSENT_COLUMNS <= _columns(v4_db, "users")
+    for user in (a, b):
+        assert user.age_confirmed is False
+        assert (user.age_confirmed_at, user.consent_version, user.consent_at) == (
+            None, None, None
+        )
+    assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
+    assert store.get_password_hash("u0") == "h0"
+    assert store.get_user_by_session("v3-token").id == "u0"
+    assert _user_version(v4_db) == 5
+
+
+def test_running_the_v5_migration_twice_changes_nothing(v4_db):
+    first = SqliteUserStore(v4_db)
+    before = first._conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+    first.close()
+
+    second = SqliteUserStore(v4_db)
+
+    assert second._conn.execute("SELECT * FROM users ORDER BY id").fetchall() == before
+
+
+def test_upgrading_a_v4_database_discards_registrations_started_before_the_age_check(v4_db):
+    conn = sqlite3.connect(v4_db)
+    conn.execute(
+        "INSERT INTO pending_registrations (email, password_hash, created_at)"
+        " VALUES ('kid@example.com', 'h', ?)",
+        (datetime.now(timezone.utc).isoformat(),),
+    )
+    conn.commit()
+    conn.close()
+
+    store = SqliteUserStore(v4_db)
+
+    assert store._conn.execute("SELECT COUNT(*) FROM pending_registrations").fetchone()[0] == 0

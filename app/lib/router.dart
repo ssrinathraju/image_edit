@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/provider_sign_in.dart';
 import 'features/auth/confirm_registration_screen.dart';
 import 'features/auth/forgot_password_screen.dart';
 import 'features/auth/login_screen.dart';
@@ -11,11 +12,16 @@ import 'features/auth/register_screen.dart';
 import 'features/auth/reset_password_screen.dart';
 import 'features/auth/session_notifier.dart';
 import 'features/auth/splash_screen.dart';
+import 'features/consent/age_blocked_screen.dart';
+import 'features/consent/confirm_age_screen.dart';
+import 'features/consent/consent_screen.dart';
+import 'features/consent/provider_age_screen.dart';
 import 'features/custom_generation/custom_generation_screen.dart';
 import 'features/generation_status/generation_status_screen.dart';
 import 'features/history/creation_detail_screen.dart';
 import 'features/history/creations_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/plans/account_notifier.dart';
 import 'features/plans/invite_screen.dart';
 import 'features/plans/upgrade_screen.dart';
 import 'features/profile/profile_screen.dart';
@@ -29,6 +35,9 @@ const String _forgotPassword = '/forgot-password';
 const String _resetPassword = '/reset-password';
 const String _confirmRegistration = '/confirm-registration';
 const String _referralPrompt = '/referral-prompt';
+const String _providerAge = '/age';
+const String _confirmAge = '/confirm-age';
+const String _ageBlocked = '/age-blocked';
 
 /// Pages a signed-out user may open.
 const Set<String> _signedOutPages = {
@@ -37,12 +46,17 @@ const Set<String> _signedOutPages = {
   _confirmRegistration,
   _forgotPassword,
   _resetPassword,
+  _providerAge,
 };
+
+/// The only pages open to a signed-in account whose age is not confirmed.
+const Set<String> _ageGatePages = {_confirmAge, _ageBlocked};
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Bumped on every session change so go_router re-runs `redirect`.
   final sessionChanges = ValueNotifier<int>(0);
   ref.listen(sessionProvider, (_, _) => sessionChanges.value++);
+  ref.listen(accountProvider, (_, _) => sessionChanges.value++);
   ref.onDispose(sessionChanges.dispose);
 
   String? redirect(Object _, GoRouterState state) {
@@ -56,8 +70,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           ref.read(registrationDraftProvider) == null) {
         return _register;
       }
+      if (location == _providerAge && state.extra is! ProviderCredential) {
+        return _login;
+      }
       return _signedOutPages.contains(location) ? null : _login;
     }
+    final account = ref.read(accountProvider);
+    if (account.isLoading) return location == _splash ? null : _splash;
+    // An account that failed to load is not held back; the server still refuses
+    // generation for an unconfirmed age.
+    final ageConfirmed = account.valueOrNull?.ageConfirmed ?? true;
+    if (!ageConfirmed) return _ageGatePages.contains(location) ? null : _confirmAge;
+    if (_ageGatePages.contains(location)) return '/';
     final isAuthPage = _signedOutPages.contains(location) || location == _splash;
     if (!isAuthPage) return null;
     final notifier = ref.read(sessionProvider.notifier);
@@ -89,6 +113,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: _confirmRegistration,
         builder: (_, _) => const ConfirmRegistrationScreen(),
       ),
+      GoRoute(
+        path: _providerAge,
+        builder: (_, state) =>
+            ProviderAgeScreen(credential: state.extra! as ProviderCredential),
+      ),
+      GoRoute(path: _confirmAge, builder: (_, _) => const ConfirmAgeScreen()),
+      GoRoute(path: _ageBlocked, builder: (_, _) => const AgeBlockedScreen()),
+      GoRoute(path: '/consent', builder: (_, _) => const ConsentScreen()),
       GoRoute(
         path: _referralPrompt,
         builder: (_, _) => const ReferralPromptScreen(),

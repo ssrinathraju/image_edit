@@ -24,6 +24,7 @@ from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.core.plans import ALL_PLANS, FREE
 from image_edit_server.core.referral_codes import generate_code, normalize_code
 from image_edit_server.core.user_store import (
+    AgeRequired,
     EmailTakenError,
     InvalidReferralCode,
     PendingRegistration,
@@ -33,12 +34,13 @@ from image_edit_server.core.user_store import (
     QuotaExceeded,
     ReferralNotAllowed,
     RegistrationChanged,
+    UnderAgeSignUp,
     UserNotFound,
 )
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 SESSION_TOKEN_BYTES = 32
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 CODE_ATTEMPTS = 5
 SOURCE_DAILY = "daily"
 SOURCE_BONUS = "bonus"
@@ -70,6 +72,9 @@ _ADDED_USER_COLUMNS = {
     "referral_bonus_pending": "INTEGER NOT NULL DEFAULT 0",
     "created_via": "TEXT NOT NULL DEFAULT 'password'",
     "referral_redeemed": "INTEGER NOT NULL DEFAULT 0",
+    "age_confirmed_at": "TEXT",
+    "consent_version": "TEXT",
+    "consent_at": "TEXT",
 }
 
 # An account made through a provider stores this instead of a password hash;
@@ -134,9 +139,10 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 
 _USER_COLUMNS = (
     "u.id, u.email, u.created_at, u.plan, u.bonus_credits, u.referral_code,"
-    " u.referral_rewards, u.password_hash <> ''"
+    " u.referral_rewards, u.password_hash <> '', u.age_confirmed_at,"
+    " u.consent_version, u.consent_at"
 )
-_USER_COLUMN_COUNT = 8
+_USER_COLUMN_COUNT = 11
 SEND_WINDOW = timedelta(hours=1)
 PENDING_REGISTRATION_MAX_AGE = timedelta(hours=24)
 
@@ -159,6 +165,9 @@ def _to_user(row: tuple) -> User:
         referral_code=row[5] or "",
         referral_rewards=row[6],
         has_password=bool(row[7]),
+        age_confirmed_at=row[8],
+        consent_version=row[9],
+        consent_at=row[10],
     )
 
 
@@ -195,6 +204,7 @@ class SqliteUserStore:
         half-migrated file heals too.
         """
         with self._lock:
+            previous_version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             self._conn.execute("BEGIN")
             try:
                 existing = {
@@ -215,6 +225,10 @@ class SqliteUserStore:
                 for statement in schema.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
+                if previous_version < 5:
+                    # Registrations started before the age check carry no date of
+                    # birth, so they must be started again, not confirmed unchecked.
+                    self._conn.execute("DELETE FROM pending_registrations")
                 usage_columns = {
                     row[1]
                     for row in self._conn.execute("PRAGMA table_info(generation_usage)")
@@ -286,14 +300,15 @@ class SqliteUserStore:
         now: datetime,
         bonus_credits: int,
         referrer_id: Optional[str],
+        age_confirmed_at: Optional[str] = None,
     ) -> str:
         user_id = str(ULID())
         # email_verified stays written as 1 so a rollback to the version-3 server
         # does not treat these accounts as unverified.
         self._conn.execute(
             "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
-            " referral_code, referred_by, email_verified)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+            " referral_code, referred_by, email_verified, age_confirmed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)",
             (
                 user_id,
                 email,
@@ -302,6 +317,7 @@ class SqliteUserStore:
                 bonus_credits,
                 self._unused_code(),
                 referrer_id,
+                age_confirmed_at,
             ),
         )
         return user_id
@@ -620,8 +636,14 @@ class SqliteUserStore:
                 "SELECT id FROM users WHERE referral_code = ?", (referral_code,)
             ).fetchone()
             referrer = row[0] if row else None
+        # Every pending registration passed the age check when it was started.
         user_id = self._insert_password_user(
-            email, password_hash, now, bonus if referral_code else 0, referrer
+            email,
+            password_hash,
+            now,
+            bonus if referral_code else 0,
+            referrer,
+            now.isoformat(),
         )
         if referrer:
             self._reward_referrer(referrer, bonus, max_rewards)
@@ -670,10 +692,34 @@ class SqliteUserStore:
                 "DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),)
             )
 
+    # ── age and consent ──────────────────────────────────────────────────
+
+    def confirm_age(self, user_id: str, now: datetime) -> None:
+        self._update_user_columns(
+            user_id, "age_confirmed_at = ?", (now.isoformat(),)
+        )
+
+    def set_consent(self, user_id: str, version: str, now: datetime) -> None:
+        self._update_user_columns(
+            user_id, "consent_version = ?, consent_at = ?", (version, now.isoformat())
+        )
+
+    def clear_consent(self, user_id: str) -> None:
+        self._update_user_columns(user_id, "consent_version = NULL, consent_at = NULL", ())
+
+    def _update_user_columns(self, user_id: str, assignments: str, values: tuple) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                f"UPDATE users SET {assignments} WHERE id = ?", (*values, user_id)
+            )
+
     # ── provider identities ──────────────────────────────────────────────
 
     def sign_in_with_identity(
-        self, identity: ProviderIdentity, now: datetime
+        self,
+        identity: ProviderIdentity,
+        now: datetime,
+        adult_confirmed: Optional[bool] = None,
     ) -> tuple[User, bool]:
         with self._lock, self._conn:
             linked = self._conn.execute(
@@ -689,6 +735,10 @@ class SqliteUserStore:
             if existing:
                 self._link_identity(existing[0], identity, email, now)
                 return self._load_user(existing[0]), False
+            if adult_confirmed is None:
+                raise AgeRequired(identity.provider)
+            if not adult_confirmed:
+                raise UnderAgeSignUp(identity.provider)
             user_id = self._insert_provider_user(identity, email, now)
             return self._load_user(user_id), True
 
@@ -723,8 +773,8 @@ class SqliteUserStore:
         self._conn.execute("DELETE FROM pending_registrations WHERE email = ?", (email,))
         self._conn.execute(
             "INSERT INTO users (id, email, password_hash, created_at, bonus_credits,"
-            " referral_code, email_verified, created_via)"
-            " VALUES (?, ?, ?, ?, 0, ?, 1, ?)",
+            " referral_code, email_verified, created_via, age_confirmed_at)"
+            " VALUES (?, ?, ?, ?, 0, ?, 1, ?, ?)",
             (
                 user_id,
                 email,
@@ -732,6 +782,7 @@ class SqliteUserStore:
                 now.isoformat(),
                 self._unused_code(),
                 identity.provider,
+                now.isoformat(),
             ),
         )
         self._insert_identity(user_id, identity, email, now)

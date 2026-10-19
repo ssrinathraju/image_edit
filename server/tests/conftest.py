@@ -138,11 +138,21 @@ def anon_client(app) -> TestClient:
 
 
 @pytest.fixture
-def client(app) -> TestClient:
-    """A client already signed in as ana@example.com."""
+def unconsented_client(app) -> TestClient:
+    """A client signed in as ana@example.com, age-confirmed but without face-photo consent."""
     test_client = TestClient(app)
     test_client.headers.update(register_headers(test_client, "ana@example.com"))
     return test_client
+
+
+@pytest.fixture
+def client(unconsented_client, settings) -> TestClient:
+    """A client signed in as ana@example.com, age-confirmed and consenting to the current version."""
+    resp = unconsented_client.post(
+        "/me/consent", json={"version": settings.CONSENT_VERSION}
+    )
+    assert resp.status_code == 200, resp.text
+    return unconsented_client
 
 
 @pytest.fixture

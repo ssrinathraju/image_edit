@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/common/photo_picker_field.dart';
+import 'package:image_edit/schemas/session.dart';
 import 'package:image_edit/features/profile/profile_screen.dart';
 import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_edit/features/profile/profile_providers.dart';
@@ -381,5 +383,113 @@ void main() {
 
     expect(client.deletedWith, ['password-1']);
     expect(google.calls, 0);
+  });
+
+  group('face photo consent row', () {
+    testWidgets('shows when consent was given with a Withdraw action', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      await _openProfile(tester);
+
+      expect(find.text('Face photo consent'), findsOneWidget);
+      expect(find.text('Given on 2026-10-19'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Withdraw'), findsOneWidget);
+    });
+
+    testWidgets('reads Not given without consent and offers no Withdraw', (tester) async {
+      client.onFetchMe = () async => fakeProfile(consentGiven: false);
+      await _openProfile(tester);
+
+      expect(find.text('Not given'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Withdraw'), findsNothing);
+    });
+
+    testWidgets('reads Not given for an outdated version', (tester) async {
+      client.onFetchMe = () async => fakeProfile(currentConsentVersion: '2');
+      await _openProfile(tester);
+
+      expect(find.text('Not given'), findsOneWidget);
+    });
+
+    testWidgets('is hidden for a server that predates consent', (tester) async {
+      client.onFetchMe = () async =>
+          const UserProfile(id: 'user-1', email: 'ana@example.com');
+      await _openProfile(tester);
+
+      expect(find.text('Face photo consent'), findsNothing);
+    });
+
+    testWidgets('Withdraw asks first, then reads Not given', (tester) async {
+      var given = true;
+      client.onFetchMe = () async => fakeProfile(consentGiven: given);
+      client.onWithdrawConsent = () async => given = false;
+      await _openProfile(tester);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+      expect(find.text('Withdraw consent?'), findsOneWidget);
+      expect(client.withdrawnConsents, 0);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+
+      expect(client.withdrawnConsents, 1);
+      expect(find.text('Not given'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Withdraw'), findsNothing);
+    });
+
+    testWidgets('cancelling the dialog withdraws nothing', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      await _openProfile(tester);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(client.withdrawnConsents, 0);
+      expect(find.text('Given on 2026-10-19'), findsOneWidget);
+    });
+
+    testWidgets('a failed withdrawal shows a snackbar and keeps the row', (tester) async {
+      client.onFetchMe = () async => fakeProfile();
+      client.onWithdrawConsent = () async => throw StateError('offline');
+      await _openProfile(tester);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Given on 2026-10-19'), findsOneWidget);
+    });
+
+    testWidgets('after withdrawing, the next submission shows the consent screen', (tester) async {
+      var given = true;
+      client.onFetchMe = () async => fakeProfile(consentGiven: given);
+      client.onWithdrawConsent = () async => given = false;
+      await _openProfile(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create your own'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'a cat in space');
+      await tester.pump();
+      await tester.tap(find.byType(PhotoPickerField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Generate'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Face photo consent'), findsWidgets);
+      expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
+      expect(client.submitted, isEmpty);
+    });
   });
 }

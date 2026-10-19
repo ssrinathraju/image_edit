@@ -86,4 +86,52 @@ void main() {
     expect(ProviderSession.fromJson(base).created, isFalse);
     expect(ProviderSession.fromJson(base).session.token, 't');
   });
+
+  test('age_confirmed and the consent state are parsed', () {
+    final profile = UserProfile.fromJson({
+      'id': 'u1',
+      'email': 'ana@example.com',
+      'age_confirmed': false,
+      'consent': {
+        'accepted_version': '1',
+        'accepted_at': '2026-10-19T18:56:12.148114+00:00',
+        'current_version': '2',
+      },
+    });
+
+    expect(profile.ageConfirmed, isFalse);
+    expect(profile.consent!.acceptedVersion, '1');
+    expect(profile.consent!.currentVersion, '2');
+    expect(profile.consent!.acceptedAt, DateTime.utc(2026, 10, 19, 18, 56, 12, 148, 114));
+    expect(profile.consent!.isCurrentVersionAccepted, isFalse);
+  });
+
+  test('a withdrawn consent has no version and no date', () {
+    final consent = ConsentState.fromJson({
+      'accepted_version': null,
+      'accepted_at': null,
+      'current_version': '1',
+    });
+
+    expect(consent.acceptedVersion, isNull);
+    expect(consent.acceptedAt, isNull);
+    expect(consent.isCurrentVersionAccepted, isFalse);
+  });
+
+  test('the accepted current version counts as accepted', () {
+    final consent = ConsentState.fromJson({
+      'accepted_version': '1',
+      'accepted_at': '2026-10-19T18:56:12+00:00',
+      'current_version': '1',
+    });
+
+    expect(consent.isCurrentVersionAccepted, isTrue);
+  });
+
+  test('age and consent default to confirmed and none for an old server', () {
+    final profile = UserProfile.fromJson({'id': 'u1', 'email': 'ana@example.com'});
+
+    expect(profile.ageConfirmed, isTrue);
+    expect(profile.consent, isNull);
+  });
 }

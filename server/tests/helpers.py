@@ -38,21 +38,34 @@ def build_templates_dir(root: Path, entries: list[dict] = TEST_TEMPLATES) -> Pat
 
 
 DEFAULT_PASSWORD = "correct horse battery"
+ADULT_DOB = "1990-01-01"
 
 
-def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> dict:
+def register_headers(
+    client, email: str, password: str = DEFAULT_PASSWORD, consent: bool = False
+) -> dict:
     """Register and confirm through the API with the emailed code; returns bearer headers."""
     from image_edit_server.api.deps import get_auth_service
 
     sender = client.app.dependency_overrides[get_auth_service]()._sender
-    resp = client.post("/auth/register", json={"email": email, "password": password})
+    resp = client.post("/auth/register", json={"email": email, "password": password, "date_of_birth": ADULT_DOB},
+    )
     assert resp.status_code == 202, resp.text
     resp = client.post(
         "/auth/register/confirm",
         json={"email": email, "code": sender.last_code(email), "password": password},
     )
     assert resp.status_code == 201, resp.text
-    return {"Authorization": f"Bearer {resp.json()['token']}"}
+    headers = {"Authorization": f"Bearer {resp.json()['token']}"}
+    if consent:
+        grant_consent(client, headers)
+    return headers
+
+
+def grant_consent(client, headers=None, version: str = "1") -> None:
+    """Accept face-photo consent through the API for the account behind `headers`."""
+    resp = client.post("/me/consent", json={"version": version}, headers=headers)
+    assert resp.status_code == 200, resp.text
 
 
 def confirm_in_store(users, email, code, at, max_attempts, bonus, max_rewards, password_ok=True):

@@ -23,7 +23,7 @@ class Clock:
 def _start(auth, email, password, referral_code=None):
     """Start a registration and run its email task, as the response's background would."""
     tasks = BackgroundTasks()
-    auth.register(email, password, referral_code, tasks)
+    auth.register(email, password, "1990-01-01", referral_code, tasks)
     for task in tasks.tasks:
         task.func(*task.args, **task.kwargs)
 

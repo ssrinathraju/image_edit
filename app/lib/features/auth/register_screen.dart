@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../configs/app_config.dart';
 import '../../core/api_errors.dart';
+import '../consent/age_messages.dart';
+import '../consent/date_of_birth_field.dart';
 import '../common/error_message.dart';
 import 'credentials_form.dart';
 import 'provider_buttons.dart';
@@ -15,6 +17,9 @@ const String _emailTakenMessage = 'Email already registered';
 const String _unknownReferralMessage = 'Code not recognised';
 
 String _describeRegistrationError(Object error) {
+  if (isUnderAge(error) || isInvalidDateOfBirth(error)) {
+    return describeDateOfBirthError(error);
+  }
   if (isEmailTaken(error)) return _emailTakenMessage;
   if (isInvalidReferralCode(error)) return _unknownReferralMessage;
   if (isTooManyRequests(error)) {
@@ -35,6 +40,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _providerBusy = false;
+  DateTime? _dateOfBirth;
 
   Future<void> _startRegistration(
     String email,
@@ -44,6 +50,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     await ref.read(sessionProvider.notifier).startRegistration(
           email: email,
           password: password,
+          dateOfBirth: _dateOfBirth!,
           referralCode: referralCode.isEmpty ? null : referralCode,
         );
     // Pushed, not gone to, so Back returns here with the values kept.
@@ -70,6 +77,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           ? 'At least ${AppConfig.minPasswordChars} characters'
                           : null,
                   withReferralCode: true,
+                  extraField: DateOfBirthField(
+                    value: _dateOfBirth,
+                    enabled: !_providerBusy,
+                    onChanged: (date) => setState(() => _dateOfBirth = date),
+                  ),
+                  extraFieldReady: _dateOfBirth != null,
                   describeFailure: _describeRegistrationError,
                   onSubmit: _startRegistration,
                 ),

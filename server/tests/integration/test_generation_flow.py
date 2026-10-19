@@ -22,7 +22,7 @@ def app_client(tmp_path, templates_dir):
     sender = RecordingSender()
     app = create_app(settings=settings, sender=sender)
     with TestClient(app) as client:
-        client.headers.update(register_headers(client, "ana@example.com"))
+        client.headers.update(register_headers(client, "ana@example.com", consent=True))
         yield client
 
 
@@ -102,7 +102,7 @@ def test_a_full_flow_leaves_the_default_storage_untouched(tmp_path, templates_di
     settings = Settings(STORAGE_ROOT=str(tmp_path), TEMPLATES_DIR=str(templates_dir))
     sender = RecordingSender()
     with TestClient(create_app(settings=settings, sender=sender)) as client:
-        client.headers.update(register_headers(client, "ana@example.com"))
+        client.headers.update(register_headers(client, "ana@example.com", consent=True))
         job_id = client.post(
             "/generations",
             data={"prompt": "a family at sunset"},

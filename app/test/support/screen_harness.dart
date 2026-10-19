@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
+import 'package:image_edit/features/consent/consent_screen.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_picker/image_picker.dart';
@@ -28,6 +29,11 @@ Future<void> pumpScreen(
       GoRoute(path: '/', builder: (_, _) => screen),
       GoRoute(path: '/upgrade', builder: (_, _) => const Text('upgrade-screen')),
       GoRoute(path: '/invite', builder: (_, _) => const Text('invite-screen')),
+      GoRoute(path: '/consent', builder: (_, _) => const ConsentScreen()),
+      GoRoute(
+        path: '/confirm-age',
+        builder: (_, _) => const Text('confirm-age-screen'),
+      ),
       GoRoute(
         path: '/status/:jobId',
         builder: (_, state) => Text('status:${state.pathParameters['jobId']}'),

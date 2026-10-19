@@ -6,11 +6,15 @@ class RegistrationDraft {
   const RegistrationDraft({
     required this.email,
     required this.password,
+    required this.dateOfBirth,
     this.referralCode,
   });
 
   final String email;
   final String password;
+
+  /// Kept only so Resend can send the registration again; it dies with the draft.
+  final DateTime dateOfBirth;
   final String? referralCode;
 }
 

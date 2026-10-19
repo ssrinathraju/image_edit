@@ -30,7 +30,8 @@ async def submit(
     quota: QuotaService,
     settings: Settings,
 ) -> str:
-    """Validate inputs, reserve a generation, persist uploads, queue a job."""
+    """Require age and consent, validate inputs, reserve a generation, persist uploads, queue a job."""
+    _require_age_and_consent(user, settings)
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
@@ -74,6 +75,20 @@ def get_status(job_id: str, user_id: str, store: JobStore) -> Optional[JobStatus
 
 
 # ── private helpers ──────────────────────────────────────────────────────────
+
+def _require_age_and_consent(user: User, settings: Settings) -> None:
+    if not user.age_confirmed:
+        raise _forbidden("age_not_confirmed", "confirm your age with POST /me/age first")
+    if user.consent_version != settings.CONSENT_VERSION:
+        raise _forbidden(
+            "consent_required",
+            f"accept face-photo consent version {settings.CONSENT_VERSION!r} first",
+        )
+
+
+def _forbidden(code: str, detail: str) -> HTTPException:
+    return HTTPException(403, ErrorBody(error=code, detail=detail).model_dump())
+
 
 async def _reserve(quota: QuotaService, user: User) -> str:
     try:

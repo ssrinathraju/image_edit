@@ -3,7 +3,7 @@ import pytest
 
 def _google_account(client, google_verifier, subject="g-1", email="gina@example.com"):
     google_verifier.add(f"tok-{subject}", subject, email=email)
-    resp = client.post("/auth/oauth/google", json={"id_token": f"tok-{subject}"})
+    resp = client.post("/auth/oauth/google", json={"id_token": f"tok-{subject}", "date_of_birth": "1990-01-01"})
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
 
@@ -61,7 +61,7 @@ def test_account_linked_to_google_but_created_with_a_password_is_409(
     client, google_verifier, friend_code
 ):
     google_verifier.add("tok", "g-9", email="ana@example.com")
-    linked = client.post("/auth/oauth/google", json={"id_token": "tok"}).json()
+    linked = client.post("/auth/oauth/google", json={"id_token": "tok", "date_of_birth": "1990-01-01"}).json()
 
     resp = client.post(
         "/me/referral",
