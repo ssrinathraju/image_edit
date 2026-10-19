@@ -65,10 +65,10 @@ void main() {
     await _fillAndGenerate(tester);
 
     expect(find.text('Face photo consent'), findsOneWidget);
-    expect(find.text(consentTextFor('1').points.first), findsOneWidget);
-    expect(find.text(consentTextFor('1').points[1]), findsOneWidget);
-    expect(find.text(consentTextFor('1').points[2]), findsOneWidget);
-    expect(find.text(consentTextFor('1').points[3]), findsOneWidget);
+    expect(find.text(consentTextFor('1')!.points.first), findsOneWidget);
+    expect(find.text(consentTextFor('1')!.points[1]), findsOneWidget);
+    expect(find.text(consentTextFor('1')!.points[2]), findsOneWidget);
+    expect(find.text(consentTextFor('1')!.points[3]), findsOneWidget);
     expect(client.submitted, isEmpty);
   });
 
@@ -110,7 +110,7 @@ void main() {
     expect(find.text('status:job-1'), findsOneWidget);
   });
 
-  testWidgets('a new consent version asks again', (tester) async {
+  testWidgets('a consent version the app has no text for cannot be accepted', (tester) async {
     acceptedVersion = '1';
     currentVersion = '2';
     await _pumpCreate(tester);
@@ -118,11 +118,10 @@ void main() {
     await _fillAndGenerate(tester);
 
     expect(find.text('Face photo consent'), findsOneWidget);
+    expect(find.text('Update the app to continue'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+    expect(client.acceptedConsents, isEmpty);
     expect(client.submitted, isEmpty);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Accept'));
-    await tester.pumpAndSettle();
-    expect(client.acceptedConsents, ['2']);
   });
 
   testWidgets('a server consent_required opens the screen and retries once after Accept', (tester) async {
@@ -176,7 +175,7 @@ void main() {
     expect(find.text('confirm-age-screen'), findsOneWidget);
   });
 
-  testWidgets('a version change while the screen is open shows the new text', (tester) async {
+  testWidgets('a version change while the screen is open stops at an unknown version', (tester) async {
     await _pumpCreate(tester);
     await _fillAndGenerate(tester);
     client.onAcceptConsent = (_) async {
@@ -187,15 +186,10 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Accept'));
     await tester.pumpAndSettle();
 
-    expect(find.text('The consent text changed. Please read it again.'), findsOneWidget);
-    expect(find.text('Face photo consent'), findsOneWidget);
+    expect(find.text('Update the app to continue'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+    expect(client.acceptedConsents, ['1']);
     expect(client.submitted, isEmpty);
-
-    client.onAcceptConsent = (version) async => acceptedVersion = version;
-    await tester.tap(find.widgetWithText(FilledButton, 'Accept'));
-    await tester.pumpAndSettle();
-    expect(client.acceptedConsents.last, '2');
-    expect(client.submitted, hasLength(1));
   });
 
   testWidgets('a failed Accept keeps the screen and submits nothing', (tester) async {
@@ -237,7 +231,7 @@ void main() {
     expect(find.text('Privacy policy'), findsNothing);
   });
 
-  test('a version the app has no text for shows the newest text it has', () {
-    expect(consentTextFor('99').points, consentTextFor('1').points);
+  test('a version the app has no text for has no text', () {
+    expect(consentTextFor('99'), isNull);
   });
 }

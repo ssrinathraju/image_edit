@@ -62,7 +62,7 @@ class AgeRequired(Exception):
     """Raised when a provider sign-in would create an account but sent no date of birth."""
 
 
-class UnderAge(Exception):
+class UnderAgeSignUp(Exception):
     """Raised when a provider sign-in would create an account for someone under 18."""
 
 
@@ -209,10 +209,10 @@ class UserStore(Protocol):
         """Find the linked account, link by email, or create one; returns (user, created).
 
         `adult_confirmed` matters only when an account would be created: None raises
-        AgeRequired, False raises UnderAge, True creates it with its age confirmed.
+        AgeRequired, False raises UnderAgeSignUp, True creates it with its age confirmed.
         Creating an account discards any pending registration for its email. Raises
         ProviderEmailMissing, ProviderEmailUnverified, ProviderAlreadyLinked,
-        AgeRequired or UnderAge before writing anything.
+        AgeRequired or UnderAgeSignUp before writing anything.
         """
         ...
 

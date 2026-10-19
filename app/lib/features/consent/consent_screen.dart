@@ -80,6 +80,14 @@ class _ConsentScreenState extends ConsumerState<ConsentScreen> {
 
   Widget _body(BuildContext context, String version, String? privacyUrl) {
     final text = consentTextFor(version);
+    if (text == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('Update the app to continue', textAlign: TextAlign.center),
+        ),
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [

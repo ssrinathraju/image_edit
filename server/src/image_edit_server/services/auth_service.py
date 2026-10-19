@@ -27,7 +27,7 @@ from image_edit_server.core.user_store import (
     ProviderEmailMissing,
     ProviderEmailUnverified,
     RegistrationChanged,
-    UnderAge as StoreUnderAge,
+    UnderAgeSignUp,
     UserStore,
 )
 from image_edit_server.schemas.api import ErrorBody
@@ -250,7 +250,7 @@ class AuthService:
                 "age_required",
                 "send a date_of_birth (YYYY-MM-DD) to create an account",
             )
-        except StoreUnderAge:
+        except UnderAgeSignUp:
             logger.info("Refused a provider sign-up: under 18")
             raise _under_age()
         except ProviderEmailUnverified:

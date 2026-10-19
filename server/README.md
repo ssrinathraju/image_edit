@@ -134,6 +134,8 @@ idempotent. It also:
   "Age and face-photo consent"; the previous server ignores the extra columns);
 - adds the provider and pending-registration tables and recreates the code tables keyed by email
   address (a code in flight during the upgrade has to be requested again);
+- deletes pending registrations when upgrading from before the age check (a registration in flight
+  during the upgrade has to be started again);
 - marks every **unverified account verified**, because unverified accounts no longer exist. This is
   safe only for development data. If a real database ever holds accounts created between the
   email-verification release and this one, check them by hand first: anyone who registered an email

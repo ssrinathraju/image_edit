@@ -9,7 +9,7 @@ from image_edit_server.core.user_store import (
     ProviderAlreadyLinked,
     ProviderEmailMissing,
     ProviderEmailUnverified,
-    UnderAge,
+    UnderAgeSignUp,
 )
 from image_edit_server.repos.user_store import SqliteUserStore
 
@@ -210,7 +210,7 @@ def test_creating_an_account_without_an_age_decision_raises_age_required_and_wri
 
 
 def test_creating_an_account_for_a_minor_raises_under_age_and_writes_nothing(users):
-    with pytest.raises(UnderAge):
+    with pytest.raises(UnderAgeSignUp):
         users.sign_in_with_identity(_identity(), NOW, adult_confirmed=False)
 
     assert _count(users, "users") == 0

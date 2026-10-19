@@ -1,6 +1,6 @@
 import hashlib
 import sqlite3
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -395,3 +395,18 @@ def test_running_the_v5_migration_twice_changes_nothing(v4_db):
     second = SqliteUserStore(v4_db)
 
     assert second._conn.execute("SELECT * FROM users ORDER BY id").fetchall() == before
+
+
+def test_upgrading_a_v4_database_discards_registrations_started_before_the_age_check(v4_db):
+    conn = sqlite3.connect(v4_db)
+    conn.execute(
+        "INSERT INTO pending_registrations (email, password_hash, created_at)"
+        " VALUES ('kid@example.com', 'h', ?)",
+        (datetime.now(timezone.utc).isoformat(),),
+    )
+    conn.commit()
+    conn.close()
+
+    store = SqliteUserStore(v4_db)
+
+    assert store._conn.execute("SELECT COUNT(*) FROM pending_registrations").fetchone()[0] == 0

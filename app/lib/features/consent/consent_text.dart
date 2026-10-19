@@ -20,6 +20,6 @@ const Map<String, ConsentText> _consentTexts = {
   ),
 };
 
-/// The text for [version]; a version this app has no text for shows the newest one it knows.
-ConsentText consentTextFor(String version) =>
-    _consentTexts[version] ?? _consentTexts.values.last;
+/// The text for [version], or null when this app has none: consent is only ever
+/// recorded for a version whose words the user was shown.
+ConsentText? consentTextFor(String version) => _consentTexts[version];

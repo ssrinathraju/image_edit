@@ -37,7 +37,7 @@ def test_exactly_18_today_is_accepted(anon_client, unconfirmed_headers):
     assert resp.status_code == 200
 
 
-@pytest.mark.parametrize("text", ["2008-13-01", "08/05/2001", "2026-01-02"])
+@pytest.mark.parametrize("text", ["2008-13-01", "08/05/2001", "2026-01-02", "1987-03-14T00:00", "1987-03-14 "])
 def test_malformed_or_future_dates_are_400(anon_client, unconfirmed_headers, text):
     resp = anon_client.post(
         "/me/age", json={"date_of_birth": text}, headers=unconfirmed_headers

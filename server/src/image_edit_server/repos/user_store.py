@@ -34,7 +34,7 @@ from image_edit_server.core.user_store import (
     QuotaExceeded,
     ReferralNotAllowed,
     RegistrationChanged,
-    UnderAge,
+    UnderAgeSignUp,
     UserNotFound,
 )
 from image_edit_server.schemas.user import UsageSnapshot, User
@@ -204,6 +204,7 @@ class SqliteUserStore:
         half-migrated file heals too.
         """
         with self._lock:
+            previous_version = self._conn.execute("PRAGMA user_version").fetchone()[0]
             self._conn.execute("BEGIN")
             try:
                 existing = {
@@ -224,6 +225,10 @@ class SqliteUserStore:
                 for statement in schema.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
+                if previous_version < 5:
+                    # Registrations started before the age check carry no date of
+                    # birth, so they must be started again, not confirmed unchecked.
+                    self._conn.execute("DELETE FROM pending_registrations")
                 usage_columns = {
                     row[1]
                     for row in self._conn.execute("PRAGMA table_info(generation_usage)")
@@ -733,7 +738,7 @@ class SqliteUserStore:
             if adult_confirmed is None:
                 raise AgeRequired(identity.provider)
             if not adult_confirmed:
-                raise UnderAge(identity.provider)
+                raise UnderAgeSignUp(identity.provider)
             user_id = self._insert_provider_user(identity, email, now)
             return self._load_user(user_id), True
 
