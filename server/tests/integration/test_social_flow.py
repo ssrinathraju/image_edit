@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.main import create_app
-from tests.helpers import DEFAULT_PASSWORD, FakeVerifier, RecordingSender
+from tests.helpers import DEFAULT_PASSWORD, FakeVerifier, RecordingSender, grant_consent
 from tests.integration.test_generation_flow import SMALL_PNG
 
 
@@ -70,6 +70,7 @@ def test_social_sign_in_flow(app_client, sender, google):
     assert _bonus(app_client, gina) == 5
     assert _bonus(app_client, friend) == 5
 
+    grant_consent(app_client, gina)
     submit = app_client.post(
         "/generations",
         data={"prompt": "a family at sunset"},

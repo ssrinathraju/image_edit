@@ -25,7 +25,7 @@ def test_limit_survives_a_server_restart(tmp_path, templates_dir):
 
     sender = RecordingSender()
     with TestClient(create_app(settings, sender=sender)) as first:
-        headers = register_headers(first, "ana@example.com")
+        headers = register_headers(first, "ana@example.com", consent=True)
         responses = [_submit(first, headers) for _ in range(3)]
         assert [r.status_code for r in responses] == [202] * 3
         assert _submit(first, headers).status_code == 429

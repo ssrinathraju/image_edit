@@ -27,11 +27,11 @@ Work on branch `feat/add-age-gate-and-face-consent`. Do not push to `main`. Serv
 
 ## 3. Server: `/me` age and consent, generation gate
 
-- [ ] 3.1 Add `POST /me/age`, `POST /me/consent`, `DELETE /me/consent` and the new `MeResponse` fields (Decision 5). Verify that `tests/api/test_age_and_consent.py` covers every scenario in `specs/age-and-consent/spec.md`, including "Never store the date of birth": no column holds it, and a log capture during register, provider sign-up and `/me/age` contains no submitted date.
-- [ ] 3.2 Add the gate at the top of `generation_service.submit` (Decision 6), and update the conftest fixtures so the default `client` account is age-confirmed with current consent. Add an `unconsented_client` fixture. Verify:
+- [x] 3.1 Add `POST /me/age`, `POST /me/consent`, `DELETE /me/consent` and the new `MeResponse` fields (Decision 5). Verify that `tests/api/test_age_and_consent.py` covers every scenario in `specs/age-and-consent/spec.md`, including "Never store the date of birth": no column holds it, and a log capture during register, provider sign-up and `/me/age` contains no submitted date.
+- [x] 3.2 Add the gate at the top of `generation_service.submit` (Decision 6), and update the conftest fixtures so the default `client` account is age-confirmed with current consent. Add an `unconsented_client` fixture. Verify:
   - `tests/api/test_generations_gate.py` covers every scenario of "Require a confirmed age and current consent to generate", including no stored upload and unchanged remaining generations;
   - the full suite passes.
-- [ ] 3.3 Update `server/README.md`: the date of birth on register and the provider endpoints, the new endpoints and fields, the error codes, `CONSENT_VERSION`, and the v5 migration note. Verify the curl examples against a local server on a temporary storage root (`uvicorn --factory image_edit_server.main:create_app`, a free port, stopping only your own process).
+- [x] 3.3 Update `server/README.md`: the date of birth on register and the provider endpoints, the new endpoints and fields, the error codes, `CONSENT_VERSION`, and the v5 migration note. Verify the curl examples against a local server on a temporary storage root (`uvicorn --factory image_edit_server.main:create_app`, a free port, stopping only your own process).
 
 ## 4. App: client, schemas, errors
 

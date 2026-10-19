@@ -27,10 +27,11 @@ never exists:
 
 ```bash
 # Step 1: start a registration → 202 {}  (no account and no session yet; a 6-digit code is emailed)
-# `referral_code` is optional; an unknown code is a 400 invalid_referral_code
+# `date_of_birth` (YYYY-MM-DD) is required and must be 18+ (400 under_age, 400 invalid_date_of_birth);
+# it is checked, never stored or logged. `referral_code` is optional; an unknown code is a 400 invalid_referral_code
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "ana@example.com", "password": "correct horse battery"}'
+  -d '{"email": "ana@example.com", "password": "correct horse battery", "date_of_birth": "1990-01-31"}'
 
 # Step 2: confirm with the emailed code and the same password → 201 {"token": "...", "id": "...", "email": "ana@example.com"}
 # A password that differs from the pending registration's is a 409 registration_changed and discards it
@@ -50,7 +51,8 @@ curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
 #    "usage": {"daily_limit": 3, "used_today": 0, "bonus_credits": 0, "remaining": 3,
 #              "resets_at": "2026-10-17T00:00:00+00:00", "plan_limits": {"free": 3, "premium": 30}},
 #    "referral": {"code": "K7M2QX9P", "rewards": 0, "max_rewards": 10, "bonus_per_referral": 5},
-#    "providers": [], "has_password": true}
+#    "providers": [], "has_password": true, "age_confirmed": true,
+#    "consent": {"accepted_version": null, "accepted_at": null, "current_version": "1"}}
 
 # Log out: revokes this token only → 204
 curl -X POST http://localhost:8000/auth/logout -H "Authorization: Bearer $TOKEN"
@@ -104,7 +106,7 @@ nothing for either side.
 # Start a registration with a friend's code (case and surrounding spaces are ignored); confirm as above
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "ben@example.com", "password": "correct horse battery", "referral_code": "k7m2qx9p"}'
+  -d '{"email": "ben@example.com", "password": "correct horse battery", "date_of_birth": "1990-01-31", "referral_code": "k7m2qx9p"}'
 ```
 
 There is no endpoint that changes a plan. Promote or demote an account from `server/` with the
@@ -123,10 +125,13 @@ Jobs are held in memory, so a restart loses any job that was queued or running. 
 are refunded automatically when the server starts again. This assumes a single server process: a
 second instance on the same `app.db` would refund the first one's in-flight jobs.
 
-The first start after upgrading migrates an existing `app.db` in place (schema version 4): users keep
+The first start after upgrading migrates an existing `app.db` in place (schema version 5): users keep
 their data, become `free` with no bonus credits, and receive referral codes. The migration is
 idempotent. It also:
 
+- adds the `age_confirmed_at`, `consent_version` and `consent_at` user columns, all NULL for existing
+  accounts, so each existing account must confirm its age and give consent on next use (see
+  "Age and face-photo consent"; the previous server ignores the extra columns);
 - adds the provider and pending-registration tables and recreates the code tables keyed by email
   address (a code in flight during the upgrade has to be requested again);
 - marks every **unverified account verified**, because unverified accounts no longer exist. This is
@@ -197,14 +202,17 @@ configured answers `503 provider_not_configured`.
 
 ```bash
 # → 200 {"token": "...", "id": "...", "email": "...", "created": true}
+# A request that would create an account needs `date_of_birth` (YYYY-MM-DD, 18+): without it the
+# answer is 400 age_required (resend the same token with the date), under 18 is 400 under_age; neither
+# creates an account or exchanges an Apple code. Linked and existing accounts are never asked.
 curl -X POST http://localhost:8000/auth/oauth/google \
-  -H "Content-Type: application/json" -d '{"id_token": "<GOOGLE_ID_TOKEN>"}'
+  -H "Content-Type: application/json" -d '{"id_token": "<GOOGLE_ID_TOKEN>", "date_of_birth": "1990-01-31"}'
 
 # `nonce` is the raw value the app generated; the token carries its SHA-256 hex digest.
 # `authorization_code` is exchanged for the refresh token that is revoked on deletion.
 curl -X POST http://localhost:8000/auth/oauth/apple \
   -H "Content-Type: application/json" \
-  -d '{"identity_token": "<APPLE_IDENTITY_TOKEN>", "nonce": "<RAW_NONCE>", "authorization_code": "<APPLE_CODE>"}'
+  -d '{"identity_token": "<APPLE_IDENTITY_TOKEN>", "nonce": "<RAW_NONCE>", "authorization_code": "<APPLE_CODE>", "date_of_birth": "1990-01-31"}'
 
 # New provider accounts can redeem one referral code, within 24 hours of creation → 200 {}
 curl -X POST http://localhost:8000/me/referral \
@@ -279,6 +287,37 @@ Profile). A free Personal Team cannot sign that capability, so a signed device b
 provision. The simulator and `flutter build ios --no-codesign` are unaffected. Until the membership
 exists, either use the simulator or clear `CODE_SIGN_ENTITLEMENTS` for the Debug configuration in
 Xcode for device runs (and restore it afterwards: do not commit the change).
+
+## Age and face-photo consent
+
+Only adults may use the service, and each account must agree to how face photos are handled
+before generating. The date of birth is checked and thrown away: it is never stored, logged or
+returned. Only `age_confirmed_at` is kept. The rule is 18 or older by the UTC date, and a
+29 February birth counts from 1 March in other years.
+
+```bash
+# Existing accounts confirm their age → 200 {}; under 18 is 403 under_age; confirmed already is 409 age_already_confirmed
+curl -X POST http://localhost:8000/me/age \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"date_of_birth": "1990-01-31"}'
+
+# Accept the current consent version (GET /me shows it as consent.current_version) → 200 {}
+# Any other version is 400 consent_version_mismatch
+curl -X POST http://localhost:8000/me/consent \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"version": "1"}'
+
+# Withdraw consent → 204, whether or not it was given
+curl -X DELETE http://localhost:8000/me/consent -H "Authorization: Bearer $TOKEN"
+```
+
+`GET /me` reports `age_confirmed` and `consent` (`accepted_version`, `accepted_at`,
+`current_version`). `POST /generations` answers `403 age_not_confirmed` or `403 consent_required`
+before validating or counting anything. Raising `IMAGE_EDIT_CONSENT_VERSION` asks everyone to
+accept again.
+
+Error codes: `400 invalid_date_of_birth`, `400 under_age` (registration and provider sign-up),
+`403 under_age` (`/me/age`), `400 age_required`, `409 age_already_confirmed`,
+`400 consent_version_mismatch`, `403 age_not_confirmed`, `403 consent_required`.
 
 ## Submit a generation job
 
@@ -366,6 +405,7 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_EMAIL_CODE_MAX_ATTEMPTS` | `5` | Wrong tries before a code is invalidated (minimum 1) |
 | `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one email address (minimum 1) |
 | `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per email address per hour (minimum 1) |
+| `IMAGE_EDIT_CONSENT_VERSION` | `1` | Current face-photo consent version; must not be empty. Change it when the consent text changes |
 | `IMAGE_EDIT_GOOGLE_CLIENT_IDS` | _(empty)_ | Comma-separated Google client IDs accepted as the token audience; empty disables Google sign-in |
 | `IMAGE_EDIT_APPLE_BUNDLE_ID` | _(empty)_ | App bundle ID, the Apple token audience; empty disables Apple sign-in |
 | `IMAGE_EDIT_APPLE_TEAM_ID` | _(empty)_ | Apple team ID; set with the next two or none |

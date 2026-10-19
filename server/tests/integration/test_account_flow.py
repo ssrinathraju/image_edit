@@ -40,7 +40,7 @@ def _generate(client, headers) -> dict:
 
 
 def test_deleting_the_account_removes_sessions_login_and_images(app_client, sender, tmp_path):
-    headers = register_headers(app_client, "ana@example.com")
+    headers = register_headers(app_client, "ana@example.com", consent=True)
     body = _generate(app_client, headers)
     assert body["status"] == "succeeded"
     assert app_client.get(body["result_url"]).status_code == 200

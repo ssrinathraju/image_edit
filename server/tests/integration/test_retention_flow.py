@@ -53,7 +53,7 @@ def test_expired_result_and_its_job_disappear_but_a_young_one_stays(tmp_path, te
     sender = RecordingSender()
     app = create_app(settings, sender=sender)
     with TestClient(app) as client:
-        headers = register_headers(client, "ana@example.com")
+        headers = register_headers(client, "ana@example.com", consent=True)
         old, young = _generate(client, headers), _generate(client, headers)
         assert client.get(old["result_url"]).status_code == 200
         _age(file_storage.output_path(old["job_id"], str(tmp_path)), hours=25)

@@ -15,6 +15,7 @@ from tests.helpers import (
     MISSING,
     apple_claims,
     google_claims,
+    grant_consent,
     make_rsa_key,
     sign_token,
 )
@@ -197,6 +198,7 @@ def test_new_provider_account_is_passwordless_and_can_generate(
     headers = _bearer(_google(anon_client))
 
     me = anon_client.get("/me", headers=headers).json()
+    grant_consent(anon_client, headers)
     submit = anon_client.post(
         "/generations", data={"prompt": VALID_PROMPT}, files=[_face()], headers=headers
     )
