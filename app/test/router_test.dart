@@ -10,7 +10,9 @@ import 'package:image_edit/schemas/session.dart';
 
 import 'support/app_harness.dart';
 import 'support/fake_api_client.dart';
+import 'support/fake_image_picker.dart';
 import 'support/fake_provider_sign_in.dart';
+import 'support/in_memory_creation_store.dart';
 import 'support/fake_session_storage.dart';
 
 void main() {
@@ -303,5 +305,68 @@ void main() {
 
       expect(notifier.justCreatedViaProvider, isFalse);
     });
+  });
+
+  testWidgets('My creations opens from home and goes back', (tester) async {
+    await pumpApp(tester, client: client, storage: FakeSessionStorage(savedSession));
+
+    await tester.tap(find.byTooltip('My creations'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your creations will appear here'), findsOneWidget);
+    expect(find.text('Trending'), findsNothing);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trending'), findsOneWidget);
+  });
+
+  testWidgets('a creation opens its detail screen and goes back to the grid',
+      (tester) async {
+    final store = InMemoryCreationStore();
+    await store.save(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'astronaut on a beach',
+      bytes: tinyPng,
+      finishedAt: DateTime.utc(2026, 10, 19),
+    );
+    await pumpApp(
+      tester,
+      client: client,
+      storage: FakeSessionStorage(savedSession),
+      store: store,
+    );
+
+    await tester.tap(find.byTooltip('My creations'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('job-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('astronaut on a beach'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('My creations'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Trending'), findsOneWidget);
+  });
+
+  testWidgets('a signed-out user is redirected from My creations to sign-in',
+      (tester) async {
+    final container =
+        await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+    container.read(routerProvider).go('/creations');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+
+    container.read(routerProvider).go('/creations/job-1');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(find.text('My creations'), findsNothing);
   });
 }

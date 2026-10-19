@@ -61,7 +61,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
   - an image-fetch error keeping the entry;
   - two concurrent runs causing one set of calls;
   - no error ever reaching the caller.
-- [ ] 5.2 Run `HistorySync` from `initState` of the home screen and the My creations screen. Verify that `test/features/home/home_screen_test.dart` covers home triggering a run and an offline run showing no error.
+- [x] 5.2 Run `HistorySync` from `initState` of the home screen and the My creations screen. Verify that `test/features/home/home_screen_test.dart` covers home triggering a run and an offline run showing no error.
 
 ## 6. Account deletion
 
@@ -73,7 +73,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 7. Screens
 
-- [ ] 7.1 Add the routes `/creations` and `/creations/:jobId`, the home app-bar button "My creations", `features/history/creations_screen.dart` (the grid) and `features/history/creation_detail_screen.dart`, with the states in the Decision 8 table. Verify:
+- [x] 7.1 Add the routes `/creations` and `/creations/:jobId`, the home app-bar button "My creations", `features/history/creations_screen.dart` (the grid) and `features/history/creation_detail_screen.dart`, with the states in the Decision 8 table. Verify:
   - `test/features/history/creations_screen_test.dart` covers newest first, the empty state, a placeholder for a missing file, a cell opening the detail, and a creation saved by the catch-up appearing without leaving the screen;
   - `test/features/history/creation_detail_screen_test.dart` covers the image, label and date, an empty label shown as "Creation", Download and Share calling a fake `ImageActions` with the stored bytes, the permission-denied message, Delete with confirm, a cancelled delete, and "This image is no longer available" with Delete;
   - `test/router_test.dart` covers reaching both routes from home and going back, and that a signed-out user is redirected to sign-in.

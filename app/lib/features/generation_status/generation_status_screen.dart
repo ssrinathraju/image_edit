@@ -7,10 +7,10 @@ import 'package:go_router/go_router.dart';
 import 'package:logging/logging.dart';
 
 import '../../schemas/job.dart';
-import '../../services/image_actions.dart';
 import '../auth/session_notifier.dart';
 import '../common/clock.dart';
 import '../common/error_message.dart';
+import '../common/image_action_row.dart';
 import '../history/creation_store.dart';
 import '../plans/account_notifier.dart';
 import '../common/submit_controller.dart';
@@ -156,72 +156,16 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
 
   @override
   Widget build(BuildContext context) {
-    final showActions = ref.watch(showImageActionsProvider);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Image.memory(bytes, fit: BoxFit.contain),
         const SizedBox(height: 16),
-        if (showActions)
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _download(context, ref),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Builder(
-                  builder: (buttonContext) => OutlinedButton.icon(
-                    onPressed: () => _share(buttonContext, ref),
-                    icon: const Icon(Icons.share),
-                    label: const Text('Share'),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        ImageActionRow(bytes: bytes, name: jobId),
         const SizedBox(height: 12),
         _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
       ],
     );
-  }
-
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    String message;
-    try {
-      final result =
-          await ref.read(imageActionsProvider).saveToLibrary(bytes, name: jobId);
-      message = switch (result) {
-        SaveResult.saved => 'Saved to your photo library.',
-        SaveResult.permissionDenied =>
-          'Photo library access is required to save images. '
-              'Allow it in Settings and try again.',
-      };
-    } catch (_) {
-      message = 'Could not save the image.';
-    }
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _share(BuildContext buttonContext, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(buttonContext);
-    final box = buttonContext.findRenderObject() as RenderBox?;
-    final origin =
-        box == null ? null : box.localToGlobal(Offset.zero) & box.size;
-    try {
-      await ref
-          .read(imageActionsProvider)
-          .share(bytes, name: jobId, origin: origin);
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open the share sheet.')),
-      );
-    }
   }
 }
 

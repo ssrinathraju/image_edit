@@ -50,6 +50,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text('Trending'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.photo_library_outlined),
+            tooltip: 'My creations',
+            onPressed: () => context.push('/creations'),
+          ),
+          IconButton(
             icon: const Icon(Icons.account_circle_outlined),
             tooltip: 'Profile',
             onPressed: () => context.push('/profile'),
