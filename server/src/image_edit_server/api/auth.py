@@ -7,17 +7,22 @@ from image_edit_server.api.deps import (
     AuthServiceDep,
     QuotaDep,
     ReferralDep,
+    SettingsDep,
     TokenDep,
     UserStoreDep,
 )
 from image_edit_server.schemas.user import (
+    AgeConfirmRequest,
     AppleSignInRequest,
     AuthResponse,
+    ConsentRequest,
+    ConsentState,
     Credentials,
     DeleteAccountRequest,
     GoogleSignInRequest,
     MeResponse,
     ReferralRedeemRequest,
+    RegisterRequest,
     RegistrationConfirm,
     ResetConfirm,
     ResetRequest,
@@ -44,8 +49,12 @@ def _social_response(token: str, user: User, created: bool) -> SocialAuthRespons
 
 
 @router.post("/auth/register", status_code=status.HTTP_202_ACCEPTED)
-def register(body: Credentials, auth: AuthServiceDep, background: BackgroundTasks) -> dict:
-    auth.register(body.email, body.password, body.referral_code, background)
+def register(
+    body: RegisterRequest, auth: AuthServiceDep, background: BackgroundTasks
+) -> dict:
+    auth.register(
+        body.email, body.password, body.date_of_birth, body.referral_code, background
+    )
     return {}
 
 
@@ -67,7 +76,9 @@ def login(body: Credentials, auth: AuthServiceDep) -> AuthResponse:
 
 @router.post("/auth/oauth/google", response_model=SocialAuthResponse)
 def sign_in_with_google(body: GoogleSignInRequest, auth: AuthServiceDep) -> SocialAuthResponse:
-    token, user, created = auth.sign_in_with_provider("google", body.id_token)
+    token, user, created = auth.sign_in_with_provider(
+        "google", body.id_token, date_of_birth=body.date_of_birth
+    )
     return _social_response(token, user, created)
 
 
@@ -78,6 +89,7 @@ def sign_in_with_apple(body: AppleSignInRequest, auth: AuthServiceDep) -> Social
         body.identity_token,
         nonce=body.nonce,
         authorization_code=body.authorization_code,
+        date_of_birth=body.date_of_birth,
     )
     return _social_response(token, user, created)
 
@@ -104,7 +116,11 @@ def logout(token: TokenDep, _user: AuthDep, auth: AuthServiceDep) -> Response:
 
 @router.get("/me", response_model=MeResponse)
 def get_me(
-    user: AuthDep, quota: QuotaDep, referrals: ReferralDep, users: UserStoreDep
+    user: AuthDep,
+    quota: QuotaDep,
+    referrals: ReferralDep,
+    users: UserStoreDep,
+    settings: SettingsDep,
 ) -> MeResponse:
     return MeResponse(
         id=user.id,
@@ -115,7 +131,31 @@ def get_me(
         referral=referrals.summary(user),
         providers=users.list_providers(user.id),
         has_password=user.has_password,
+        age_confirmed=user.age_confirmed,
+        consent=ConsentState(
+            accepted_version=user.consent_version,
+            accepted_at=user.consent_at,
+            current_version=settings.CONSENT_VERSION,
+        ),
     )
+
+
+@router.post("/me/age")
+def confirm_age(body: AgeConfirmRequest, user: AuthDep, auth: AuthServiceDep) -> dict:
+    auth.confirm_age(user, body.date_of_birth)
+    return {}
+
+
+@router.post("/me/consent")
+def accept_consent(body: ConsentRequest, user: AuthDep, auth: AuthServiceDep) -> dict:
+    auth.accept_consent(user, body.version)
+    return {}
+
+
+@router.delete("/me/consent", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_consent(user: AuthDep, auth: AuthServiceDep) -> Response:
+    auth.withdraw_consent(user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/me/referral")

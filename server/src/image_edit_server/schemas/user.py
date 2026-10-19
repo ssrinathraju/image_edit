@@ -15,6 +15,8 @@ MAX_NEW_PASSWORD_TRANSPORT_CHARS = 1024
 MAX_CODE_CHARS = 16
 MAX_PROVIDER_TOKEN_CHARS = 8192
 MAX_NONCE_CHARS = 256
+MAX_DATE_OF_BIRTH_CHARS = 10
+MAX_CONSENT_VERSION_CHARS = 32
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,13 @@ class User:
     referral_code: str = ""
     referral_rewards: int = 0
     has_password: bool = True
+    age_confirmed_at: Optional[str] = None
+    consent_version: Optional[str] = None
+    consent_at: Optional[str] = None
+
+    @property
+    def age_confirmed(self) -> bool:
+        return self.age_confirmed_at is not None
 
 
 @dataclass(frozen=True)
@@ -46,6 +55,18 @@ class Credentials(BaseModel):
     referral_code: Optional[str] = Field(default=None, max_length=MAX_REFERRAL_CODE_CHARS)
 
 
+class RegisterRequest(Credentials):
+    date_of_birth: str = Field(max_length=MAX_DATE_OF_BIRTH_CHARS)
+
+
+class AgeConfirmRequest(BaseModel):
+    date_of_birth: str = Field(max_length=MAX_DATE_OF_BIRTH_CHARS)
+
+
+class ConsentRequest(BaseModel):
+    version: str = Field(max_length=MAX_CONSENT_VERSION_CHARS)
+
+
 class AuthResponse(BaseModel):
     token: str
     id: str
@@ -58,12 +79,14 @@ class SocialAuthResponse(AuthResponse):
 
 class GoogleSignInRequest(BaseModel):
     id_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+    date_of_birth: Optional[str] = Field(default=None, max_length=MAX_DATE_OF_BIRTH_CHARS)
 
 
 class AppleSignInRequest(BaseModel):
     identity_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
     nonce: str = Field(max_length=MAX_NONCE_CHARS)
     authorization_code: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+    date_of_birth: Optional[str] = Field(default=None, max_length=MAX_DATE_OF_BIRTH_CHARS)
 
 
 class ReferralRedeemRequest(BaseModel):
@@ -102,6 +125,12 @@ class ReferralResponse(BaseModel):
     bonus_per_referral: int
 
 
+class ConsentState(BaseModel):
+    accepted_version: Optional[str]
+    accepted_at: Optional[str]
+    current_version: str
+
+
 class MeResponse(BaseModel):
     id: str
     email: str
@@ -111,6 +140,8 @@ class MeResponse(BaseModel):
     referral: ReferralResponse
     providers: list[str]
     has_password: bool
+    age_confirmed: bool
+    consent: ConsentState
 
 
 class DeleteAccountRequest(BaseModel):

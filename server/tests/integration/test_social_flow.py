@@ -38,11 +38,11 @@ def _bearer(resp) -> dict:
 
 
 def _google(client, token):
-    return client.post("/auth/oauth/google", json={"id_token": token})
+    return client.post("/auth/oauth/google", json={"id_token": token, "date_of_birth": "1990-01-01"})
 
 
 def _register_confirmed(client, sender, email) -> dict:
-    resp = client.post("/auth/register", json={"email": email, "password": DEFAULT_PASSWORD})
+    resp = client.post("/auth/register", json={"email": email, "password": DEFAULT_PASSWORD, "date_of_birth": "1990-01-01"})
     assert resp.status_code == 202, resp.text
     confirm = client.post(
         "/auth/register/confirm",

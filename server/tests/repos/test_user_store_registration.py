@@ -168,7 +168,7 @@ def test_a_provider_creating_the_account_discards_the_pending_row(users):
     _start(users)
     identity = ProviderIdentity("google", "g-1", EMAIL, True, T0)
 
-    user, created = users.sign_in_with_identity(identity, T0)
+    user, created = users.sign_in_with_identity(identity, T0, adult_confirmed=True)
 
     assert created is True
     assert _count(users, "pending_registrations") == 0

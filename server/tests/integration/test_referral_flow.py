@@ -23,7 +23,7 @@ def app_client(tmp_path, templates_dir, sender):
 
 
 def _start(client, email, code=None) -> None:
-    body = {"email": email, "password": DEFAULT_PASSWORD}
+    body = {"email": email, "password": DEFAULT_PASSWORD, "date_of_birth": "1990-01-01"}
     if code:
         body["referral_code"] = code
     resp = client.post("/auth/register", json=body)

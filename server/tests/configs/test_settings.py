@@ -187,3 +187,15 @@ def test_an_apple_key_file_that_is_not_a_pem_key_is_rejected(tmp_path):
             APPLE_KEY_ID="K",
             APPLE_PRIVATE_KEY_PATH=str(key),
         )
+
+
+def test_consent_version_defaults_to_one_and_can_be_overridden(monkeypatch):
+    assert Settings().CONSENT_VERSION == "1"
+    monkeypatch.setenv("IMAGE_EDIT_CONSENT_VERSION", "2")
+    assert Settings().CONSENT_VERSION == "2"
+
+
+def test_empty_consent_version_refuses_to_start(monkeypatch):
+    monkeypatch.setenv("IMAGE_EDIT_CONSENT_VERSION", "")
+    with pytest.raises(ValidationError, match="CONSENT_VERSION"):
+        Settings()

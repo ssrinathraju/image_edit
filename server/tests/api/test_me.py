@@ -54,7 +54,7 @@ def test_no_password_material_is_returned(client):
 def test_a_client_cannot_choose_its_plan(anon_client, sender):
     anon_client.post(
         "/auth/register",
-        json={"email": "eve@example.com", "password": "correct horse battery", "plan": "premium"},
+        json={"email": "eve@example.com", "password": "correct horse battery", "plan": "premium", "date_of_birth": "1990-01-01"},
     )
     confirmed = anon_client.post(
         "/auth/register/confirm",
@@ -81,7 +81,7 @@ def test_me_never_contains_a_code_or_a_verification_flag(client, sender):
 
 def _google_sign_in(client, google_verifier, subject="g-1", email="gina@example.com"):
     google_verifier.add(f"tok-{subject}", subject, email=email)
-    resp = client.post("/auth/oauth/google", json={"id_token": f"tok-{subject}"})
+    resp = client.post("/auth/oauth/google", json={"id_token": f"tok-{subject}", "date_of_birth": "1990-01-01"})
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
 

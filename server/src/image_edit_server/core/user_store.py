@@ -58,6 +58,14 @@ class ReferralNotAllowed(Exception):
     """Raised when an account may not redeem a referral code (late, repeated or password-made)."""
 
 
+class AgeRequired(Exception):
+    """Raised when a provider sign-in would create an account but sent no date of birth."""
+
+
+class UnderAge(Exception):
+    """Raised when a provider sign-in would create an account for someone under 18."""
+
+
 class UserStore(Protocol):
     def create_user(self, email: str, password_hash: str) -> User:
         """Create a bare verified user (no referral); raises EmailTakenError on a duplicate."""
@@ -193,14 +201,31 @@ class UserStore(Protocol):
     def delete_session(self, token: str) -> None: ...
 
     def sign_in_with_identity(
-        self, identity: ProviderIdentity, now: datetime
+        self,
+        identity: ProviderIdentity,
+        now: datetime,
+        adult_confirmed: Optional[bool] = None,
     ) -> tuple[User, bool]:
         """Find the linked account, link by email, or create one; returns (user, created).
 
+        `adult_confirmed` matters only when an account would be created: None raises
+        AgeRequired, False raises UnderAge, True creates it with its age confirmed.
         Creating an account discards any pending registration for its email. Raises
-        ProviderEmailMissing, ProviderEmailUnverified or ProviderAlreadyLinked before
-        writing anything.
+        ProviderEmailMissing, ProviderEmailUnverified, ProviderAlreadyLinked,
+        AgeRequired or UnderAge before writing anything.
         """
+        ...
+
+    def confirm_age(self, user_id: str, now: datetime) -> None:
+        """Record that the account's age was confirmed at `now`."""
+        ...
+
+    def set_consent(self, user_id: str, version: str, now: datetime) -> None:
+        """Record that the account accepted consent `version` at `now`."""
+        ...
+
+    def clear_consent(self, user_id: str) -> None:
+        """Remove the account's recorded consent; a no-op when there is none."""
         ...
 
     def has_identity(self, user_id: str, provider: str, subject: str) -> bool: ...

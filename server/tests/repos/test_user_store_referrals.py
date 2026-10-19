@@ -190,7 +190,7 @@ CREATED = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
 def _provider_user(users, subject="g-1", email="new@example.com"):
     identity = ProviderIdentity("google", subject, email, True, CREATED)
-    return users.sign_in_with_identity(identity, CREATED)[0]
+    return users.sign_in_with_identity(identity, CREATED, adult_confirmed=True)[0]
 
 
 def _redeem_after(users, user, code, hours=1):

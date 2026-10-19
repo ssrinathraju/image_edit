@@ -4,20 +4,20 @@ Work on branch `feat/add-age-gate-and-face-consent`. Do not push to `main`. Serv
 
 ## 1. Server: age rule, settings, schema
 
-- [ ] 1.1 Add `core/age.py` with `check_date_of_birth(text, today)`, `InvalidDateOfBirth` and `UnderAge` (Decision 1), and add `CONSENT_VERSION` to settings with a startup check that it is non-empty (Decision 7). Verify:
+- [x] 1.1 Add `core/age.py` with `check_date_of_birth(text, today)`, `InvalidDateOfBirth` and `UnderAge` (Decision 1), and add `CONSENT_VERSION` to settings with a startup check that it is non-empty (Decision 7). Verify:
   - `tests/core/test_age.py` covers exactly 18 today, one day short, the leap-day birth on 28 February and 1 March 2026, `2008-13-01`, `08/05/2001`, `2008-1-1`, a datetime string, tomorrow, and today;
   - `tests/configs/test_settings.py` covers the default `"1"`, an override, and an empty value refusing to start.
-- [ ] 1.2 Schema version 5: add `age_confirmed_at`, `consent_version` and `consent_at`, and extend `User` (Decision 2). Verify that `tests/repos/test_user_store_migration.py` covers a v4 database with accounts (all three columns NULL afterwards, everything else kept) and running the migration twice changing nothing.
+- [x] 1.2 Schema version 5: add `age_confirmed_at`, `consent_version` and `consent_at`, and extend `User` (Decision 2). Verify that `tests/repos/test_user_store_migration.py` covers a v4 database with accounts (all three columns NULL afterwards, everything else kept) and running the migration twice changing nothing.
 
 ## 2. Server: registration and provider sign-up
 
-- [ ] 2.1 Add `RegisterRequest` with `date_of_birth`. Check it first in the registration service and set `age_confirmed_at` in `complete_registration` (Decision 3). Verify that `tests/api/test_auth.py` covers every new scenario of "Start a registration":
+- [x] 2.1 Add `RegisterRequest` with `date_of_birth`. Check it first in the registration service and set `age_confirmed_at` in `complete_registration` (Decision 3). Verify that `tests/api/test_auth.py` covers every new scenario of "Start a registration":
   - under 18 sends no code and leaves no pending row;
   - a missing date;
   - exactly 18 confirmed shows `age_confirmed` true;
   - a malformed date gives 400 `invalid_date_of_birth`;
   - login still works without a date.
-- [ ] 2.2 Add an optional `date_of_birth` to both provider requests and the `adult_confirmed` parameter to `sign_in_with_identity` (Decision 4). Verify that `tests/api/test_social_sign_in.py` and `tests/repos/test_user_store_identities.py` cover:
+- [x] 2.2 Add an optional `date_of_birth` to both provider requests and the `adult_confirmed` parameter to `sign_in_with_identity` (Decision 4). Verify that `tests/api/test_social_sign_in.py` and `tests/repos/test_user_store_identities.py` cover:
   - `age_required` with no account created;
   - a retry with an adult date creating the account with `age_confirmed` true;
   - Apple under 18 not exchanging the code (the fake `post` is not called);

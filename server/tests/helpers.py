@@ -38,6 +38,7 @@ def build_templates_dir(root: Path, entries: list[dict] = TEST_TEMPLATES) -> Pat
 
 
 DEFAULT_PASSWORD = "correct horse battery"
+ADULT_DOB = "1990-01-01"
 
 
 def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> dict:
@@ -45,7 +46,8 @@ def register_headers(client, email: str, password: str = DEFAULT_PASSWORD) -> di
     from image_edit_server.api.deps import get_auth_service
 
     sender = client.app.dependency_overrides[get_auth_service]()._sender
-    resp = client.post("/auth/register", json={"email": email, "password": password})
+    resp = client.post("/auth/register", json={"email": email, "password": password, "date_of_birth": ADULT_DOB},
+    )
     assert resp.status_code == 202, resp.text
     resp = client.post(
         "/auth/register/confirm",

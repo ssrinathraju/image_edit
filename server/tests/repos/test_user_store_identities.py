@@ -5,9 +5,11 @@ import pytest
 
 from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.core.user_store import (
+    AgeRequired,
     ProviderAlreadyLinked,
     ProviderEmailMissing,
     ProviderEmailUnverified,
+    UnderAge,
 )
 from image_edit_server.repos.user_store import SqliteUserStore
 
@@ -29,7 +31,7 @@ def _identity(
 
 
 def _sign_in(users, identity):
-    return users.sign_in_with_identity(identity, NOW)
+    return users.sign_in_with_identity(identity, NOW, adult_confirmed=True)
 
 
 def _count(users, table) -> int:
@@ -197,3 +199,43 @@ def test_the_apple_refresh_token_is_gone_after_the_user_is_deleted(users):
 
     assert users.get_apple_refresh_token(user.id) is None
     assert _count(users, "identities") == 0
+
+
+def test_creating_an_account_without_an_age_decision_raises_age_required_and_writes_nothing(users):
+    with pytest.raises(AgeRequired):
+        users.sign_in_with_identity(_identity(), NOW)
+
+    assert _count(users, "users") == 0
+    assert _count(users, "identities") == 0
+
+
+def test_creating_an_account_for_a_minor_raises_under_age_and_writes_nothing(users):
+    with pytest.raises(UnderAge):
+        users.sign_in_with_identity(_identity(), NOW, adult_confirmed=False)
+
+    assert _count(users, "users") == 0
+
+
+def test_an_adult_decision_creates_the_account_with_its_age_confirmed(users):
+    user, created = users.sign_in_with_identity(_identity(), NOW, adult_confirmed=True)
+
+    assert created is True
+    assert user.age_confirmed_at == NOW.isoformat()
+
+
+def test_a_linked_identity_ignores_the_age_decision(users):
+    users.sign_in_with_identity(_identity(), NOW, adult_confirmed=True)
+
+    user, created = users.sign_in_with_identity(_identity(), NOW)
+
+    assert created is False
+    assert user.email == "ana@example.com"
+
+
+def test_linking_by_email_ignores_the_age_decision_and_leaves_the_age_unconfirmed(users):
+    existing = users.create_user("ana@example.com", "hash")
+
+    user, created = users.sign_in_with_identity(_identity(), NOW)
+
+    assert (user.id, created) == (existing.id, False)
+    assert user.age_confirmed is False

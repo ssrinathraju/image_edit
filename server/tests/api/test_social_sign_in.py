@@ -7,6 +7,7 @@ from image_edit_server.services.identity.apple_verifier import AppleVerifier
 from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from tests.api.test_generations_submit import VALID_PROMPT, _face
 from tests.helpers import (
+    ADULT_DOB,
     APPLE_BUNDLE,
     GOOGLE_AUDIENCE,
     TEST_KID,
@@ -22,13 +23,18 @@ APPLE_SECRET_CODE = "apple-auth-code-secret"
 
 
 def _google(client, token="g-tok"):
-    return client.post("/auth/oauth/google", json={"id_token": token})
+    return client.post("/auth/oauth/google", json={"id_token": token, "date_of_birth": ADULT_DOB})
 
 
 def _apple(client, token="a-tok", nonce="raw-nonce", code=APPLE_SECRET_CODE):
     return client.post(
         "/auth/oauth/apple",
-        json={"identity_token": token, "nonce": nonce, "authorization_code": code},
+        json={
+            "identity_token": token,
+            "nonce": nonce,
+            "authorization_code": code,
+            "date_of_birth": ADULT_DOB,
+        },
     )
 
 
@@ -407,3 +413,124 @@ def test_tokens_codes_and_refresh_tokens_are_never_logged_or_returned(
         assert secret not in caplog.text
         assert secret not in ok.text
         assert secret not in rejected.text
+
+
+# ── Age check when a provider would create the account ─────────────────
+
+def _google_without_date(client, token="g-tok"):
+    return client.post("/auth/oauth/google", json={"id_token": token})
+
+
+def _error_code(resp) -> str:
+    return resp.json()["detail"]["error"]
+
+
+def test_a_new_google_account_without_a_date_of_birth_is_asked_for_one(
+    anon_client, google_verifier, user_store
+):
+    google_verifier.add("g-tok", "g-1")
+
+    resp = _google_without_date(anon_client)
+
+    assert resp.status_code == 400
+    assert _error_code(resp) == "age_required"
+    assert _user_count(user_store) == 0
+
+
+def test_retrying_with_an_adult_date_creates_an_age_confirmed_account(
+    anon_client, google_verifier
+):
+    google_verifier.add("g-tok", "g-1")
+    _google_without_date(anon_client)
+
+    resp = anon_client.post(
+        "/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": "2008-01-01"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["created"] is True
+    assert anon_client.get("/me", headers=_bearer(resp)).json()["age_confirmed"] is True
+
+
+def test_an_under_18_apple_sign_up_is_refused_and_the_code_is_not_exchanged(
+    anon_client, apple_verifier, apple_client, user_store
+):
+    apple_verifier.add("a-tok", "a-1")
+
+    resp = anon_client.post(
+        "/auth/oauth/apple",
+        json={
+            "identity_token": "a-tok",
+            "nonce": "raw-nonce",
+            "authorization_code": APPLE_SECRET_CODE,
+            "date_of_birth": "2008-01-02",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert _error_code(resp) == "under_age"
+    assert apple_client.exchanged == []
+    assert _user_count(user_store) == 0
+
+
+def test_an_apple_sign_up_asking_for_age_does_not_exchange_the_code(
+    anon_client, apple_verifier, apple_client
+):
+    apple_verifier.add("a-tok", "a-1")
+
+    resp = anon_client.post(
+        "/auth/oauth/apple",
+        json={
+            "identity_token": "a-tok",
+            "nonce": "raw-nonce",
+            "authorization_code": APPLE_SECRET_CODE,
+        },
+    )
+
+    assert _error_code(resp) == "age_required"
+    assert apple_client.exchanged == []
+
+
+def test_a_linked_identity_signs_in_without_a_date_of_birth(anon_client, google_verifier):
+    google_verifier.add("g-tok", "g-1")
+    _google(anon_client)
+
+    resp = _google_without_date(anon_client)
+
+    assert resp.status_code == 200
+    assert resp.json()["created"] is False
+
+
+def test_linking_by_email_does_not_ask_for_a_date_of_birth(
+    anon_client, sender, google_verifier
+):
+    anon_client.post(
+        "/auth/register",
+        json={"email": "ana@example.com", "password": "correct horse battery",
+              "date_of_birth": ADULT_DOB},
+    )
+    anon_client.post(
+        "/auth/register/confirm",
+        json={"email": "ana@example.com", "code": sender.last_code("ana@example.com"),
+              "password": "correct horse battery"},
+    )
+    google_verifier.add("g-tok", "g-1", email="ana@example.com")
+
+    resp = _google_without_date(anon_client)
+
+    assert resp.status_code == 200
+    assert resp.json()["created"] is False
+
+
+def test_a_malformed_date_of_birth_is_400_even_for_an_existing_account(
+    anon_client, google_verifier
+):
+    google_verifier.add("g-tok", "g-1")
+    _google(anon_client)
+
+    resp = anon_client.post(
+        "/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": "08/05/2001"}
+    )
+
+    assert resp.status_code == 400
+    assert _error_code(resp) == "invalid_date_of_birth"

@@ -201,7 +201,11 @@ def test_without_smtp_the_registration_code_is_in_the_server_log(
     with caplog.at_level("INFO"), TestClient(create_app(settings)) as client:
         resp = client.post(
             "/auth/register",
-            json={"email": "ana@example.com", "password": "correct horse battery"},
+            json={
+                "email": "ana@example.com",
+                "password": "correct horse battery",
+                "date_of_birth": "1990-01-01",
+            },
         )
 
     assert resp.status_code == 202
