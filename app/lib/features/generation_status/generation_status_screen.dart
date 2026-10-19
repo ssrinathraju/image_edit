@@ -1,17 +1,26 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logging/logging.dart';
 
 import '../../schemas/job.dart';
 import '../../services/image_actions.dart';
+import '../auth/session_notifier.dart';
+import '../common/clock.dart';
 import '../common/error_message.dart';
+import '../history/creation_store.dart';
 import '../plans/account_notifier.dart';
 import '../common/submit_controller.dart';
 import '../common/submit_flow.dart';
 import 'generation_status_notifier.dart';
 import 'result_image_provider.dart';
+
+final _log = Logger('generation_status');
+
+const String _saveFailedMessage = "Couldn't save to My creations";
 
 class GenerationStatusScreen extends ConsumerWidget {
   const GenerationStatusScreen({required this.jobId, super.key});
@@ -95,14 +104,58 @@ class _SuccessView extends ConsumerWidget {
   }
 }
 
-class _ResultBody extends ConsumerWidget {
+class _ResultBody extends ConsumerStatefulWidget {
   const _ResultBody({required this.jobId, required this.bytes});
 
   final String jobId;
   final Uint8List bytes;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ResultBody> createState() => _ResultBodyState();
+}
+
+class _ResultBodyState extends ConsumerState<_ResultBody> {
+  bool _saveStarted = false;
+
+  String get jobId => widget.jobId;
+  Uint8List get bytes => widget.bytes;
+
+  // Not initState: a failed save needs the ScaffoldMessenger from context.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_saveStarted) return;
+    _saveStarted = true;
+    unawaited(_saveToHistory());
+  }
+
+  Future<void> _saveToHistory() async {
+    // Everything is read before the first await: the user may leave the
+    // screen meanwhile, and the bytes in hand should still be saved.
+    final messenger = ScaffoldMessenger.of(context);
+    final sessionFuture = ref.read(sessionProvider.future);
+    final store = ref.read(creationStoreProvider);
+    final finishedAt = ref.read(clockProvider)();
+    try {
+      final session = await sessionFuture;
+      if (session == null) return;
+      final pending = await store.pending(session.userId);
+      final label = pending.where((p) => p.jobId == jobId).firstOrNull?.label ?? '';
+      await store.save(
+        userId: session.userId,
+        jobId: jobId,
+        label: label,
+        bytes: bytes,
+        finishedAt: finishedAt,
+      );
+    } on Object catch (error) {
+      _log.warning('save_failed job=$jobId ${error.runtimeType}');
+      messenger.showSnackBar(const SnackBar(content: Text(_saveFailedMessage)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final showActions = ref.watch(showImageActionsProvider);
     return ListView(
       padding: const EdgeInsets.all(16),

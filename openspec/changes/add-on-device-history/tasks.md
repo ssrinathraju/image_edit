@@ -40,11 +40,11 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 4. Remember on submit, save on success
 
-- [ ] 4.1 In `submit_flow.dart`, after the job id returns and before navigating, call `remember(userId, jobId, label, now)`. The label is the prompt for a custom generation, and the template title (or id) for a template (Decision 3). Verify that `test/features/common/submit_flow_test.dart` covers:
+- [x] 4.1 In `submit_flow.dart`, after the job id returns and before navigating, call `remember(userId, jobId, label, now)`. The label is the prompt for a custom generation, and the template title (or id) for a template (Decision 3). Verify that `test/features/common/submit_flow_test.dart` covers:
   - a custom prompt being remembered with its text;
   - a template being remembered with its title;
   - a failed submit remembering nothing.
-- [ ] 4.2 On the status screen, once the job has succeeded and the bytes are loaded, call `save` once, with the label from the pending entry and an empty label if there is none (Decision 4). Show the "Couldn't save to My creations" SnackBar when the save throws. Verify that `test/features/generation_status/generation_status_screen_test.dart` covers:
+- [x] 4.2 On the status screen, once the job has succeeded and the bytes are loaded, call `save` once, with the label from the pending entry and an empty label if there is none (Decision 4). Show the "Couldn't save to My creations" SnackBar when the save throws. Verify that `test/features/generation_status/generation_status_screen_test.dart` covers:
   - success saving exactly once, even after a rebuild or reopening the screen;
   - a throwing store showing the SnackBar while the image, Download and Share stay visible;
   - a failed job saving nothing.

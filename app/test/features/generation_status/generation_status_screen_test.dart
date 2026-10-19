@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/generation_request.dart';
+import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/common/submit_controller.dart';
 import 'package:image_edit/features/generation_status/generation_status_screen.dart';
 import 'package:image_edit/schemas/job.dart';
@@ -14,6 +16,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../support/fake_api_client.dart';
 import '../../support/fake_image_actions.dart';
 import '../../support/fake_image_picker.dart';
+import '../../support/fake_session_storage.dart';
+import '../../support/in_memory_creation_store.dart';
 
 GenerationJob _succeeded(String id) => GenerationJob(
       jobId: id,
@@ -39,6 +43,7 @@ Future<_Harness> _pump(
   GenerationRequest? lastRequest,
   bool showActions = true,
   String jobId = 'job-1',
+  InMemoryCreationStore? store,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -63,6 +68,8 @@ Future<_Harness> _pump(
     ProviderScope(
       overrides: [
         apiClientProvider.overrideWithValue(fakeClient),
+        creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
+        sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
         imageActionsProvider.overrideWithValue(actions),
         showImageActionsProvider.overrideWithValue(showActions),
         lastRequestProvider.overrideWith(
@@ -189,5 +196,77 @@ void main() {
 
     expect(harness.actions.shared.single.bytes, tinyPng);
     expect(harness.actions.shared.single.name, 'job-1');
+  });
+
+  testWidgets('a succeeded job is saved once, with the label from the pending entry',
+      (tester) async {
+    final store = InMemoryCreationStore();
+    await store.remember(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'astronaut on a beach',
+      submittedAt: DateTime.utc(2026, 10, 19),
+    );
+
+    await _pump(tester, store: store);
+    await tester.pump(const Duration(seconds: 3));
+
+    final creations = await store.list('user-1');
+    expect(creations.single.jobId, 'job-1');
+    expect(creations.single.label, 'astronaut on a beach');
+    expect(store.savedJobs, ['job-1']);
+    expect(await store.pending('user-1'), isEmpty);
+  });
+
+  testWidgets('a job with no pending entry is saved with an empty label', (tester) async {
+    final store = InMemoryCreationStore();
+
+    await _pump(tester, store: store);
+
+    expect((await store.list('user-1')).single.label, '');
+  });
+
+  testWidgets('rebuilding the screen does not save again', (tester) async {
+    final store = InMemoryCreationStore();
+    final harness = await _pump(tester, store: store);
+
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(harness.actions.saved, hasLength(1));
+    expect(store.savedJobs, ['job-1']);
+  });
+
+  testWidgets('opening a saved job again keeps one creation', (tester) async {
+    final store = InMemoryCreationStore();
+    await _pump(tester, store: store);
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, store: store);
+
+    expect(await store.list('user-1'), hasLength(1));
+  });
+
+  testWidgets('a store that fails keeps the image and actions and says so', (tester) async {
+    final store = InMemoryCreationStore()..saveError = StateError('disk full');
+
+    await _pump(tester, store: store);
+
+    expect(find.text("Couldn't save to My creations"), findsOneWidget);
+    expect(find.byType(Image, skipOffstage: false), findsOneWidget);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+  });
+
+  testWidgets('a failed job saves nothing', (tester) async {
+    final store = InMemoryCreationStore();
+    final client = FakeApiClient()
+      ..onStatus = (id) async =>
+          GenerationJob(jobId: id, status: JobStatus.failed, error: 'pipeline_failed');
+
+    await _pump(tester, client: client, store: store);
+
+    expect(store.savedJobs, isEmpty);
+    expect(find.text("Couldn't save to My creations"), findsNothing);
   });
 }
