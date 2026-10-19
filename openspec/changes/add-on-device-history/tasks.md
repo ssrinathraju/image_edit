@@ -4,11 +4,11 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 1. Dependency and model
 
-- [ ] 1.1 Add `path_provider` as a direct dependency (`flutter pub add path_provider`) and add `schemas/creation.dart` with `Creation {jobId, label, finishedAt}` and `PendingGeneration {jobId, label, submittedAt}`, each with JSON round-trip. Verify that `flutter pub get` succeeds and that `test/schemas/creation_test.dart` covers the round-trip, an empty label, and the timestamp format.
+- [x] 1.1 Add `path_provider` as a direct dependency (`flutter pub add path_provider`) and add `schemas/creation.dart` with `Creation {jobId, label, finishedAt}` and `PendingGeneration {jobId, label, submittedAt}`, each with JSON round-trip. Verify that `flutter pub get` succeeds and that `test/schemas/creation_test.dart` covers the round-trip, an empty label, and the timestamp format.
 
 ## 2. Creation store
 
-- [ ] 2.1 Add `features/history/creation_store.dart`, following Decisions 1 and 2:
+- [x] 2.1 Add `features/history/creation_store.dart`, following Decisions 1 and 2:
   - a root folder injected through the constructor, with per-account folders;
   - atomic writes, with the `.tmp` file renamed over the target;
   - one serial operation queue;
@@ -27,13 +27,13 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
   - two saves of the same job started together creating one entry;
   - `remember`, `pending` and `forget`;
   - save removing the pending entry.
-- [ ] 2.2 Add `deleteAccount(userId)` with the tombstone from Decision 6. Verify with tests in the same file:
+- [x] 2.2 Add `deleteAccount(userId)` with the tombstone from Decision 6. Verify with tests in the same file:
   - the account's folder is gone and other accounts are untouched;
   - a tombstone left by a failed delete is finished the next time a store is created.
 
 ## 3. Backup exclusion
 
-- [ ] 3.1 Add the `BackupExclusion` interface with a method-channel implementation (`image_edit/backup`, `excludeFromBackup(path)`). The store calls it when it creates `creations/` and once at startup, and logs and ignores failures. Add the handler in `ios/Runner/AppDelegate.swift`, which sets `isExcludedFromBackup` on the URL. Verify:
+- [x] 3.1 Add the `BackupExclusion` interface with a method-channel implementation (`image_edit/backup`, `excludeFromBackup(path)`). The store calls it when it creates `creations/` and once at startup, and logs and ignores failures. Add the handler in `ios/Runner/AppDelegate.swift`, which sets `isExcludedFromBackup` on the URL. Verify:
   - the store test checks the fake is called with the `creations/` path and that a throwing fake doesn't break saving;
   - `flutter build ios --no-codesign --debug` succeeds.
 - [ ] 3.2 Add `android/app/src/main/res/xml/backup_rules.xml` and `data_extraction_rules.xml`, each excluding `domain="file" path="creations/"`, the latter for both cloud backup and device transfer. Reference them from `AndroidManifest.xml` with `android:fullBackupContent` and `android:dataExtractionRules`. Verify that `flutter build apk --debug` succeeds and that the merged manifest contains both attributes.

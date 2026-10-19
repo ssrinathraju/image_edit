@@ -7,20 +7,20 @@ class Creation {
   });
 
   factory Creation.fromJson(Map<String, dynamic> json) => Creation(
-        jobId: json['jobId'] as String,
-        label: json['label'] as String,
-        finishedAt: DateTime.parse(json['finishedAt'] as String),
-      );
+    jobId: json['jobId'] as String,
+    label: json['label'] as String,
+    finishedAt: DateTime.parse(json['finishedAt'] as String),
+  );
 
   final String jobId;
   final String label;
   final DateTime finishedAt;
 
   Map<String, dynamic> toJson() => {
-        'jobId': jobId,
-        'label': label,
-        'finishedAt': finishedAt.toUtc().toIso8601String(),
-      };
+    'jobId': jobId,
+    'label': label,
+    'finishedAt': finishedAt.toUtc().toIso8601String(),
+  };
 }
 
 /// A submitted generation that has not been saved yet.
@@ -43,8 +43,8 @@ class PendingGeneration {
   final DateTime submittedAt;
 
   Map<String, dynamic> toJson() => {
-        'jobId': jobId,
-        'label': label,
-        'submittedAt': submittedAt.toUtc().toIso8601String(),
-      };
+    'jobId': jobId,
+    'label': label,
+    'submittedAt': submittedAt.toUtc().toIso8601String(),
+  };
 }
