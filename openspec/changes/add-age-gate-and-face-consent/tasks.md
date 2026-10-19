@@ -65,4 +65,4 @@ Work on branch `feat/add-age-gate-and-face-consent`. Do not push to `main`. Serv
 
   This box stays unticked until someone runs every step.
 - [ ] 7.3 **Manual, needs the consoles.** A new Google or Apple sign-up asks for a date of birth before the account exists, and an existing linked account isn't asked. This box stays unticked until someone runs it.
-- [ ] 7.4 Push `feat/add-age-gate-and-face-consent`. Verify with `git log origin/feat/add-age-gate-and-face-consent -1` that it matches the local HEAD.
+- [x] 7.4 Push `feat/add-age-gate-and-face-consent`. Verify with `git log origin/feat/add-age-gate-and-face-consent -1` that it matches the local HEAD.
