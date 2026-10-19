@@ -118,7 +118,7 @@ Screen states:
 
 - **[What data is stored, and for how long]**
   - Per account: `age_confirmed_at`, `consent_version` and `consent_at`, kept as long as the account and removed with it.
-  - **No date of birth is stored anywhere**: not on the server, in logs, or on the device. The app holds it in memory only: on the registration draft (with the password) until the draft is cleared on confirm, back or sign-out, so Resend can send it again, and on the provider date screen while it is open. It is never persisted.
+  - **No date of birth is stored anywhere**: not on the server, in logs, or on the device. The app holds it in memory only: on the registration draft (with the password) until the draft is cleared by any sign-in (including confirming), going back, or the confirm screen's sign-in link, so Resend can send it again; and in the register, provider date-of-birth and confirm-age screens while they are open. It is never persisted.
   - Withdrawing consent clears its two columns, and no history is kept.
 - **[Who can read it]** Only the account itself, through `/me`. Nothing is exposed to other users.
 - **[What is logged]**
