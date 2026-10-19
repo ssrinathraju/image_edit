@@ -20,6 +20,7 @@ const String _pendingFile = 'pending.json';
 const String _tombstoneFile = 'deleted.json';
 const String _imageExtension = '.png';
 const String _tempExtension = '.tmp';
+final RegExp _safeId = RegExp(r'^[A-Za-z0-9_-]+$');
 
 /// The on-device record of finished generations, one folder per account.
 /// Every operation runs on one queue, so two callers saving the same job
@@ -32,6 +33,7 @@ class CreationStore extends ChangeNotifier {
 
   Future<void> _tail = Future<void>.value();
   Future<Directory>? _ready;
+  final Set<String> _deletedAccounts = {};
 
   /// The account's creations, newest first; unreadable data reads as empty.
   Future<List<Creation>> list(String userId) => _run(() => _readIndex(userId));
@@ -53,6 +55,7 @@ class CreationStore extends ChangeNotifier {
     required Uint8List bytes,
     required DateTime finishedAt,
   }) => _run(() async {
+    if (_deletedAccounts.contains(userId)) return;
     final dir = await _createAccountDir(userId);
     final index = await _readIndex(userId);
     if (!index.any((c) => c.jobId == jobId)) {
@@ -89,6 +92,7 @@ class CreationStore extends ChangeNotifier {
     required String label,
     required DateTime submittedAt,
   }) => _run(() async {
+    if (_deletedAccounts.contains(userId)) return;
     final dir = await _createAccountDir(userId);
     final pending = await _readPending(userId);
     if (pending.any((p) => p.jobId == jobId)) return;
@@ -111,6 +115,7 @@ class CreationStore extends ChangeNotifier {
   /// Removes everything the account has on the device. A tombstone written
   /// first lets the next start finish the job if this one is interrupted.
   Future<void> deleteAccount(String userId) => _run(() async {
+    _deletedAccounts.add(userId);
     final tombstones = await _readTombstones();
     if (!tombstones.contains(userId)) {
       await _writeStrings(_tombstones, [...tombstones, userId]);
@@ -175,13 +180,21 @@ class CreationStore extends ChangeNotifier {
   File get _tombstones => File('${_creationsDir.path}/$_tombstoneFile');
 
   Directory _accountDir(String userId) =>
-      Directory('${_creationsDir.path}/$userId');
+      Directory('${_creationsDir.path}/${_checkedId(userId)}');
 
   Future<Directory> _createAccountDir(String userId) =>
       _accountDir(userId).create(recursive: true);
 
-  File _imageFile(String userId, String jobId) =>
-      File('${_accountDir(userId).path}/$jobId$_imageExtension');
+  File _imageFile(String userId, String jobId) => File(
+    '${_accountDir(userId).path}/${_checkedId(jobId)}$_imageExtension',
+  );
+
+  /// Ids become path segments, and a job id arrives from a route, so anything
+  /// that could leave the account folder is refused.
+  String _checkedId(String id) {
+    if (!_safeId.hasMatch(id)) throw ArgumentError.value(id, 'id', 'unsafe');
+    return id;
+  }
 
   Future<void> _deleteAccountFolder(String userId) async {
     final dir = _accountDir(userId);

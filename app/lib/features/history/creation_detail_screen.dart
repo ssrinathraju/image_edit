@@ -128,7 +128,12 @@ class _DetailBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Image.memory(bytes, fit: BoxFit.contain, width: double.infinity),
+        Image.memory(
+          bytes,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          errorBuilder: (_, _, _) => _UnavailableView(onDelete: onDelete),
+        ),
         const SizedBox(height: 16),
         Text(
           label.isEmpty ? _unlabelled : label,

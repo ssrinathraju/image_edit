@@ -213,6 +213,37 @@ void main() {
     expect(File('${_root.path}/creations/deleted.json').readAsStringSync(), '[]');
   });
 
+  test('a save and a remember queued behind deleteAccount leave nothing', () async {
+    final store = _newStore();
+    await _save(store, 'job-a', userId: 'user-a');
+
+    final deleting = store.deleteAccount('user-a');
+    final saving = _save(store, 'job-late', userId: 'user-a');
+    final remembering = store.remember(
+      userId: 'user-a',
+      jobId: 'pending-late',
+      label: 'late',
+      submittedAt: DateTime.utc(2026, 10, 19),
+    );
+    await Future.wait([deleting, saving, remembering]);
+
+    expect(_account('user-a').existsSync(), isFalse);
+    expect(await store.list('user-a'), isEmpty);
+  });
+
+  test('ids that could leave the account folder are refused', () async {
+    final store = _newStore();
+    await _save(store, 'theirs', userId: 'other');
+    await _save(store, 'mine', userId: 'me');
+
+    await expectLater(store.readImage('me', '../other/theirs'), throwsArgumentError);
+    await expectLater(store.delete('me', '../other/theirs'), throwsArgumentError);
+    await expectLater(store.list('../other'), throwsArgumentError);
+
+    expect(File('${_root.path}/creations/other/theirs.png').existsSync(), isTrue);
+    expect(await store.readImage('me', 'mine'), _bytes);
+  });
+
   test('a tombstone left by an interrupted delete is finished at the next start', () async {
     await _save(_newStore(), 'job-a', userId: 'user-a');
     await _save(_newStore(), 'job-b', userId: 'user-b');

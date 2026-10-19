@@ -67,6 +67,22 @@ void main() {
     expect(_pendingIds(), isEmpty);
   });
 
+  test('a call for another account does not join a run in flight', () async {
+    client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+    await _remember('job-1');
+    await store.remember(
+      userId: 'user-2',
+      jobId: 'job-2',
+      label: 'label job-2',
+      submittedAt: _now.subtract(const Duration(hours: 1)),
+    );
+
+    await Future.wait([sync.run('user-1'), sync.run('user-2')]);
+
+    expect((await store.list('user-1')).single.jobId, 'job-1');
+    expect((await store.list('user-2')).single.jobId, 'job-2');
+  });
+
   test('a failed job is forgotten and nothing is added', () async {
     client.onStatus = (id) async => _job(id, JobStatus.failed);
     await _remember('job-1');

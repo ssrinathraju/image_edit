@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,6 +81,21 @@ void main() {
     expect(find.text('astronaut on a beach'), findsOneWidget);
     expect(find.textContaining('Oct 19'), findsOneWidget);
     expect(find.textContaining('10:30'), findsOneWidget);
+  });
+
+  testWidgets('an image that does not decode reads as unavailable', (tester) async {
+    final store = InMemoryCreationStore();
+    await store.save(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'x',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      finishedAt: _finishedAt,
+    );
+
+    await _pump(tester, store);
+
+    expect(find.text('This image is no longer available'), findsOneWidget);
   });
 
   testWidgets('an empty label reads as Creation', (tester) async {

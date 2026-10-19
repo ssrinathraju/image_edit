@@ -33,11 +33,13 @@ class HistorySync {
   final GenerationService service;
   final DateTime Function() clock;
 
-  Future<void>? _running;
+  final Map<String, Future<void>> _running = {};
 
   /// Checks the account's unsaved generations; a call during a run joins it.
   Future<void> run(String userId) {
-    return _running ??= _runOnce(userId).whenComplete(() => _running = null);
+    return _running[userId] ??= _runOnce(userId).whenComplete(() {
+      _running.remove(userId);
+    });
   }
 
   Future<void> _runOnce(String userId) async {
@@ -84,11 +86,16 @@ class HistorySync {
     if (code == _notFound) return _forgetAndContinue(userId, entry);
     // A 401 signs the user out elsewhere; anything else means the device is
     // probably offline. Either way the rest waits for the next visit.
-    _log.info('status_unavailable job=${entry.jobId} code=${code ?? error.type.name}');
+    _log.info(
+      'status_unavailable job=${entry.jobId} code=${code ?? error.type.name}',
+    );
     return false;
   }
 
-  Future<bool> _forgetAndContinue(String userId, PendingGeneration entry) async {
+  Future<bool> _forgetAndContinue(
+    String userId,
+    PendingGeneration entry,
+  ) async {
     await store.forget(userId, entry.jobId);
     return true;
   }
@@ -130,10 +137,12 @@ final historySyncProvider = Provider<HistorySync>(
 
 /// Starts a catch-up for the signed-in account and does not wait for it.
 void startHistoryCatchUp(WidgetRef ref) {
-  unawaited(_catchUpOnceSessionKnown(
-    ref.read(sessionProvider.future),
-    ref.read(historySyncProvider),
-  ));
+  unawaited(
+    _catchUpOnceSessionKnown(
+      ref.read(sessionProvider.future),
+      ref.read(historySyncProvider),
+    ),
+  );
 }
 
 Future<void> _catchUpOnceSessionKnown(
