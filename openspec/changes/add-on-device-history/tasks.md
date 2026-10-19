@@ -80,7 +80,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 8. Integration and hand-off
 
-- [ ] 8.1 Run `flutter analyze && flutter test` in `app/`. Verify zero analyzer warnings and that all tests pass. Then run `openspec validate add-on-device-history --strict`. The server is unchanged: run `uv run pytest -q` in `server/` once to confirm, and record the md5 of `server/storage/app.db` before and after to show it was untouched.
+- [x] 8.1 Run `flutter analyze && flutter test` in `app/`. Verify zero analyzer warnings and that all tests pass. Then run `openspec validate add-on-device-history --strict`. The server is unchanged: run `uv run pytest -q` in `server/` once to confirm, and record the md5 of `server/storage/app.db` before and after to show it was untouched.
 - [ ] 8.2 **Manual. iOS simulator and Android emulator**, against a local server in log mode on a temporary storage root:
   - Generate from a prompt and wait: it appears in My creations with the prompt and date.
   - Generate from a template and go back to home before it finishes. A few seconds later, open My creations: it appears, labelled with the template.
