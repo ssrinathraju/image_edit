@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../schemas/template.dart';
+import '../history/history_sync.dart';
 import '../plans/account_notifier.dart';
 import 'home_notifier.dart';
 
@@ -17,6 +18,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    startHistoryCatchUp(ref);
+  }
 
   @override
   void dispose() {

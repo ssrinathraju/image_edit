@@ -1,13 +1,17 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 
 import '../../core/provider_sign_in.dart';
 import '../../core/session_storage.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
 import '../common/submit_controller.dart';
+import '../history/creation_store.dart';
 import '../home/home_notifier.dart';
 import 'registration_draft.dart';
+
+final _log = Logger('SessionNotifier');
 
 final sessionStorageProvider =
     Provider<SessionStorage>((_) => SecureSessionStorage());
@@ -159,18 +163,22 @@ class SessionNotifier extends AsyncNotifier<Session?> {
 
   /// Deletes the account; a wrong password throws and keeps the session.
   Future<void> deleteAccount({required String password}) async {
+    final userId = state.valueOrNull?.userId;
     await ref.read(apiClientProvider).deleteAccount(password: password);
+    await _deleteLocalCreations(userId);
     await _clearLocalSession();
   }
 
   /// Deletes the account confirmed by a fresh provider sign-in; a rejected
   /// token throws and keeps the session.
   Future<void> deleteAccountWithProvider(ProviderCredential credential) async {
+    final userId = state.valueOrNull?.userId;
     await ref.read(apiClientProvider).deleteAccount(
           provider: credential.provider.apiName,
           token: credential.token,
           nonce: credential.nonce,
         );
+    await _deleteLocalCreations(userId);
     await _clearLocalSession();
   }
 
@@ -186,6 +194,17 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     state = AsyncData(session);
     // Every way of signing in ends the registration flow.
     ref.read(registrationDraftProvider.notifier).state = null;
+  }
+
+  /// The account is already gone on the server, so a failure here is logged
+  /// and sign-out goes on; the store finishes the job at its next start.
+  Future<void> _deleteLocalCreations(String? userId) async {
+    if (userId == null) return;
+    try {
+      await ref.read(creationStoreProvider).deleteAccount(userId);
+    } on Object catch (error) {
+      _log.warning('local_creations_not_deleted ${error.runtimeType}');
+    }
   }
 
   Future<void> _discardStoredSession() async {

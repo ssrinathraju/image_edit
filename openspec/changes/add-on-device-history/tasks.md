@@ -65,7 +65,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 
 ## 6. Account deletion
 
-- [ ] 6.1 In `SessionNotifier.deleteAccount` and `deleteAccountWithProvider`, call `store.deleteAccount(userId)` after the server confirms and before `_clearLocalSession`. Log and continue if it throws, and leave `signOut` unchanged (Decision 6). Verify that `test/features/auth/session_notifier_test.dart` covers:
+- [x] 6.1 In `SessionNotifier.deleteAccount` and `deleteAccountWithProvider`, call `store.deleteAccount(userId)` after the server confirms and before `_clearLocalSession`. Log and continue if it throws, and leave `signOut` unchanged (Decision 6). Verify that `test/features/auth/session_notifier_test.dart` covers:
   - both delete paths removing the account's creations and pending entries;
   - a server failure deleting nothing locally;
   - a throwing local delete still signing out;
