@@ -61,8 +61,6 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **Confirm screen `_backToRegistration` fallback loses typed values** — `context.go('/register')` opens a fresh screen when Confirm is the root route; unreachable in normal flow.
 
-## From PR review of add-on-device-history (round 2), design.md wording for archive time
+## From add-on-device-history
 
-- [ ] **Decision 4/catch-up date** — note in `design.md` that a caught-up creation's `finishedAt` is the catch-up time (up to 24h after the job really finished) because the server sends no finish time; it can affect grid order.
-- [ ] **Decision 7** — change "task 7.2" to task 8.3 (the manual backup check).
-- [ ] **Decision 8** — the detail screen uses `Image.memory` (not `Image.file`).
+- [ ] **Manual passes never recorded for add-on-device-history** — tasks 3.2 (Android build and merged-manifest check, no Android SDK), 8.2 (simulator/emulator pass) and 8.3 (backup-exclusion check) were never run.
