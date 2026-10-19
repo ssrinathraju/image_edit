@@ -71,6 +71,8 @@ When the status notifier reaches `succeeded` and `resultImageBytesProvider` has 
 
 The run never shows an error. When it saves something, the My creations grid refreshes through the store's change notifier.
 
+A caught-up creation's `finishedAt` is the time of the catch-up, which can be up to 24 hours after the job really finished, because the server sends no finish time. This can affect grid order.
+
 - **Alternative rejected: keep polling after the user leaves the status screen.** That means timers outliving the screen, plus extra work when the app is backgrounded. Catching up on the next home visit covers the same need with less machinery.
 
 ### 6. Scope and account deletion
@@ -83,7 +85,7 @@ The run never shows an error. When it saves something, the My creations grid ref
 - **Android.**
   - `res/xml/backup_rules.xml` is referenced by `android:fullBackupContent` for Android 11 and lower. It holds `<exclude domain="file" path="creations/"/>`, because `getApplicationSupportDirectory` maps to `files/`.
   - `res/xml/data_extraction_rules.xml` is referenced by `android:dataExtractionRules` for Android 12 and higher. It excludes the same path for both cloud backup and device transfer.
-- **Tests.** In Dart, the channel sits behind a small `BackupExclusion` interface so tests use a fake. The real exclusion can only be checked by hand (task 7.2).
+- **Tests.** In Dart, the channel sits behind a small `BackupExclusion` interface so tests use a fake. The real exclusion can only be checked by hand (task 8.3).
 
 - **Alternative rejected: allowing backups.** It would copy face images into the user's cloud account, which goes against the device-only decision.
 
@@ -92,7 +94,7 @@ The run never shows an error. When it saves something, the My creations grid ref
 - **Home:** an app-bar icon button with the tooltip "My creations".
 - **Grid:** `GridView` with 3 columns, each cell `Image.file(..., cacheWidth: 300)` with `errorBuilder` showing a placeholder.
 - **Detail:**
-  - the image `Image.file` at full width;
+  - the image as `Image.memory` with the bytes the screen reads from the file, at full width, with an `errorBuilder` showing the unavailable view;
   - the label (or "Creation") and the date in the device locale;
   - **Download:** `ImageActions.saveToLibrary` with bytes read from the file;
   - **Share:** `ImageActions.share` with the same bytes;
