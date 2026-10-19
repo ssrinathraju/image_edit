@@ -60,3 +60,9 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Mutual referral redemption** — two fresh provider accounts can redeem each other's codes (each gets +5 once, within 24 hours of creation). Bounded by the referrer cap and by the one-redemption-per-account rule. Closing it needs a rule such as "a code from an account that itself redeemed in the last 24 hours is refused", which is a spec change. Part of the wider referral-farming item above (disposable emails, no per-IP limits).
 
 - [ ] **Confirm screen `_backToRegistration` fallback loses typed values** — `context.go('/register')` opens a fresh screen when Confirm is the root route; unreachable in normal flow.
+
+## From PR review of add-on-device-history (round 2), design.md wording for archive time
+
+- [ ] **Decision 4/catch-up date** — note in `design.md` that a caught-up creation's `finishedAt` is the catch-up time (up to 24h after the job really finished) because the server sends no finish time; it can affect grid order.
+- [ ] **Decision 7** — change "task 7.2" to task 8.3 (the manual backup check).
+- [ ] **Decision 8** — the detail screen uses `Image.memory` (not `Image.file`).

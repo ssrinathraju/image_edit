@@ -5,22 +5,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/custom_generation/custom_generation_screen.dart';
+import 'package:image_edit/features/common/clock.dart';
+import 'package:image_edit/features/template_detail/template_screen.dart';
 import 'package:image_edit/features/plans/account_notifier.dart';
 import 'package:image_edit/schemas/session.dart';
 
 import '../../support/app_harness.dart';
 import '../../support/fake_api_client.dart';
 import '../../support/fake_session_storage.dart';
+import '../../support/in_memory_creation_store.dart';
 import '../../support/screen_harness.dart';
 
 late FakeApiClient client;
 
-Future<void> _pumpCustom(WidgetTester tester) => pumpScreen(
+final _now = DateTime.utc(2026, 10, 19, 8);
+
+Future<void> _pumpCustom(WidgetTester tester, {InMemoryCreationStore? store}) =>
+    pumpScreen(
       tester,
       client: client,
+      store: store,
       screen: const CustomGenerationScreen(),
       overrides: [
         sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
+        clockProvider.overrideWithValue(() => _now),
+      ],
+    );
+
+Future<void> _pumpTemplate(WidgetTester tester, InMemoryCreationStore store) =>
+    pumpScreen(
+      tester,
+      client: client,
+      store: store,
+      screen: TemplateScreen(
+        templateId: 'golden-hour',
+        template: fakeTemplate('golden-hour', title: 'Golden Hour Beach'),
+      ),
+      overrides: [
+        sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
+        clockProvider.overrideWithValue(() => _now),
       ],
     );
 
@@ -163,5 +186,55 @@ void main() {
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, 'a cat in space');
     expect(isGenerateEnabled(tester), isTrue);
+  });
+
+  testWidgets('a custom prompt is remembered with its text', (tester) async {
+    client.onSubmit = (_) async => 'job-9';
+    final store = InMemoryCreationStore();
+    await _pumpCustom(tester, store: store);
+    await _primeAccount(tester);
+
+    await _generate(tester);
+
+    final pending = await store.pending('user-1');
+    expect(pending.single.jobId, 'job-9');
+    expect(pending.single.label, 'a cat in space');
+    expect(pending.single.submittedAt, _now);
+    expect(find.text('status:job-9'), findsOneWidget);
+  });
+
+  testWidgets('a template is remembered with its title', (tester) async {
+    client.onSubmit = (_) async => 'job-8';
+    final store = InMemoryCreationStore();
+    await _pumpTemplate(tester, store);
+    await _primeAccount(tester);
+
+    await pickPhoto(tester);
+    await tester.tap(find.text('Generate'));
+    await tester.pumpAndSettle();
+
+    final pending = await store.pending('user-1');
+    expect(pending.single.label, 'Golden Hour Beach');
+  });
+
+  testWidgets('a failed submit remembers nothing', (tester) async {
+    final store = InMemoryCreationStore();
+    await _pumpCustom(tester, store: store);
+    await _primeAccount(tester);
+
+    await _generate(tester);
+
+    expect(await store.pending('user-1'), isEmpty);
+  });
+
+  testWidgets('a store that cannot remember still opens the status screen', (tester) async {
+    client.onSubmit = (_) async => 'job-7';
+    final store = InMemoryCreationStore()..rememberError = StateError('disk full');
+    await _pumpCustom(tester, store: store);
+    await _primeAccount(tester);
+
+    await _generate(tester);
+
+    expect(find.text('status:job-7'), findsOneWidget);
   });
 }

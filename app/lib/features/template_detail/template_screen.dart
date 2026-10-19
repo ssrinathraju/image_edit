@@ -87,7 +87,11 @@ class _TemplateBody extends ConsumerWidget {
               : () => submitAndOpenStatus(
                     context,
                     ref,
-                    GenerationRequest(photo: photo, templateId: template.id),
+                    GenerationRequest(
+                      photo: photo,
+                      templateId: template.id,
+                      templateTitle: template.title,
+                    ),
                   ),
           child: isSubmitting
               ? const SizedBox(

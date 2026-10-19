@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/registration_draft.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/generation_request.dart';
 import 'package:image_edit/features/common/submit_controller.dart';
+import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/schemas/session.dart';
 import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +14,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../support/fake_api_client.dart';
 import '../../support/fake_image_picker.dart';
 import '../../support/fake_session_storage.dart';
+import '../../support/in_memory_creation_store.dart';
 
 DioException _status(int code) => DioException(
       requestOptions: RequestOptions(path: '/me'),
@@ -21,11 +24,16 @@ DioException _status(int code) => DioException(
       ),
     );
 
-ProviderContainer _container(FakeApiClient client, FakeSessionStorage storage) {
+ProviderContainer _container(
+  FakeApiClient client,
+  FakeSessionStorage storage, {
+  InMemoryCreationStore? store,
+}) {
   final container = ProviderContainer(
     overrides: [
       apiClientProvider.overrideWithValue(client),
       sessionStorageProvider.overrideWithValue(storage),
+      creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
     ],
   );
   addTearDown(container.dispose);
@@ -253,5 +261,103 @@ void main() {
     expect(client.deletedWith, ['password-1']);
     expect(container.read(sessionProvider).value, isNull);
     expect(storage.saved, isNull);
+  });
+
+  Future<InMemoryCreationStore> storeWithCreations() async {
+    final store = InMemoryCreationStore();
+    for (final userId in ['user-1', 'user-2']) {
+      await store.save(
+        userId: userId,
+        jobId: 'job-$userId',
+        label: 'a label',
+        bytes: tinyPng,
+        finishedAt: DateTime.utc(2026, 10, 19),
+      );
+      await store.remember(
+        userId: userId,
+        jobId: 'pending-$userId',
+        label: '',
+        submittedAt: DateTime.utc(2026, 10, 19),
+      );
+    }
+    return store;
+  }
+
+  test('deleteAccount removes the account creations and pending jobs', () async {
+    storage.saved = savedSession;
+    final store = await storeWithCreations();
+    final container = _container(client, storage, store: store);
+    await container.read(sessionProvider.future);
+
+    await container
+        .read(sessionProvider.notifier)
+        .deleteAccount(password: 'password-1');
+
+    expect(store.deletedAccounts, ['user-1']);
+    expect(await store.list('user-1'), isEmpty);
+    expect(await store.pending('user-1'), isEmpty);
+    expect(await store.list('user-2'), hasLength(1));
+  });
+
+  test('deleteAccountWithProvider removes the account creations too', () async {
+    storage.saved = savedSession;
+    final store = await storeWithCreations();
+    final container = _container(client, storage, store: store);
+    await container.read(sessionProvider.future);
+
+    await container.read(sessionProvider.notifier).deleteAccountWithProvider(
+          const ProviderCredential(provider: SignInProvider.google, token: 'g-token'),
+        );
+
+    expect(store.deletedAccounts, ['user-1']);
+    expect(await store.list('user-1'), isEmpty);
+    expect(await store.pending('user-1'), isEmpty);
+    expect(container.read(sessionProvider).value, isNull);
+  });
+
+  test('a server failure deletes nothing locally', () async {
+    storage.saved = savedSession;
+    client.onDeleteAccount = (_) async => throw _status(403);
+    final store = await storeWithCreations();
+    final container = _container(client, storage, store: store);
+    await container.read(sessionProvider.future);
+
+    await expectLater(
+      container.read(sessionProvider.notifier).deleteAccount(password: 'nope'),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(store.deletedAccounts, isEmpty);
+    expect(await store.list('user-1'), hasLength(1));
+    expect(await store.pending('user-1'), hasLength(1));
+  });
+
+  test('a local delete that throws still signs out', () async {
+    storage.saved = savedSession;
+    final store = await storeWithCreations();
+    store.deleteAccountError = StateError('disk gone');
+    final container = _container(client, storage, store: store);
+    await container.read(sessionProvider.future);
+
+    await container
+        .read(sessionProvider.notifier)
+        .deleteAccount(password: 'password-1');
+
+    expect(container.read(sessionProvider).value, isNull);
+    expect(storage.saved, isNull);
+  });
+
+  test('signOut keeps the creations', () async {
+    storage.saved = savedSession;
+    final store = await storeWithCreations();
+    final container = _container(client, storage, store: store);
+    await container.read(sessionProvider.future);
+
+    await container.read(sessionProvider.notifier).signOut();
+
+    expect(store.deletedAccounts, isEmpty);
+    expect(await store.list('user-1'), hasLength(1));
+    expect(await store.pending('user-1'), hasLength(1));
+    expect(container.read(sessionProvider).value, isNull);
   });
 }

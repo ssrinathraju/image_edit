@@ -1,17 +1,26 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logging/logging.dart';
 
 import '../../schemas/job.dart';
-import '../../services/image_actions.dart';
+import '../auth/session_notifier.dart';
+import '../common/clock.dart';
 import '../common/error_message.dart';
+import '../common/image_action_row.dart';
+import '../history/creation_store.dart';
 import '../plans/account_notifier.dart';
 import '../common/submit_controller.dart';
 import '../common/submit_flow.dart';
 import 'generation_status_notifier.dart';
 import 'result_image_provider.dart';
+
+final _log = Logger('generation_status');
+
+const String _saveFailedMessage = "Couldn't save to My creations";
 
 class GenerationStatusScreen extends ConsumerWidget {
   const GenerationStatusScreen({required this.jobId, super.key});
@@ -95,80 +104,68 @@ class _SuccessView extends ConsumerWidget {
   }
 }
 
-class _ResultBody extends ConsumerWidget {
+class _ResultBody extends ConsumerStatefulWidget {
   const _ResultBody({required this.jobId, required this.bytes});
 
   final String jobId;
   final Uint8List bytes;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final showActions = ref.watch(showImageActionsProvider);
+  ConsumerState<_ResultBody> createState() => _ResultBodyState();
+}
+
+class _ResultBodyState extends ConsumerState<_ResultBody> {
+  bool _saveStarted = false;
+
+  String get jobId => widget.jobId;
+  Uint8List get bytes => widget.bytes;
+
+  // Not initState: a failed save needs the ScaffoldMessenger from context.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_saveStarted) return;
+    _saveStarted = true;
+    unawaited(_saveToHistory());
+  }
+
+  Future<void> _saveToHistory() async {
+    // Everything is read before the first await: the user may leave the
+    // screen meanwhile, and the bytes in hand should still be saved.
+    final messenger = ScaffoldMessenger.of(context);
+    final sessionFuture = ref.read(sessionProvider.future);
+    final store = ref.read(creationStoreProvider);
+    final finishedAt = ref.read(clockProvider)();
+    try {
+      final session = await sessionFuture;
+      if (session == null) return;
+      final pending = await store.pending(session.userId);
+      final label = pending.where((p) => p.jobId == jobId).firstOrNull?.label ?? '';
+      await store.save(
+        userId: session.userId,
+        jobId: jobId,
+        label: label,
+        bytes: bytes,
+        finishedAt: finishedAt,
+      );
+    } on Object catch (error) {
+      _log.warning('save_failed job=$jobId ${error.runtimeType}');
+      messenger.showSnackBar(const SnackBar(content: Text(_saveFailedMessage)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Image.memory(bytes, fit: BoxFit.contain),
         const SizedBox(height: 16),
-        if (showActions)
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _download(context, ref),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Builder(
-                  builder: (buttonContext) => OutlinedButton.icon(
-                    onPressed: () => _share(buttonContext, ref),
-                    icon: const Icon(Icons.share),
-                    label: const Text('Share'),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        ImageActionRow(bytes: bytes, name: jobId),
         const SizedBox(height: 12),
         _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
       ],
     );
-  }
-
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    String message;
-    try {
-      final result =
-          await ref.read(imageActionsProvider).saveToLibrary(bytes, name: jobId);
-      message = switch (result) {
-        SaveResult.saved => 'Saved to your photo library.',
-        SaveResult.permissionDenied =>
-          'Photo library access is required to save images. '
-              'Allow it in Settings and try again.',
-      };
-    } catch (_) {
-      message = 'Could not save the image.';
-    }
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _share(BuildContext buttonContext, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(buttonContext);
-    final box = buttonContext.findRenderObject() as RenderBox?;
-    final origin =
-        box == null ? null : box.localToGlobal(Offset.zero) & box.size;
-    try {
-      await ref
-          .read(imageActionsProvider)
-          .share(bytes, name: jobId, origin: origin);
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open the share sheet.')),
-      );
-    }
   }
 }
 

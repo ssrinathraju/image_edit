@@ -13,6 +13,8 @@ import 'features/auth/session_notifier.dart';
 import 'features/auth/splash_screen.dart';
 import 'features/custom_generation/custom_generation_screen.dart';
 import 'features/generation_status/generation_status_screen.dart';
+import 'features/history/creation_detail_screen.dart';
+import 'features/history/creations_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/plans/invite_screen.dart';
 import 'features/plans/upgrade_screen.dart';
@@ -92,6 +94,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const ReferralPromptScreen(),
       ),
       GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
+      GoRoute(path: '/creations', builder: (_, _) => const CreationsScreen()),
+      GoRoute(
+        path: '/creations/:jobId',
+        builder: (_, state) =>
+            CreationDetailScreen(jobId: state.pathParameters['jobId']!),
+      ),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(path: '/upgrade', builder: (_, _) => const UpgradeScreen()),
       GoRoute(path: '/invite', builder: (_, _) => const InviteScreen()),

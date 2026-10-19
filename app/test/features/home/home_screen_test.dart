@@ -1,15 +1,19 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/home/home_notifier.dart';
 import 'package:image_edit/features/home/home_screen.dart';
+import 'package:image_edit/schemas/job.dart';
 import 'package:image_edit/schemas/template.dart';
 import 'package:image_edit/services/generation_providers.dart';
 
 import '../../support/fake_api_client.dart';
 import '../../support/fake_session_storage.dart';
+import '../../support/in_memory_creation_store.dart';
 
 Future<GoRouter> _pump(
   WidgetTester tester,
@@ -45,6 +49,8 @@ Future<GoRouter> _pump(
 }
 
 void main() {
+  _historyTests();
+
   testWidgets('shows the templates in backend order', (tester) async {
     final client = FakeApiClient()
       ..onListTemplates = (_) async => [
@@ -122,5 +128,55 @@ void main() {
 
     expect(find.text('Verify your email'), findsNothing);
     expect(find.text('Trending'), findsOneWidget);
+  });
+}
+
+Future<InMemoryCreationStore> _pumpWithPendingJob(
+  WidgetTester tester,
+  FakeApiClient client,
+) async {
+  final store = InMemoryCreationStore();
+  await store.remember(
+    userId: 'user-1',
+    jobId: 'job-1',
+    label: 'astronaut on a beach',
+    submittedAt: DateTime.now(),
+  );
+  await _pump(tester, client, overrides: [
+    sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
+    creationStoreProvider.overrideWithValue(store),
+  ]);
+  return store;
+}
+
+void _historyTests() {
+  testWidgets('opening home saves a generation that finished meanwhile', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (id) async => GenerationJob(
+            jobId: id,
+            status: JobStatus.succeeded,
+            resultUrl: 'http://fake/$id.png',
+          );
+
+    final store = await _pumpWithPendingJob(tester, client);
+
+    expect(client.statusCalls, ['job-1']);
+    expect((await store.list('user-1')).single.label, 'astronaut on a beach');
+  });
+
+  testWidgets('an offline catch-up shows no error and keeps the job', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (_) async => throw DioException(
+            requestOptions: RequestOptions(path: '/generations/job-1'),
+            type: DioExceptionType.connectionError,
+          );
+
+    final store = await _pumpWithPendingJob(tester, client);
+
+    expect(client.statusCalls, ['job-1']);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.textContaining('Could not reach'), findsNothing);
+    expect(find.text('Trending'), findsOneWidget);
+    expect(await store.pending('user-1'), hasLength(1));
   });
 }
