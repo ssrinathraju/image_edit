@@ -66,7 +66,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 7. Integration and hand-off
 
-- [ ] 7.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `app.db` md5 and `inputs` count are unchanged, and that `openspec validate add-content-safety --strict` passes.
+- [x] 7.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `app.db` md5 and `inputs` count are unchanged, and that `openspec validate add-content-safety --strict` passes.
 - [ ] 7.2 **Manual. iOS simulator** against a local stub server on a temporary storage root:
   - a blocked word in a custom prompt shows the prompt message;
   - with `SAFETY_STUB_FLAG=all`, a photo shows "can't be used";
@@ -77,4 +77,4 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
   This box stays unticked until someone runs it.
 - [ ] 7.3 **Manual, needs the `ml` group and network.** Start with `MODEL_BACKEND=sana` and the real classifier, generate a few template images, and check that none of the safe templates are blocked at the default threshold. Note any false positives in the PR. This box stays unticked until someone runs it.
-- [ ] 7.4 Push `feat/add-content-safety`. Verify with `git log origin/feat/add-content-safety -1` that it matches the local HEAD.
+- [x] 7.4 Push `feat/add-content-safety`. Verify with `git log origin/feat/add-content-safety -1` that it matches the local HEAD.
