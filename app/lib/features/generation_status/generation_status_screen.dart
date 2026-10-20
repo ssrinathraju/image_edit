@@ -162,7 +162,7 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
       children: [
         Image.memory(bytes, fit: BoxFit.contain),
         const SizedBox(height: 16),
-        ImageActionRow(bytes: bytes, name: jobId),
+        ImageActionRow(bytes: bytes, name: jobId, jobId: jobId),
         const SizedBox(height: 12),
         _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
       ],

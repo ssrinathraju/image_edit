@@ -55,6 +55,15 @@ abstract class GenerationApiClient {
   Future<void> withdrawConsent();
   Future<void> redeemReferral({required String code});
 
+  /// Reports a result; the server keeps its own copy of the image while it
+  /// still has one, otherwise [imageBytes].
+  Future<void> submitReport({
+    required String jobId,
+    required String category,
+    required String note,
+    required Uint8List imageBytes,
+  });
+
   Future<void> requestPasswordReset({required String email});
   Future<Session> confirmPasswordReset({
     required String email,
@@ -283,6 +292,27 @@ class DioApiClient implements GenerationApiClient {
   @override
   Future<void> redeemReferral({required String code}) =>
       _dio.post<void>('/me/referral', data: {'code': code});
+
+  @override
+  Future<void> submitReport({
+    required String jobId,
+    required String category,
+    required String note,
+    required Uint8List imageBytes,
+  }) =>
+      _dio.post<void>(
+        '/reports',
+        data: FormData.fromMap({
+          'job_id': jobId,
+          'category': category,
+          if (note.isNotEmpty) 'note': note,
+          'image': MultipartFile.fromBytes(
+            imageBytes,
+            filename: '$jobId.png',
+            contentType: DioMediaType.parse('image/png'),
+          ),
+        }),
+      );
 
   Future<ProviderSession> _signInWithProvider(
     String path,

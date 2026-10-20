@@ -46,6 +46,9 @@ class FakeApiClient implements GenerationApiClient {
         created: false,
       );
   Future<void> Function(String code) onRedeemReferral = (_) async {};
+  Future<void> Function() onSubmitReport = () async {};
+  final submittedReports =
+      <({String jobId, String category, String note, Uint8List imageBytes})>[];
   Future<void> Function(String email) onRequestPasswordReset = (_) async {};
   Future<Session> Function(String email, String code, String newPassword)
       onConfirmPasswordReset = (email, _, _) async =>
@@ -198,6 +201,19 @@ class FakeApiClient implements GenerationApiClient {
   Future<void> redeemReferral({required String code}) {
     redeemedCodes.add(code);
     return onRedeemReferral(code);
+  }
+
+  @override
+  Future<void> submitReport({
+    required String jobId,
+    required String category,
+    required String note,
+    required Uint8List imageBytes,
+  }) {
+    submittedReports.add(
+      (jobId: jobId, category: category, note: note, imageBytes: imageBytes),
+    );
+    return onSubmitReport();
   }
 
   @override

@@ -4,18 +4,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/image_actions.dart';
+import '../report/report_sheet.dart';
 
-/// Download and Share for an image already in memory; hidden where the
-/// platform offers neither (web).
+/// Download and Share for an image already in memory (hidden where the
+/// platform offers neither, such as web), and Report for the job that made it.
 class ImageActionRow extends ConsumerWidget {
-  const ImageActionRow({required this.bytes, required this.name, super.key});
+  const ImageActionRow({
+    required this.bytes,
+    required this.name,
+    required this.jobId,
+    super.key,
+  });
 
   final Uint8List bytes;
   final String name;
+  final String jobId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(showImageActionsProvider)) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (ref.watch(showImageActionsProvider)) _saveAndShare(context, ref),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => showReportSheet(context, jobId: jobId, bytes: bytes),
+            icon: const Icon(Icons.flag_outlined),
+            label: const Text('Report'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _saveAndShare(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
         Expanded(

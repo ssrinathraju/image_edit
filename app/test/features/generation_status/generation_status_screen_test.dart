@@ -99,6 +99,30 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
   });
 
+  testWidgets('Report from the status screen sends the job id, category and image', (tester) async {
+    final harness = await _pump(tester, lastRequest: _request());
+
+    await tester.tap(find.text('Report'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Violence or gore'));
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+
+    final report = harness.client.submittedReports.single;
+    expect(report.jobId, 'job-1');
+    expect(report.category, 'violence');
+    expect(report.imageBytes, tinyPng);
+    expect(find.text("Thanks, we'll review it."), findsOneWidget);
+  });
+
+  testWidgets('Report stays available on web where Download and Share are hidden', (tester) async {
+    await _pump(tester, lastRequest: _request(), showActions: false);
+
+    expect(find.text('Download'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
+  });
+
   testWidgets('Download and Share are hidden on web, other actions stay', (tester) async {
     await _pump(tester, lastRequest: _request(), showActions: false);
 

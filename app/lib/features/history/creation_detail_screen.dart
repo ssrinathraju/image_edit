@@ -145,7 +145,7 @@ class _DetailBody extends StatelessWidget {
             '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(finishedAt))}',
           ),
         const SizedBox(height: 16),
-        ImageActionRow(bytes: bytes, name: jobId),
+        ImageActionRow(bytes: bytes, name: jobId, jobId: jobId),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: onDelete,
