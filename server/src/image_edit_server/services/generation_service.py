@@ -16,6 +16,7 @@ from image_edit_server.schemas.api import ErrorBody, JobStatusResponse
 from image_edit_server.schemas.job import Job, JobStatus
 from image_edit_server.schemas.user import User
 from image_edit_server.services.quota_service import QuotaService
+from image_edit_server.services.safety.safety_service import SafetyService, log_safety_event
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +30,20 @@ async def submit(
     user: User,
     quota: QuotaService,
     settings: Settings,
+    safety: SafetyService,
 ) -> str:
-    """Require age and consent, refuse an exhausted account, validate inputs, reserve a generation, persist uploads, queue a job."""
+    """Require age and consent, refuse a paused or exhausted account, validate and screen inputs, reserve a generation, persist uploads, queue a job."""
     _require_age_and_consent(user, settings)
+    await _refuse_if_suspended(user, safety)
     # Read-only: an exhausted account is refused before any upload is read or decoded.
     if not await asyncio.to_thread(quota.has_remaining, user):
         raise _quota_exceeded()
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
+    if template_id is None:
+        _screen_prompt(resolved_prompt, user, safety)
+    await _screen_uploads(face_data, user, safety)
 
     # Reserved only after validation passed, so a rejected request costs nothing.
     reservation_id = await _reserve(quota, user)
@@ -87,6 +93,58 @@ def _require_age_and_consent(user: User, settings: Settings) -> None:
             "consent_required",
             f"accept face-photo consent version {settings.CONSENT_VERSION!r} first",
         )
+
+
+async def _refuse_if_suspended(user: User, safety: SafetyService) -> None:
+    until = await asyncio.to_thread(safety.suspended_until, user.id)
+    if until is None:
+        return
+    log_safety_event("suspended", user.id)
+    raise HTTPException(
+        403,
+        {
+            **ErrorBody(
+                error="generation_suspended",
+                detail="generating is paused after repeated blocked results",
+            ).model_dump(),
+            "suspended_until": until.isoformat(),
+        },
+    )
+
+
+def _screen_prompt(prompt: str, user: User, safety: SafetyService) -> None:
+    if not safety.is_prompt_blocked(prompt):
+        return
+    log_safety_event("prompt_blocked", user.id)
+    raise HTTPException(
+        400,
+        ErrorBody(
+            error="prompt_blocked", detail="the prompt contains words that are not allowed"
+        ).model_dump(),
+    )
+
+
+async def _screen_uploads(photos: list[bytes], user: User, safety: SafetyService) -> None:
+    for data in photos:
+        try:
+            flagged = await safety.is_upload_flagged(data)
+        except Exception:
+            logger.exception("Upload classifier failed for account %s", user.id)
+            raise HTTPException(
+                503,
+                ErrorBody(
+                    error="safety_unavailable",
+                    detail="photo checks are unavailable right now; try again shortly",
+                ).model_dump(),
+            )
+        if flagged:
+            log_safety_event("photo_blocked", user.id)
+            raise HTTPException(
+                400,
+                ErrorBody(
+                    error="photo_blocked", detail="this photo cannot be used"
+                ).model_dump(),
+            )
 
 
 def _forbidden(code: str, detail: str) -> HTTPException:

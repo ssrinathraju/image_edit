@@ -25,7 +25,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 3. Server: submit checks
 
-- [ ] 3.1 Add the pause check, prompt screening and upload screening in `generation_service.submit`, in the order of Decision 3. Verify that `tests/api/test_generations_safety.py`, with fake classifiers, covers:
+- [x] 3.1 Add the pause check, prompt screening and upload screening in `generation_service.submit`, in the order of Decision 3. Verify that `tests/api/test_generations_safety.py`, with fake classifiers, covers:
   - `generation_suspended` with `suspended_until`, raised before uploads are read;
   - `prompt_blocked` with no echo, no job and unchanged remaining generations;
   - templates not screened;

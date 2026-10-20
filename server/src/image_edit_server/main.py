@@ -16,6 +16,7 @@ from image_edit_server.api.deps import (
     get_auth_service,
     get_quota_service,
     get_referral_service,
+    get_safety_service,
     get_settings,
     get_user_store,
 )
@@ -27,7 +28,7 @@ from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
-from image_edit_server.core.safety import ImageClassifier
+from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_terms
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
@@ -41,6 +42,7 @@ from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.safety.local_classifier import LocalImageClassifier
+from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.safety.stub_classifier import StubClassifier
 from image_edit_server.services.retention_service import run_retention, sweep
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
@@ -137,6 +139,13 @@ def create_app(
     )
 
     quota_service = QuotaService(user_store, cfg)
+    safety_service = SafetyService(
+        cfg,
+        user_store,
+        TermMatcher(load_terms(cfg.SAFETY_TERMS_FILE)),
+        upload_classifier,
+        output_classifier,
+    )
     referral_service = ReferralService(cfg, user_store)
 
     @asynccontextmanager
@@ -195,6 +204,7 @@ def create_app(
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
+    app.dependency_overrides[get_safety_service] = lambda: safety_service
     app.dependency_overrides[get_referral_service] = lambda: referral_service
     app.include_router(auth_router)
     app.include_router(generations_router)
