@@ -55,7 +55,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 6. App
 
-- [ ] 6.1 Add the error codes and `suspended_until` parsing, the `content_blocked` failure text, and the submit-flow messages and paused dialog (Decision 9). Verify that tests cover each message, the dialog's local time, the form values being kept, and the `content_blocked` view showing no image.
+- [x] 6.1 Add the error codes and `suspended_until` parsing, the `content_blocked` failure text, and the submit-flow messages and paused dialog (Decision 9). Verify that tests cover each message, the dialog's local time, the form values being kept, and the `content_blocked` view showing no image.
 - [ ] 6.2 Add `features/report/report_sheet.dart`, `submitReport` on the API client, and the Report action on the status success view and the creation detail screen. Verify that tests cover:
   - Send disabled without a category;
   - the request carrying the job id, category, note and image bytes from each screen;

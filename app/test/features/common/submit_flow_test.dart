@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,6 +69,8 @@ Future<void> _generate(WidgetTester tester) async {
 }
 
 void main() {
+  _safetyTests();
+
   setUp(() {
     client = FakeApiClient();
     client.onFetchMe = () async => fakeProfile(
@@ -236,5 +239,110 @@ void main() {
     await _generate(tester);
 
     expect(find.text('status:job-7'), findsOneWidget);
+  });
+}
+
+DioException _refused(int status, String code, {String? suspendedUntil}) => DioException(
+      requestOptions: RequestOptions(path: '/generations'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/generations'),
+        statusCode: status,
+        data: {
+          'detail': {
+            'error': code,
+            'detail': 'server wording that must not be shown',
+            'suspended_until': ?suspendedUntil,
+          },
+        },
+      ),
+    );
+
+void _safetyTests() {
+  group('safety refusals', () {
+    setUp(() {
+      client = FakeApiClient();
+      client.onFetchMe = () async => fakeProfile();
+    });
+
+    testWidgets('a blocked prompt keeps the form and says so in the app\'s words', (tester) async {
+      client.onSubmit = (_) async => throw _refused(400, 'prompt_blocked');
+      await _pumpCustom(tester);
+
+      await _generate(tester);
+
+      expect(find.text("Your prompt contains words we don't allow."), findsOneWidget);
+      expect(find.textContaining('server wording'), findsNothing);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'a cat in space');
+      expect(isGenerateEnabled(tester), isTrue);
+      expect(find.text('status:job-1'), findsNothing);
+    });
+
+    testWidgets('a blocked photo keeps the form and asks for another', (tester) async {
+      client.onSubmit = (_) async => throw _refused(400, 'photo_blocked');
+      await _pumpCustom(tester);
+
+      await _generate(tester);
+
+      expect(find.text("This photo can't be used. Choose another."), findsOneWidget);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'a cat in space');
+      expect(isGenerateEnabled(tester), isTrue);
+    });
+
+    testWidgets('unavailable checks say to try again', (tester) async {
+      client.onSubmit = (_) async => throw _refused(503, 'safety_unavailable');
+      await _pumpCustom(tester);
+
+      await _generate(tester);
+
+      expect(find.text('Checks are unavailable right now, try again.'), findsOneWidget);
+    });
+
+    testWidgets('a paused account sees when the pause ends in local time', (tester) async {
+      final until = DateTime.utc(2026, 10, 21, 15, 5);
+      client.onSubmit = (_) async =>
+          throw _refused(403, 'generation_suspended', suspendedUntil: until.toIso8601String());
+      await _pumpCustom(tester);
+
+      await _generate(tester);
+
+      final local = until.toLocal();
+      final context = tester.element(find.byType(AlertDialog));
+      final localizations = MaterialLocalizations.of(context);
+      final expectedEnd = '${localizations.formatMediumDate(local)}, '
+          '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+      expect(find.text('Generating is paused'), findsOneWidget);
+      expect(find.textContaining('until $expectedEnd'), findsOneWidget);
+      expect(find.textContaining('recent results broke our content rules'), findsOneWidget);
+    });
+
+    testWidgets('closing the paused dialog returns to the form with the values kept', (tester) async {
+      client.onSubmit = (_) async => throw _refused(
+            403,
+            'generation_suspended',
+            suspendedUntil: DateTime.utc(2026, 10, 21, 15, 5).toIso8601String(),
+          );
+      await _pumpCustom(tester);
+      await _generate(tester);
+
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'a cat in space');
+      expect(isGenerateEnabled(tester), isTrue);
+    });
+
+    testWidgets('a pause without a readable end time still explains itself', (tester) async {
+      client.onSubmit = (_) async => throw _refused(403, 'generation_suspended');
+      await _pumpCustom(tester);
+
+      await _generate(tester);
+
+      expect(find.text('Generating is paused'), findsOneWidget);
+      expect(find.textContaining('recent results broke our content rules'), findsOneWidget);
+    });
   });
 }

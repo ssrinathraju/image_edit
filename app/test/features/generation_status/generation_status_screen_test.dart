@@ -128,6 +128,22 @@ void main() {
     expect(find.text('Download'), findsNothing);
   });
 
+  testWidgets('a content_blocked job shows the content-rules message and no image', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (id) async =>
+          GenerationJob(jobId: id, status: JobStatus.failed, error: 'content_blocked');
+    await _pump(tester, client: client, lastRequest: _request());
+
+    expect(
+      find.text("This image was blocked by our content rules and wasn't counted."),
+      findsOneWidget,
+    );
+    expect(find.text('content_blocked'), findsNothing);
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('Report'), findsNothing);
+    expect(find.text('New Generation'), findsOneWidget);
+  });
+
   for (final code in <String?>['quota_exploded', null]) {
     testWidgets('a failed job with code $code shows the general message', (tester) async {
       final client = FakeApiClient()

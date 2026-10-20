@@ -82,3 +82,29 @@ bool isReferralNotAllowed(Object error) =>
     errorCodeOf(error) == referralNotAllowedCode;
 bool isInvalidReferralCode(Object error) =>
     errorCodeOf(error) == invalidReferralCodeCode;
+
+const String promptBlockedCode = 'prompt_blocked';
+const String photoBlockedCode = 'photo_blocked';
+const String generationSuspendedCode = 'generation_suspended';
+const String safetyUnavailableCode = 'safety_unavailable';
+const String tooManyReportsCode = 'too_many_reports';
+
+bool isPromptBlocked(Object error) => errorCodeOf(error) == promptBlockedCode;
+bool isPhotoBlocked(Object error) => errorCodeOf(error) == photoBlockedCode;
+bool isGenerationSuspended(Object error) =>
+    errorCodeOf(error) == generationSuspendedCode;
+bool isSafetyUnavailable(Object error) =>
+    errorCodeOf(error) == safetyUnavailableCode;
+bool isTooManyReports(Object error) => errorCodeOf(error) == tooManyReportsCode;
+
+/// When a `generation_suspended` pause ends (`detail.suspended_until`), if the
+/// server sent a readable time.
+DateTime? suspendedUntilOf(Object error) {
+  if (error is! DioException) return null;
+  final data = error.response?.data;
+  if (data is! Map) return null;
+  final detail = data['detail'];
+  if (detail is! Map) return null;
+  final until = detail['suspended_until'];
+  return until is String ? DateTime.tryParse(until) : null;
+}
