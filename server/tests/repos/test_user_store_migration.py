@@ -173,7 +173,7 @@ def test_fresh_database_has_the_email_keyed_code_schema(tmp_path):
     assert _columns(path, "pending_registrations") == {
         "email", "password_hash", "referral_code", "created_at"
     }
-    assert _user_version(path) == 5
+    assert _user_version(path) == 6
     assert _verified_flags(SqliteUserStore(path)) == {}
     created = store.create_user("ana@example.com", "hash")
     assert _verified_flags(store) == {created.id: 1}
@@ -187,7 +187,7 @@ def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db)
     assert _verified_flags(store) == {"u0": 1, "u1": 1}
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_user_by_session("v2-token").id == "u0"
-    assert _user_version(v2_db) == 5
+    assert _user_version(v2_db) == 6
 
 
 def test_running_the_migration_twice_changes_nothing_for_new_accounts(v2_db):
@@ -271,7 +271,7 @@ def test_fresh_database_has_the_identity_schema(tmp_path):
     assert _columns(path, "identities") >= {
         "provider", "subject", "user_id", "email", "apple_refresh_token", "created_at"
     }
-    assert _user_version(path) == 5
+    assert _user_version(path) == 6
 
 
 def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
@@ -287,7 +287,7 @@ def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
     assert vias == [("password",)]
     assert (a.has_password, b.has_password) == (True, True)
     assert store.list_providers("u0") == []
-    assert _user_version(v3_db) == 5
+    assert _user_version(v3_db) == 6
 
 
 def test_upgrading_a_v3_database_verifies_an_unverified_account_and_it_can_log_in(v3_db):
@@ -384,7 +384,7 @@ def test_upgrading_a_v4_database_leaves_age_and_consent_empty_and_keeps_the_rest
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_password_hash("u0") == "h0"
     assert store.get_user_by_session("v3-token").id == "u0"
-    assert _user_version(v4_db) == 5
+    assert _user_version(v4_db) == 6
 
 
 def test_running_the_v5_migration_twice_changes_nothing(v4_db):
@@ -410,3 +410,58 @@ def test_upgrading_a_v4_database_discards_registrations_started_before_the_age_c
     store = SqliteUserStore(v4_db)
 
     assert store._conn.execute("SELECT COUNT(*) FROM pending_registrations").fetchone()[0] == 0
+
+
+SAFETY_TABLES = {"safety_strikes", "reports"}
+
+
+def _tables(path) -> set:
+    conn = sqlite3.connect(path)
+    try:
+        return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def v5_db(v4_db) -> str:
+    """A schema-version-5 file: the v4 accounts, migrated, then stripped of the safety tables."""
+    SqliteUserStore(v4_db).close()
+    conn = sqlite3.connect(v4_db)
+    conn.execute("DROP TABLE safety_strikes")
+    conn.execute("DROP TABLE reports")
+    conn.execute("PRAGMA user_version = 5")
+    conn.commit()
+    conn.close()
+    return v4_db
+
+
+def test_fresh_database_has_the_safety_tables(tmp_path):
+    path = str(tmp_path / "fresh.db")
+    SqliteUserStore(path)
+
+    assert SAFETY_TABLES <= _tables(path)
+
+
+def test_upgrading_a_v5_database_adds_empty_safety_tables_and_keeps_accounts(v5_db):
+    assert not SAFETY_TABLES & _tables(v5_db)
+
+    store = SqliteUserStore(v5_db)
+
+    assert SAFETY_TABLES <= _tables(v5_db)
+    assert _user_version(v5_db) == 6
+    assert store.list_open_reports() == []
+    assert store.get_by_id("u0").bonus_credits == 5
+
+
+def test_running_the_v6_migration_twice_keeps_strikes_and_reports(v5_db):
+    first = SqliteUserStore(v5_db)
+    now = datetime.now(timezone.utc)
+    first.record_strike("u0", now, timedelta(hours=24))
+    first.add_report("r1", "u0", "job", "other", "", "none", None, now, 20)
+    first.close()
+
+    second = SqliteUserStore(v5_db)
+
+    assert second.suspended_until("u0", now, timedelta(hours=24), 1) is not None
+    assert [r.id for r in second.list_open_reports()] == ["r1"]

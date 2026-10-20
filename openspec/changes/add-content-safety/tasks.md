@@ -15,7 +15,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 2. Server: storage
 
-- [ ] 2.1 Add `repos/user_store_safety.py` with the tables and methods from Decision 5, and schema version 6. Verify:
+- [x] 2.1 Add `repos/user_store_safety.py` with the tables and methods from Decision 5, and schema version 6. Verify:
   - `tests/repos/test_user_store_safety.py` covers `suspended_until` with 2 strikes (None), with 3 (the third-most-recent plus the window), and after the oldest ages out;
   - the report cap at 20 within 24 hours;
   - two threads adding the 20th report creating exactly one;
