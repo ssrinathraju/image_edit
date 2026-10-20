@@ -11,7 +11,7 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
 
 ## 2. Server: fixes
 
-- [ ] 2.1 Unknown plan (Decision 3): `effective_plan`, a `daily_limit` that never raises, `/me` reporting `free`, and the warning with the user id only. Verify that `tests/core/test_plans.py` and `tests/api/test_me.py` cover a stored `gold` plan: `/me` gives 200 with plan `free` and the free limit, a submit uses the free limit, and a log capture has the user id and no `gold`.
+- [x] 2.1 Unknown plan (Decision 3): `effective_plan`, a `daily_limit` that never raises, `/me` reporting `free`, and the warning with the user id only. Verify that `tests/core/test_plans.py` and `tests/api/test_me.py` cover a stored `gold` plan: `/me` gives 200 with plan `free` and the free limit, a submit uses the free limit, and a log capture has the user id and no `gold`.
 - [ ] 2.2 Quota pre-check (Decision 2): `QuotaService.has_remaining` is called before face validation. Verify that `tests/api/test_generations_quota.py` covers:
   - an exhausted account getting 429 without `_read_and_validate_faces` being called (patch it to fail the test if called);
   - an account with 1 left sending an invalid image getting 400 and still having 1;

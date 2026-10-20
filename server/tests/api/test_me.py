@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from tests.helpers import grant_bonus
+import logging
+
+from tests.helpers import corrupt_plan, grant_bonus
 
 
 def test_fresh_account_reports_plan_usage_and_a_referral_code(client):
@@ -40,6 +42,20 @@ def test_premium_plan_is_reported_after_the_operator_change(client, user_store):
 
     assert body["plan"] == "premium"
     assert body["usage"]["daily_limit"] == 30
+
+
+def test_an_unknown_stored_plan_is_reported_as_free(client, user_store, user_id, caplog):
+    corrupt_plan(user_store, user_id, "gold")
+
+    with caplog.at_level(logging.WARNING):
+        response = client.get("/me")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["plan"] == "free"
+    assert body["usage"]["daily_limit"] == 3
+    assert user_id in caplog.text
+    assert "gold" not in caplog.text
 
 
 def test_no_password_material_is_returned(client):

@@ -2,7 +2,7 @@ import io
 
 import pytest
 
-from tests.helpers import grant_bonus
+from tests.helpers import corrupt_plan, grant_bonus
 
 PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -66,6 +66,16 @@ def test_premium_allows_a_fourth(client, user_store):
 
     for _ in range(4):
         assert _submit(client).status_code == 202
+
+
+def test_an_unknown_stored_plan_submits_with_the_free_limit(client, user_store, user_id, caplog):
+    corrupt_plan(user_store, user_id, "gold")
+
+    codes = [_submit(client).status_code for _ in range(4)]
+
+    assert codes == [202, 202, 202, 429]
+    assert user_id in caplog.text
+    assert "gold" not in caplog.text
 
 
 def test_plan_change_applies_without_a_restart(client, user_store):

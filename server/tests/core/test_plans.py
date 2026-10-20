@@ -1,7 +1,5 @@
-import pytest
-
 from image_edit_server.configs.settings import Settings
-from image_edit_server.core.plans import ALL_PLANS, FREE, PREMIUM, daily_limit, plan_limits
+from image_edit_server.core.plans import ALL_PLANS, FREE, PREMIUM, daily_limit, effective_plan, plan_limits
 
 
 def test_limits_per_plan():
@@ -19,6 +17,9 @@ def test_limits_follow_settings():
     assert plan_limits(settings) == {"free": 1, "premium": 2}
 
 
-def test_unknown_plan_raises():
-    with pytest.raises(ValueError, match="gold"):
-        daily_limit("gold", Settings())
+def test_unknown_plan_counts_as_free_and_never_raises():
+    settings = Settings()
+
+    assert effective_plan("gold") == FREE
+    assert effective_plan(PREMIUM) == PREMIUM
+    assert daily_limit("gold", settings) == daily_limit(FREE, settings) == 3
