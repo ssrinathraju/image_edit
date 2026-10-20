@@ -139,10 +139,11 @@ def test_the_pause_is_raised_before_any_upload_is_read(client, user_store, user_
 
 
 def test_other_endpoints_still_work_while_paused(client, user_store, user_id):
+    job_id = _submit(client).json()["job_id"]
     _strike_n_hours_ago(user_store, user_id, 3, 2, 1)
 
     assert client.get("/me").status_code == 200
-    assert client.get("/generations/unknown").status_code == 404
+    assert client.get(f"/generations/{job_id}").status_code == 200
 
 
 def test_the_pause_ends_by_itself(client, user_store, user_id):

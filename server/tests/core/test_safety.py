@@ -42,6 +42,17 @@ def test_spelled_out_run_only_matches_single_word_terms(matcher):
     assert not matcher.matches("c h i l d p o r n")
 
 
+@pytest.mark.parametrize(
+    "prompt", ["a N-U-D-3 woman", "photo of a N-U-D-3 model", "I N-U-D-3", "x N-U-D-3", "portrait, n u d e, a"]
+)
+def test_an_english_one_letter_word_beside_a_spelled_term_is_caught(prompt):
+    assert TermMatcher(["nude", "sex"]).matches(prompt)
+
+
+def test_a_spelled_run_that_has_no_term_passes():
+    assert not TermMatcher(["nude", "sex"]).matches("a b c classic")
+
+
 def test_harmless_prompt_passes(matcher):
     assert not matcher.matches("a portrait on a sunny beach, 4k")
 

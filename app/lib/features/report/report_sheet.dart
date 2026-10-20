@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_errors.dart';
@@ -11,6 +10,25 @@ const String reportThanksMessage = "Thanks, we'll review it.";
 const String _tooManyReportsMessage =
     "You've sent too many reports today. Try again tomorrow.";
 const String _sendFailedMessage = "Couldn't send the report. Try again.";
+
+/// Caps the text at [maxNoteChars] code points, the way the server counts it.
+/// Flutter's own `maxLength` counts grapheme clusters, which lets through
+/// emoji notes the server refuses.
+class CodePointLimitFormatter extends TextInputFormatter {
+  const CodePointLimitFormatter(this.limit);
+
+  final int limit;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final runes = newValue.text.runes;
+    if (runes.length <= limit) return newValue;
+    return oldValue;
+  }
+}
 
 /// The report categories the server accepts, in the order shown.
 const List<({String value, String label})> reportCategories = [
@@ -32,6 +50,7 @@ Future<void> showReportSheet(
   final sent = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    enableDrag: false,
     builder: (_) => ReportSheet(jobId: jobId, bytes: bytes),
   );
   if (sent == true) {
@@ -69,7 +88,9 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
       _errorMessage = null;
     });
     try {
-      await ref.read(apiClientProvider).submitReport(
+      await ref
+          .read(apiClientProvider)
+          .submitReport(
             jobId: widget.jobId,
             category: category,
             note: _note.text.trim(),
@@ -81,88 +102,101 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
       // The category and note stay as they are, so the user can send again.
       setState(() {
         _isSending = false;
-        _errorMessage =
-            isTooManyReports(error) ? _tooManyReportsMessage : _sendFailedMessage;
+        _errorMessage = isTooManyReports(error)
+            ? _tooManyReportsMessage
+            : _sendFailedMessage;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Report this image',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            RadioGroup<String>(
-              groupValue: _category,
-              onChanged: (value) {
-                if (!_isSending) setState(() => _category = value);
-              },
-              child: Column(
-                children: [
-                  for (final category in reportCategories)
-                    RadioListTile<String>(
-                      value: category.value,
-                      title: Text(category.label),
-                      enabled: !_isSending,
-                      dense: true,
+    return PopScope(
+      canPop: !_isSending,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            16 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Report this image',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              RadioGroup<String>(
+                groupValue: _category,
+                onChanged: (value) {
+                  if (!_isSending) setState(() => _category = value);
+                },
+                child: Column(
+                  children: [
+                    for (final category in reportCategories)
+                      RadioListTile<String>(
+                        value: category.value,
+                        title: Text(category.label),
+                        enabled: !_isSending,
+                        dense: true,
+                      ),
+                  ],
+                ),
+              ),
+              TextField(
+                controller: _note,
+                enabled: !_isSending,
+                inputFormatters: const [CodePointLimitFormatter(maxNoteChars)],
+                buildCounter: (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  required maxLength,
+                }) => Text('${_note.text.runes.length}/$maxNoteChars'),
+                maxLines: 3,
+                minLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                     ),
+                  ),
+                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isSending
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _category == null || _isSending ? null : _send,
+                    child: _isSending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Send'),
+                  ),
                 ],
               ),
-            ),
-            TextField(
-              controller: _note,
-              enabled: !_isSending,
-              maxLength: maxNoteChars,
-              maxLines: 3,
-              minLines: 1,
-              decoration: const InputDecoration(
-                labelText: 'Note (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed:
-                      _isSending ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _category == null || _isSending ? null : _send,
-                  child: _isSending
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Send'),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

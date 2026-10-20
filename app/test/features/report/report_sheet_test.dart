@@ -24,7 +24,8 @@ Future<void> _openSheet(WidgetTester tester, FakeApiClient client) async {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => showReportSheet(context, jobId: 'job-7', bytes: _bytes),
+              onPressed: () =>
+                  showReportSheet(context, jobId: 'job-7', bytes: _bytes),
               child: const Text('open'),
             ),
           ),
@@ -37,7 +38,10 @@ Future<void> _openSheet(WidgetTester tester, FakeApiClient client) async {
 }
 
 bool _sendEnabled(WidgetTester tester) =>
-    tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Send')).onPressed != null;
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Send'))
+        .onPressed !=
+    null;
 
 void main() {
   testWidgets('Send is disabled until a category is chosen', (tester) async {
@@ -64,34 +68,66 @@ void main() {
     }
   });
 
-  testWidgets('Send submits the job, category, note and image then thanks the user', (tester) async {
-    final client = FakeApiClient();
-    await _openSheet(tester, client);
+  testWidgets(
+    'Send submits the job, category, note and image then thanks the user',
+    (tester) async {
+      final client = FakeApiClient();
+      await _openSheet(tester, client);
 
-    await tester.tap(find.text('Violence or gore'));
-    await tester.enterText(find.byType(TextField), '  looks wrong ');
+      await tester.tap(find.text('Violence or gore'));
+      await tester.enterText(find.byType(TextField), '  looks wrong ');
+      await tester.pump();
+      await tester.tap(find.text('Send'));
+      await tester.pumpAndSettle();
+
+      final report = client.submittedReports.single;
+      expect(report.jobId, 'job-7');
+      expect(report.category, 'violence');
+      expect(report.note, 'looks wrong');
+      expect(report.imageBytes, _bytes);
+      expect(find.text("Thanks, we'll review it."), findsOneWidget);
+      expect(find.text('Report this image'), findsNothing);
+    },
+  );
+
+  testWidgets('the note is limited to 500 code points, as the server counts', (
+    tester,
+  ) async {
+    await _openSheet(tester, FakeApiClient());
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}';
+    final field = find.byType(TextField);
+    String text() => tester.widget<TextField>(field).controller!.text;
+
+    await tester.enterText(field, family * 71);
+    expect(text().runes.length, 497);
+    await tester.enterText(field, family * 72);
+
+    expect(text().runes.length, 497);
+  });
+
+  testWidgets('the sheet cannot be dismissed while sending', (tester) async {
+    final client = FakeApiClient();
+    final pending = Completer<void>();
+    client.onSubmitReport = () => pending.future;
+    await _openSheet(tester, client);
+    await tester.tap(find.text('Other'));
     await tester.pump();
     await tester.tap(find.text('Send'));
+    await tester.pump();
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Report this image'), findsOneWidget);
+
+    pending.complete();
     await tester.pumpAndSettle();
-
-    final report = client.submittedReports.single;
-    expect(report.jobId, 'job-7');
-    expect(report.category, 'violence');
-    expect(report.note, 'looks wrong');
-    expect(report.imageBytes, _bytes);
-    expect(find.text("Thanks, we'll review it."), findsOneWidget);
     expect(find.text('Report this image'), findsNothing);
+    expect(find.text("Thanks, we'll review it."), findsOneWidget);
   });
 
-  testWidgets('the note is limited to 500 characters', (tester) async {
-    await _openSheet(tester, FakeApiClient());
-
-    final field = tester.widget<TextField>(find.byType(TextField));
-
-    expect(field.maxLength, 500);
-  });
-
-  testWidgets('while sending, the controls are disabled and a spinner shows', (tester) async {
+  testWidgets('while sending, the controls are disabled and a spinner shows', (
+    tester,
+  ) async {
     final client = FakeApiClient();
     final pending = Completer<void>();
     client.onSubmitReport = () => pending.future;
@@ -104,7 +140,9 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel')).onPressed,
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+          .onPressed,
       isNull,
     );
     pending.complete();
@@ -112,9 +150,12 @@ void main() {
     expect(client.submittedReports, hasLength(1));
   });
 
-  testWidgets('too many reports is explained and the choices are kept', (tester) async {
+  testWidgets('too many reports is explained and the choices are kept', (
+    tester,
+  ) async {
     final client = FakeApiClient()
-      ..onSubmitReport = () async => throw apiError(429, 'too_many_reports', 'limit');
+      ..onSubmitReport = () async =>
+          throw apiError(429, 'too_many_reports', 'limit');
     await _openSheet(tester, client);
     await tester.tap(find.text('Hateful content'));
     await tester.enterText(find.byType(TextField), 'my note');
@@ -128,17 +169,22 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Report this image'), findsOneWidget);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'my note');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'my note',
+    );
     expect(_sendEnabled(tester), isTrue);
     expect(find.text("Thanks, we'll review it."), findsNothing);
   });
 
-  testWidgets('a network error keeps the sheet open and the values', (tester) async {
+  testWidgets('a network error keeps the sheet open and the values', (
+    tester,
+  ) async {
     final client = FakeApiClient()
       ..onSubmitReport = () async => throw DioException(
-            requestOptions: RequestOptions(path: '/reports'),
-            type: DioExceptionType.connectionError,
-          );
+        requestOptions: RequestOptions(path: '/reports'),
+        type: DioExceptionType.connectionError,
+      );
     await _openSheet(tester, client);
     await tester.tap(find.text('Other'));
     await tester.enterText(find.byType(TextField), 'offline note');
@@ -148,7 +194,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Couldn't send the report. Try again."), findsOneWidget);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'offline note');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'offline note',
+    );
     expect(_sendEnabled(tester), isTrue);
 
     client.onSubmitReport = () async {};

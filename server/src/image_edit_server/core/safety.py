@@ -27,8 +27,8 @@ def normalize_text(text: str) -> str:
     return " ".join(letters_only.split())
 
 
-def _join_single_letter_runs(normalized: str) -> str:
-    return _SINGLE_LETTER_RUN.sub(lambda match: match.group(0).replace(" ", ""), normalized)
+def _joined_letter_runs(normalized: str) -> list[str]:
+    return [match.group(0).replace(" ", "") for match in _SINGLE_LETTER_RUN.finditer(normalized)]
 
 
 class TermMatcher:
@@ -38,9 +38,7 @@ class TermMatcher:
         normalized = {normalize_text(term) for term in terms}
         normalized.discard("")
         self._terms = frozenset(f" {term} " for term in normalized)
-        self._single_word_terms = frozenset(
-            term for term in self._terms if term.strip().count(" ") == 0
-        )
+        self._single_word_terms = frozenset(term for term in normalized if " " not in term)
 
     def matches(self, prompt: str) -> bool:
         """True when the prompt contains any blocked term as a whole word or phrase."""
@@ -48,8 +46,8 @@ class TermMatcher:
         padded = f" {normalized} "
         if any(term in padded for term in self._terms):
             return True
-        joined = f" {_join_single_letter_runs(normalized)} "
-        return any(term in joined for term in self._single_word_terms)
+        runs = _joined_letter_runs(normalized)
+        return any(term in run for run in runs for term in self._single_word_terms)
 
 
 def load_terms(path: str) -> list[str]:

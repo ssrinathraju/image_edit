@@ -46,6 +46,10 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-content-safety
 
 - [ ] **Tune the threshold and the term list before launch** — `SAFETY_NSFW_THRESHOLD` (0.7) and `seed/safety/blocked_terms.txt` are a starting point. Run real generations (swimwear and beach templates especially) and adjust, then have the starter list reviewed.
+- [ ] **Starter-list false positives and normalisation gaps** — the list blocks "nude-colored dress", "gore-tex jacket", "topless convertible car" and "loli pop". Zero-width characters (`n\u200bude` becomes "n ude") and Cyrillic look-alike letters slip past `normalize_text`. Handle both when tuning.
+- [ ] **Design drift to correct at archive** — design.md Decision 1 describes the joined-letter check as joining every single-letter run and matching whole words; the code now tests each single-word term as a substring of each spelled-out run (so "a N-U-D-3 woman" is caught). The design's logging list names a `strike` event; the worker logs only `output_blocked`, and the README matches the code.
+- [ ] **Device report images are always saved as `<id>.png`** even when the upload was JPEG (harmless; `show --out` writes the bytes under the operator's name).
+- [ ] **Paused-dialog test does not exercise the local-time conversion** — it computes the expected time with `toLocal()` in the test's own timezone; set a non-UTC zone to prove it.
 - [ ] **Reported images in the privacy review** — reports keep a face-derived image for 30 days, longer than the 24-hour result retention. Add this to the privacy policy review.
 
 ## Deployment checklist
