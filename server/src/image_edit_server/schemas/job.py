@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -23,3 +24,4 @@ class Job:
     user_id: str = ""
     reservation_id: Optional[str] = None
     face_paths: list[str] = field(default_factory=list)
+    finished_at: Optional[datetime] = None

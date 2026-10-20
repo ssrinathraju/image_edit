@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, Sequence, TypeVar
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.repos import file_storage
-from image_edit_server.schemas.job import JobStatus
+from image_edit_server.schemas.job import Job, JobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,33 @@ def _batches(items: Sequence[_T]) -> Iterable[Sequence[_T]]:
         yield items[start:start + BATCH_SIZE]
 
 
+def _is_expired_finished_job(job: Job, now: datetime, retention: timedelta) -> bool:
+    if job.status in _LIVE or job.finished_at is None:
+        return False
+    return now - job.finished_at >= retention
+
+
+async def _expire_finished_jobs(
+    store: JobStore, settings: Settings, now: datetime
+) -> tuple[int, int]:
+    """Remove records (and any image) of jobs finished longer ago than the retention."""
+    retention = timedelta(hours=settings.OUTPUT_RETENTION_HOURS)
+    removed = errors = 0
+    for batch in _batches(list(store.list_all())):
+        for job in batch:
+            try:
+                if not _is_expired_finished_job(job, now, retention):
+                    continue
+                store.delete(job.id)
+                file_storage.delete_output(job.id, settings.STORAGE_ROOT)
+                removed += 1
+            except Exception:
+                errors += 1
+                logger.exception("Could not expire finished job %s", job.id)
+        await asyncio.sleep(0)
+    return removed, errors
+
+
 async def sweep(store: JobStore, settings: Settings, now: datetime) -> SweepResult:
     """One retention pass: expire old images and clear faces of vanished jobs.
 
@@ -112,13 +139,19 @@ async def sweep(store: JobStore, settings: Settings, now: datetime) -> SweepResu
                 logger.exception("Could not remove leftover faces of %s", job_id)
         await asyncio.sleep(0)
 
+    finished_removed, finished_errors = await _expire_finished_jobs(store, settings, now)
+    job_records_removed += finished_removed
+    errors += finished_errors
+
     result = SweepResult(
         outputs_removed, job_records_removed, input_folders_removed, errors
     )
-    if outputs_removed or input_folders_removed:
+    if outputs_removed or input_folders_removed or finished_removed:
         logger.info(
-            "Retention sweep removed %d expired image(s) and %d leftover face folder(s)",
+            "Retention sweep removed %d expired image(s), %d finished job record(s)"
+            " and %d leftover face folder(s)",
             outputs_removed,
+            finished_removed,
             input_folders_removed,
         )
     return result

@@ -16,7 +16,7 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
   - an exhausted account getting 429 without `_read_and_validate_faces` being called (patch it to fail the test if called);
   - an account with 1 left sending an invalid image getting 400 and still having 1;
   - the existing concurrent test still passing.
-- [ ] 2.3 Finished job records (Decision 4): `Job.finished_at` set by the worker, `list_all` on the store, and the sweep's second pass. Verify that `tests/services/test_retention_service.py` and `tests/services/test_worker.py` cover:
+- [x] 2.3 Finished job records (Decision 4): `Job.finished_at` set by the worker, `list_all` on the store, and the sweep's second pass. Verify that `tests/services/test_retention_service.py` and `tests/services/test_worker.py` cover:
   - a failed job older than the retention period being removed (status gives 404);
   - a recent failed job being kept;
   - a queued or running job older than the period being kept;

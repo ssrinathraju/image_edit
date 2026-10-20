@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -12,6 +13,10 @@ from image_edit_server.repos import file_storage
 from image_edit_server.schemas.job import JobStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _call_safely(action: Callable[[str], object], argument: str, what: str) -> bool:
@@ -31,6 +36,7 @@ async def run_worker(
     user_exists: Optional[Callable[[str], bool]] = None,
     refund: Optional[Callable[[str], None]] = None,
     settle: Optional[Callable[[str], None]] = None,
+    clock: Callable[[], datetime] = _utc_now,
 ) -> None:
     """Pull queued jobs and process them one at a time. Runs until cancelled."""
     while True:
@@ -59,13 +65,23 @@ async def run_worker(
                 logger.info("Job %s was deleted while running; output discarded", job_id)
                 continue
             result_url = f"/images/{job_id}.png"
-            store.update(job_id, status=JobStatus.succeeded, result_url=result_url)
+            store.update(
+                job_id,
+                status=JobStatus.succeeded,
+                result_url=result_url,
+                finished_at=clock(),
+            )
             logger.info("Job %s succeeded", job_id)
             if settle is not None and job.reservation_id:
                 _call_safely(settle, job.reservation_id, "settle generation")
         except Exception:
             logger.exception("Job %s failed", job_id)
-            store.update(job_id, status=JobStatus.failed, error="pipeline_failed")
+            store.update(
+                job_id,
+                status=JobStatus.failed,
+                error="pipeline_failed",
+                finished_at=clock(),
+            )
             if refund is not None and job.reservation_id:
                 _call_safely(refund, job.reservation_id, "refund generation")
         finally:

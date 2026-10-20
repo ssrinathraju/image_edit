@@ -8,7 +8,7 @@ from image_edit_server.configs.settings import Settings
 from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.schemas.job import Job, JobStatus
-from image_edit_server.services import retention_service
+from image_edit_server.services import generation_service, retention_service
 from image_edit_server.services.retention_service import run_retention, sweep
 
 NOW = datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)
@@ -170,6 +170,82 @@ async def test_a_clean_pass_reports_zeroes(settings, store):
     result = await sweep(store, settings, NOW)
 
     assert result == retention_service.SweepResult()
+
+
+# ── finished job records ────────────────────────────────────────────────────
+
+
+def _finished(store, status, hours_ago: float) -> str:
+    job_id = store.create(Job(id="", prompt="p", user_id="ana"))
+    store.update(
+        job_id,
+        status=status,
+        finished_at=NOW - timedelta(hours=hours_ago),
+    )
+    return job_id
+
+
+def _status(store, job_id):
+    return generation_service.get_status(job_id, "ana", store)
+
+
+async def test_an_old_failed_job_is_removed_and_its_status_is_gone(settings, store):
+    job_id = _finished(store, JobStatus.failed, hours_ago=25)
+
+    result = await sweep(store, settings, NOW)
+
+    assert store.get(job_id) is None
+    assert _status(store, job_id) is None
+    assert result.job_records_removed == 1
+
+
+async def test_a_recent_failed_job_is_kept(settings, store):
+    job_id = _finished(store, JobStatus.failed, hours_ago=23)
+
+    await sweep(store, settings, NOW)
+
+    assert _status(store, job_id).status == JobStatus.failed
+
+
+@pytest.mark.parametrize("status", [JobStatus.queued, JobStatus.running])
+async def test_a_live_job_older_than_the_period_is_kept(settings, store, status):
+    job_id = _finished(store, status, hours_ago=100)
+
+    await sweep(store, settings, NOW)
+
+    assert store.get(job_id) is not None
+
+
+async def test_an_old_succeeded_job_loses_its_record_and_its_image(settings, store):
+    job_id = _finished(store, JobStatus.succeeded, hours_ago=25)
+    image = _output(settings, job_id, age_hours=1)
+
+    await sweep(store, settings, NOW)
+
+    assert store.get(job_id) is None
+    assert not image.exists()
+
+
+async def test_one_bad_record_is_logged_and_the_sweep_continues(
+    settings, store, monkeypatch, caplog
+):
+    first = _finished(store, JobStatus.failed, hours_ago=30)
+    second = _finished(store, JobStatus.failed, hours_ago=30)
+    real_delete = store.delete
+
+    def flaky(job_id):
+        if job_id == first:
+            raise RuntimeError("store hiccup")
+        real_delete(job_id)
+
+    monkeypatch.setattr(store, "delete", flaky)
+
+    result = await sweep(store, settings, NOW)
+
+    assert store.get(first) is not None
+    assert store.get(second) is None
+    assert result.errors == 1
+    assert first in caplog.text
 
 
 # ── run_retention ───────────────────────────────────────────────────────────

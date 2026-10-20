@@ -91,3 +91,15 @@ def test_list_queued_survives_concurrent_creates_and_deletes(store):
         writer.join()
 
     assert errors == []
+
+
+def test_list_all_returns_every_job_in_any_status_as_a_snapshot(store):
+    queued = store.create(Job(id="", prompt="a"))
+    failed = store.create(Job(id="", prompt="b"))
+    store.update(failed, status=JobStatus.failed)
+
+    snapshot = list(store.list_all())
+    store.delete(queued)
+
+    assert {job.id for job in snapshot} == {queued, failed}
+    assert [job.id for job in store.list_all()] == [failed]

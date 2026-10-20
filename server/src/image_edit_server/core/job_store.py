@@ -26,6 +26,10 @@ class JobStore(Protocol):
         """Return all jobs owned by the user."""
         ...
 
+    def list_all(self) -> Iterable[Job]:
+        """Return a snapshot of every job."""
+        ...
+
     def delete(self, job_id: str) -> None:
         """Remove the job; unknown ids are ignored."""
         ...

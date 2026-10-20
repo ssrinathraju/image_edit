@@ -36,3 +36,6 @@ class InMemoryJobStore:
 
     def list_queued(self) -> Iterable[Job]:
         return [j for j in list(self._store.values()) if j.status == JobStatus.queued]
+
+    def list_all(self) -> Iterable[Job]:
+        return list(self._store.values())
