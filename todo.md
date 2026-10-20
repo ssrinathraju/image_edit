@@ -79,3 +79,7 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Spec follow-up** — add the 'Update the app to continue' behaviour for an unknown consent version to the account-ui spec through a /prod-pm change (CLAUDE.md forbids editing openspec/specs directly; archive only syncs this change's deltas).
 - [ ] **Router notes** — `ageConfirmed ?? true` (router.dart) and the `/me`-fails-to-load case send an unconfirmed user home until the server answers `age_not_confirmed`; a future `ref.invalidate(accountProvider)` would redirect through the splash screen mid-flow. Add `/referral-prompt` and `/confirm-registration` to the router test's list of routes an unconfirmed account cannot open.
 - [ ] **Remaining manual checks for add-age-gate-and-face-consent** — 7.2's iOS simulator flows (the under-18 refusal, consent decline and accept, withdraw) passed on 2026-10-20. Still open: 7.2's pre-upgrade `app.db` step (Confirm your age, and the blocked screen), 7.3 (the consoles), and the reviewer's extra manual checks: a pending registration across the upgrade, an unknown consent version, a version change while the consent screen is open, and the date-of-birth transport limit.
+
+## From harden-server-edge-cases
+
+- [ ] **Manual check 4.2 never run** — the iOS simulator check (the limit dialog appears at once after 3 generations, and generation works normally before the limit) was not run for harden-server-edge-cases. The plain-language failure text is covered by widget tests only, because the stub pipeline cannot be made to fail.

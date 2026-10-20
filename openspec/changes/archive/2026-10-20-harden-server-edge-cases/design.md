@@ -41,7 +41,7 @@ A request racing for the last generation can pass the pre-check and still get 42
 ### 3. An unknown plan falls back to free in one place
 `core/plans.py` gains `effective_plan(plan) -> str`, which returns `plan` if it is in `ALL_PLANS`, otherwise `FREE`. `daily_limit` uses `effective_plan` and never raises.
 
-The warning is logged once per request in `QuotaService` (`unknown_plan user=<id>`, never the stored value), which `GET /me` reports through `effective_plan`. `/me` therefore always shows `free` for a corrupted value. The stored value is left untouched for the operator to inspect.
+The warning is logged by `QuotaService._limit_for` (`unknown_plan user=<id>`, never the stored value) each time the limit is computed, so a submit with a corrupted plan logs it twice (once in `has_remaining`, once in `reserve`). `GET /me` reports the plan through `effective_plan`. `/me` therefore always shows `free` for a corrupted value. The stored value is left untouched for the operator to inspect.
 
 ### 4. Jobs record `finished_at`, and the sweep expires records by age
 - `Job` gains `finished_at: Optional[datetime]`. The worker sets it, using the injected clock, when it sets `succeeded` or `failed`.
@@ -50,7 +50,7 @@ The warning is logged once per request in `QuotaService` (`unknown_plan user=<id
 - Queued and running jobs are skipped, as today (`_LIVE`).
 - The second pass catches and logs per-job errors like the first, so one bad record doesn't stop the sweep.
 
-The in-memory store's lock covers `list_all`, which returns a snapshot list.
+`InMemoryJobStore.list_all` returns a snapshot list without taking a lock, like the store's other methods. That is safe because all callers run on the event loop.
 
 ### 5. `date_of_birth` is typed loosely and checked by `check_date_of_birth`
 - The four request models declare `date_of_birth` as `Any` (Optional where it's optional), with no length constraint.
