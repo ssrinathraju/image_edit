@@ -12,7 +12,6 @@ Items deferred from PR #1 review. None block the merge.
   - Recover lost data after the activity is killed (image picker / camera).
   - Camera "permission denied" path that offers to open Settings.
 - [ ] **`resolveUrl` with absolute URLs** — only matters once results are served from a CDN. Revisit then.
-- [ ] **Friendly text for failed jobs** — the status screen shows the server's raw code (e.g. `pipeline_failed`). Map known codes to user-facing messages. Predates PR #1.
 - [ ] **Search text as prompt** — search text isn't capped when reused as the prompt. Cosmetic: the custom screen already shows the 500-character error.
 - [ ] **`assert` stripped in release builds** — low value, the server already returns a clean 400. Replace with an explicit check if we touch that code.
 - [ ] **Image format sniffing helper** (`app/lib/services/image_actions.dart`) — builds a list and `asMap()` per check. Simplify with a plain byte comparison.
@@ -26,7 +25,6 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **Tell users when a result expires** — add `expires_at` to the status response and a note on the result screen. Results are deleted after the retention period (24 hours by default) with no warning today; Download and Share are the only way to keep one.
 
-- [ ] **Failed jobs' records are never swept** — a failed job has no image, so the sweep never finds it and its (small) in-memory record lives until the process restarts. Give jobs a finish time and expire terminal records older than the retention period regardless of image; this needs a one-line spec addition. Accepted for now: growth is slow and bounded by restarts.
 - [x] **`generation_service.submit` ignores the app's settings** — it takes its settings from a module-level `Settings()` default and the router never passes the app's own settings. With an app built from an explicit `Settings(...)`, reference-face uploads and the validation limits (`MAX_FACES`, `MAX_UPLOAD_BYTES`, prompt length, accepted types) come from the environment default instead, so uploads land in `./storage/inputs` while the worker deletes under the configured root. Dormant in a normal deployment because both read the same environment variables. Visible in tests: every test run leaves face folders in the real `server/storage/inputs`. Fix: provide the app's settings to the generations router through a dependency and use them in `submit`, with a test that an explicit storage root receives the upload.
 
 ## From archive
@@ -42,10 +40,12 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **Referral farming (remaining risk)** — verification now gates the referral reward, but disposable email addresses still pass and there are no per-IP limits on registration. Add disposable-domain screening or per-IP limits before any public launch.
 - [ ] **Hide the Upgrade entry in release builds** until billing exists (the screen is a "payments not available" placeholder).
-- [ ] **Unknown plan returns 500** — `daily_limit` raises for a plan value outside `free`/`premium` (only reachable through a corrupted DB). Fall back to Free and log.
-- [ ] **Uploads are read before the quota check** — an over-limit user still makes the server read up to 40 MB before the 429.
 - [ ] **Duplicate `/me` fetch at startup** — session restore and `AccountNotifier` each call it.
 - [ ] **Failed settle gives a free generation** — if settling fails after a success, the reservation is refunded at the next restart. Rare and logged; accepted.
+
+## Deployment checklist
+
+- [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total.
 
 ## Decided, no change
 
@@ -76,8 +76,6 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-age-gate-and-face-consent
 
 - [ ] **Legal review of the consent wording** — have the face-photo consent text (`features/consent/consent_text.dart`) and the privacy policy reviewed for GDPR and BIPA before launch; bump `CONSENT_VERSION` when the text changes.
-- [ ] **Non-string date of birth gets 422, not 400** — the age spec says anything other than `YYYY-MM-DD` is `400 invalid_date_of_birth`; a JSON number for `date_of_birth` still fails pydantic's `string_type` with 422. Strings of any plausible length now get 400 (limit raised to 32). Amend the spec delta to allow 422 for non-string input, or accept `Any` and check it in `check_date_of_birth`.
 - [ ] **Spec follow-up** — add the 'Update the app to continue' behaviour for an unknown consent version to the account-ui spec through a /prod-pm change (CLAUDE.md forbids editing openspec/specs directly; archive only syncs this change's deltas).
 - [ ] **Router notes** — `ageConfirmed ?? true` (router.dart) and the `/me`-fails-to-load case send an unconfirmed user home until the server answers `age_not_confirmed`; a future `ref.invalidate(accountProvider)` would redirect through the splash screen mid-flow. Add `/referral-prompt` and `/confirm-registration` to the router test's list of routes an unconfirmed account cannot open.
-- [ ] **Split `repos/user_store.py`** (about 975 lines, limit 1000) — move age, consent and identities out in the next change.
 - [ ] **Remaining manual checks for add-age-gate-and-face-consent** — 7.2's iOS simulator flows (the under-18 refusal, consent decline and accept, withdraw) passed on 2026-10-20. Still open: 7.2's pre-upgrade `app.db` step (Confirm your age, and the blocked screen), 7.3 (the consoles), and the reviewer's extra manual checks: a pending registration across the upgrade, an unknown consent version, a version change while the consent screen is open, and the date-of-birth transport limit.

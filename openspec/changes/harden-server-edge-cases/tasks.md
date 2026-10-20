@@ -24,7 +24,7 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
   - a per-record error being logged with the sweep continuing;
   - the worker setting `finished_at` on both terminal paths.
 - [x] 2.4 Date-of-birth typing (Decision 5). Verify that `tests/api/test_age_and_consent.py` covers `19900101`, `true`, `{}`, `[]` and a 200-character string on register, Google sign-in and `/me/age`: each gives 400 `invalid_date_of_birth`, with a body that doesn't contain the sent value. Provider sign-in with `"date_of_birth": null` still gives `age_required` for a new account.
-- [ ] 2.5 Update `todo.md`: remove the five items this change fixes (friendly failure text, uploads read before the quota check, unknown plan 500, failed jobs never swept, non-string date of birth) and the `user_store.py` split item. Add a deployment note: cap the request body size at the proxy. Verify by reading `todo.md`.
+- [x] 2.5 Update `todo.md`: remove the five items this change fixes (friendly failure text, uploads read before the quota check, unknown plan 500, failed jobs never swept, non-string date of birth) and the `user_store.py` split item. Add a deployment note: cap the request body size at the proxy. Verify by reading `todo.md`.
 
 ## 3. App: failure text
 
