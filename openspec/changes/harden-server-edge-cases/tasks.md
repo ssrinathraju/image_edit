@@ -28,7 +28,7 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
 
 ## 3. App: failure text
 
-- [ ] 3.1 Add `failure_messages.dart` and use it in `_FailureView` (Decision 1). Verify that `test/features/generation_status/generation_status_screen_test.dart` covers `pipeline_failed` showing the plain message and not the code, and an unknown code and a null code showing the general message.
+- [x] 3.1 Add `failure_messages.dart` and use it in `_FailureView` (Decision 1). Verify that `test/features/generation_status/generation_status_screen_test.dart` covers `pipeline_failed` showing the plain message and not the code, and an unknown code and a null code showing the general message.
 
 ## 4. Integration and hand-off
 

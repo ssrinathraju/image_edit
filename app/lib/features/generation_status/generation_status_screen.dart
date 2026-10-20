@@ -15,6 +15,7 @@ import '../history/creation_store.dart';
 import '../plans/account_notifier.dart';
 import '../common/submit_controller.dart';
 import '../common/submit_flow.dart';
+import 'failure_messages.dart';
 import 'generation_status_notifier.dart';
 import 'result_image_provider.dart';
 
@@ -51,7 +52,7 @@ class GenerationStatusScreen extends ConsumerWidget {
           JobStatus.succeeded => _SuccessView(job: job),
           JobStatus.failed => _FailureView(
               jobId: jobId,
-              message: job.error ?? 'Generation failed',
+              message: failureMessageFor(job.error),
             ),
         },
       ),
