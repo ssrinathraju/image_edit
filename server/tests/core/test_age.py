@@ -41,3 +41,9 @@ def test_tomorrow_is_invalid():
 def test_today_is_under_age_not_invalid():
     with pytest.raises(UnderAge):
         check_date_of_birth("2026-02-28", TODAY)
+
+
+@pytest.mark.parametrize("value", [19900101, True, {}, [], None, "1" * 33])
+def test_a_non_string_or_over_long_value_is_invalid(value):
+    with pytest.raises(InvalidDateOfBirth):
+        check_date_of_birth(value, date(2026, 1, 1))

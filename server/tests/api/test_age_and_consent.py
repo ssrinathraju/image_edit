@@ -47,6 +47,77 @@ def test_malformed_or_future_dates_are_400(anon_client, unconfirmed_headers, tex
     assert resp.json()["detail"]["error"] == "invalid_date_of_birth"
 
 
+NOT_A_DATE_STRING = [
+    pytest.param(19900101, "19900101", id="number"),
+    pytest.param(True, "true", id="boolean"),
+    pytest.param({}, "{}", id="object"),
+    pytest.param([], "[]", id="list"),
+    pytest.param("x" * 200, "x" * 200, id="200-character-string"),
+    pytest.param(None, "null", id="null"),
+]
+
+
+def _assert_invalid_date_of_birth(resp, sent_text: str) -> None:
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_date_of_birth"
+    if sent_text not in ("null", "{}", "[]", "true"):
+        assert sent_text not in resp.text
+
+
+@pytest.mark.parametrize("value,sent_text", NOT_A_DATE_STRING)
+def test_a_non_string_date_of_birth_is_400_on_age_confirmation(
+    anon_client, unconfirmed_headers, value, sent_text
+):
+    resp = anon_client.post(
+        "/me/age", json={"date_of_birth": value}, headers=unconfirmed_headers
+    )
+
+    _assert_invalid_date_of_birth(resp, sent_text)
+
+
+@pytest.mark.parametrize("value,sent_text", NOT_A_DATE_STRING)
+def test_a_non_string_date_of_birth_is_400_on_register(
+    anon_client, sender, value, sent_text
+):
+    resp = anon_client.post(
+        "/auth/register",
+        json={"email": "ana@example.com", "password": "correct horse battery",
+              "date_of_birth": value},
+    )
+
+    _assert_invalid_date_of_birth(resp, sent_text)
+    assert sender.count_for("ana@example.com") == 0
+
+
+@pytest.mark.parametrize(
+    "value,sent_text", [case for case in NOT_A_DATE_STRING if case.values[0] is not None]
+)
+def test_a_non_string_date_of_birth_is_400_on_google_sign_in(
+    anon_client, google_verifier, user_store, value, sent_text
+):
+    google_verifier.add("g-tok", "g-1")
+
+    resp = anon_client.post(
+        "/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": value}
+    )
+
+    _assert_invalid_date_of_birth(resp, sent_text)
+    assert user_store._conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+
+
+def test_an_explicit_null_on_provider_sign_in_still_asks_for_a_date(
+    anon_client, google_verifier
+):
+    google_verifier.add("g-tok", "g-1")
+
+    resp = anon_client.post(
+        "/auth/oauth/google", json={"id_token": "g-tok", "date_of_birth": None}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "age_required"
+
+
 # ── Confirm the age of an existing account ──────────────────────────────
 
 
