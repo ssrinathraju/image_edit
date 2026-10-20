@@ -47,6 +47,7 @@ from image_edit_server.services.safety.local_classifier import LocalImageClassif
 from image_edit_server.services.safety.report_service import ReportService
 from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.safety.stub_classifier import StubClassifier
+from image_edit_server.services.report_retention import run_report_retention, sweep_reports
 from image_edit_server.services.retention_service import run_retention, sweep
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
@@ -173,6 +174,11 @@ def create_app(
             logger.exception("Startup retention sweep failed")
 
         try:
+            await sweep_reports(user_store, cfg, datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Startup report sweep failed")
+
+        try:
             user_store.prune_email_rows(datetime.now(timezone.utc))
         except Exception:
             logger.exception("Startup pruning of email-keyed rows failed")
@@ -190,10 +196,12 @@ def create_app(
             for _ in range(cfg.JOB_CONCURRENCY)
         ]
         retention = asyncio.create_task(run_retention(store, cfg))
+        report_retention = asyncio.create_task(run_report_retention(user_store, cfg))
         yield
-        for w in [*workers, retention]:
-            w.cancel()
-        await asyncio.gather(*workers, retention, return_exceptions=True)
+        background = [*workers, retention, report_retention]
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         user_store.close()
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)

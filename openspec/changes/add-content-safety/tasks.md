@@ -47,7 +47,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 ## 5. Server: reports
 
 - [x] 5.1 Add `POST /reports` (Decisions 6 and 7), copying the report image from the server or the device, and storing it under `reports/`. Verify that `tests/api/test_reports.py` covers every scenario of "Accept reports of results" and "Limit reports per account", including an invalid category, a note over 500 characters, an invalid uploaded image, another account's job, and source `none`.
-- [ ] 5.2 Add report expiry to the retention sweep, image cleanup on account deletion, and orphan-image cleanup (Decision 6). Verify:
+- [x] 5.2 Add report expiry to the retention sweep, image cleanup on account deletion, and orphan-image cleanup (Decision 6). Verify:
   - `tests/services/test_retention_service.py` covers a 31-day-old report and its image being removed, a 29-day-old one being kept, a reported image surviving the 24-hour output sweep, and a per-report error not stopping the sweep;
   - `tests/api/test_delete_account.py` covers a deleted reporter's reports and images being gone.
 - [ ] 5.3 Add `scripts/reports.py` (`list`, `show --out`, `resolve --outcome`). Verify that `tests/scripts/test_reports_cli.py` covers each command against a temporary database and an unknown id.
