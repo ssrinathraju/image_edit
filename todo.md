@@ -43,6 +43,11 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Duplicate `/me` fetch at startup** — session restore and `AccountNotifier` each call it.
 - [ ] **Failed settle gives a free generation** — if settling fails after a success, the reservation is refunded at the next restart. Rare and logged; accepted.
 
+## From add-content-safety
+
+- [ ] **Tune the threshold and the term list before launch** — `SAFETY_NSFW_THRESHOLD` (0.7) and `seed/safety/blocked_terms.txt` are a starting point. Run real generations (swimwear and beach templates especially) and adjust, then have the starter list reviewed.
+- [ ] **Reported images in the privacy review** — reports keep a face-derived image for 30 days, longer than the 24-hour result retention. Add this to the privacy policy review.
+
 ## Deployment checklist
 
 - [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total.

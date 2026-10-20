@@ -366,6 +366,61 @@ curl http://localhost:8000/generations/<job_id> -H "Authorization: Bearer $TOKEN
 curl http://localhost:8000/images/<job_id>.png -o result.png
 ```
 
+## Content safety and reports
+
+Nothing unsafe is served, and every check runs on this server: no photo or generated image is sent to a third party.
+
+- **Prompts.** A custom prompt is checked against `IMAGE_EDIT_SAFETY_TERMS_FILE` (default
+  `./seed/safety/blocked_terms.txt`: one word or phrase per line, `#` comments; the file must hold at least one
+  term or the server will not start). Case, accents, letter swaps (`0`, `1`, `3`, `4`, `5`, `7`, `@`, `$`),
+  separators and spelled-out letters (`N-U-D-3`) are normalised, and terms match whole words only.
+  Template prompts are trusted. A match is `400 prompt_blocked`; nothing is created or counted.
+  The starter list is short: curate it before launch.
+- **Uploads.** Each photo is scored by the local classifier before the job is queued. A flagged photo is
+  `400 photo_blocked`, and a classifier error is `503 safety_unavailable`; nothing is stored or counted.
+- **Outputs.** The pipeline writes to `<STORAGE_ROOT>/staging/<job_id>.png`, which is not served. The image is
+  scored, and only a safe one is moved into `outputs/` (so no unchecked image is ever fetchable). A flagged image
+  is deleted, the job fails with `content_blocked`, the generation is refunded and the account gets a strike.
+  A classifier error fails the job with `safety_check_failed` and a refund, with no strike. `staging/` is
+  emptied at startup.
+- **Strikes.** 3 strikes within 24 hours pause generating until 24 hours after the third-most-recent strike:
+  `403 generation_suspended` with `suspended_until` (ISO time). Everything else keeps working.
+- **Classifier.** With `IMAGE_EDIT_MODEL_BACKEND=stub` a stub classifier is used and no model is loaded
+  (`IMAGE_EDIT_SAFETY_STUB_FLAG`: `none`, `outputs` flags generated images only, `all` flags uploads too; for testing).
+  With any other backend the server refuses to start unless the classifier loads. It needs the `ml` group
+  (`uv sync --group ml`) and downloads `IMAGE_EDIT_SAFETY_MODEL_ID` (about 350 MB) into the Hugging Face cache on
+  first start: pre-fetch it, for example `uv run --group ml python -c "from transformers import pipeline; pipeline('image-classification', model='Falconsai/nsfw_image_detection')"`.
+  `IMAGE_EDIT_SAFETY_STUB_FLAG` other than `none` with a real backend is refused at startup.
+- **Privacy.** Responses never carry scores, matched terms or the prompt. Logs carry the event
+  (`prompt_blocked`, `photo_blocked`, `output_blocked`, `safety_check_failed`, `suspended`, `report_created`),
+  the account id and the job or report id only.
+
+```bash
+# Report a result (multipart). `category`: sexual | minor | violence | hate | other; `note` (max 500) and `image` are optional.
+# The server keeps its own copy of the image while it exists, otherwise the uploaded one. → 201 {"report_id": "..."}
+curl -X POST http://localhost:8000/reports \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "job_id=<JOB_ID>" -F "category=violence" -F "note=looks wrong" -F "image=@/path/to/result.png"
+# Errors: 400 invalid_report, 400 invalid_image (uploaded copy), 404 (another account's job), 429 too_many_reports (20 a day)
+```
+
+Reports (and their images, under `<STORAGE_ROOT>/reports/`) are kept `IMAGE_EDIT_REPORT_RETENTION_DAYS` (default 30),
+survive the 24-hour image sweep, and are deleted with the reporter's account. Only the operator can read them,
+with the command-line tool (run from `server/`, on the machine that holds the database):
+
+```bash
+uv run python scripts/reports.py list                                  # open reports, newest first
+uv run python scripts/reports.py show <REPORT_ID> --out reported.png   # save the image (never overwrites)
+uv run python scripts/reports.py resolve <REPORT_ID> --outcome removed # close it
+```
+
+Reported images are face-derived and outlive the 24-hour retention: include them in the privacy policy review.
+
+New error codes: `400 prompt_blocked`, `400 photo_blocked`, `503 safety_unavailable`, `403 generation_suspended`,
+`400 invalid_report`, `429 too_many_reports`, and the job error codes `content_blocked` and `safety_check_failed`.
+The SQLite schema is now version 6 (two new tables, `safety_strikes` and `reports`, added on start; an older server
+ignores them).
+
 ## Config (environment variables)
 
 | Variable | Default | Description |
@@ -386,6 +441,15 @@ curl http://localhost:8000/images/<job_id>.png -o result.png
 | `IMAGE_EDIT_SANA_NUM_INFERENCE_STEPS` | `20` | Denoising steps |
 | `IMAGE_EDIT_SANA_OUTPUT_WIDTH` | `1024` | Output image width in pixels |
 | `IMAGE_EDIT_SANA_OUTPUT_HEIGHT` | `1024` | Output image height in pixels |
+| `IMAGE_EDIT_SAFETY_TERMS_FILE` | `./seed/safety/blocked_terms.txt` | Blocked prompt terms, one per line; at least one required |
+| `IMAGE_EDIT_SAFETY_MODEL_ID` | `Falconsai/nsfw_image_detection` | Hugging Face image classifier used for uploads and outputs |
+| `IMAGE_EDIT_SAFETY_DEVICE` | `cpu` | Classifier device: `cpu`, `cuda`, `mps` |
+| `IMAGE_EDIT_SAFETY_NSFW_THRESHOLD` | `0.7` | Score at or above which an image is flagged (0 to 1) |
+| `IMAGE_EDIT_SAFETY_STUB_FLAG` | `none` | Stub backend only: `none`, `outputs` or `all` (what the stub classifier flags) |
+| `IMAGE_EDIT_STRIKE_LIMIT` | `3` | Blocked results in the window that pause generating (minimum 1) |
+| `IMAGE_EDIT_STRIKE_WINDOW_HOURS` | `24` | Strike window and pause length, in hours (minimum 1) |
+| `IMAGE_EDIT_REPORTS_PER_DAY` | `20` | Reports per account per 24 hours (minimum 1) |
+| `IMAGE_EDIT_REPORT_RETENTION_DAYS` | `30` | How long reports and their images are kept (minimum 1) |
 | `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Folder holding `catalog.json` and `previews/` |
 | `IMAGE_EDIT_AUTH_DB_PATH` | _(empty)_ | SQLite file for users and sessions; empty means `<STORAGE_ROOT>/app.db` |
 | `IMAGE_EDIT_SESSION_TTL_DAYS` | `30` | Session lifetime, fixed from login |
