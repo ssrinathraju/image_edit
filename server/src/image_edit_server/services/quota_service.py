@@ -37,6 +37,11 @@ class QuotaService:
         limit = self._limit_for(user)
         return self._users.reserve_generation(user.id, limit, self._clock())
 
+    def has_remaining(self, user: User) -> bool:
+        """Read-only look: is any generation left? Reserving is still the atomic step."""
+        limit = self._limit_for(user)
+        return self._users.usage_snapshot(user.id, limit, self._clock()).remaining > 0
+
     def release(self, reservation_id: str) -> None:
         self._users.refund_generation(reservation_id)
 
