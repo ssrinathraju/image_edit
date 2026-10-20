@@ -126,6 +126,12 @@ def grant_bonus(user_store, user_id: str, credits: int) -> None:
     user_store._conn.commit()
 
 
+def corrupt_plan(user_store, user_id: str, plan: str) -> None:
+    """Store a plan value that set_plan would refuse, as a damaged database could hold."""
+    user_store._conn.execute("UPDATE users SET plan = ? WHERE id = ?", (plan, user_id))
+    user_store._conn.commit()
+
+
 GOOGLE_AUDIENCE = "google-web.apps.example"
 APPLE_BUNDLE = "com.example.imageedit"
 TEST_KID = "test-key-1"

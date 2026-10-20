@@ -11,6 +11,7 @@ from image_edit_server.api.deps import (
     TokenDep,
     UserStoreDep,
 )
+from image_edit_server.core.plans import effective_plan
 from image_edit_server.schemas.user import (
     AgeConfirmRequest,
     AppleSignInRequest,
@@ -126,7 +127,7 @@ def get_me(
         id=user.id,
         email=user.email,
         created_at=user.created_at,
-        plan=user.plan,
+        plan=effective_plan(user.plan),
         usage=quota.summary(user),
         referral=referrals.summary(user),
         providers=users.list_providers(user.id),

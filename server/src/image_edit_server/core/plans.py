@@ -7,12 +7,14 @@ PREMIUM = "premium"
 ALL_PLANS = (FREE, PREMIUM)
 
 
+def effective_plan(plan: str) -> str:
+    """Return the plan itself when it is known, otherwise free."""
+    return plan if plan in ALL_PLANS else FREE
+
+
 def daily_limit(plan: str, settings: Settings) -> int:
-    """Return the daily generation allowance of a plan; unknown plans raise."""
-    limits = plan_limits(settings)
-    if plan not in limits:
-        raise ValueError(f"unknown plan {plan!r}; expected one of {list(ALL_PLANS)}")
-    return limits[plan]
+    """Return the daily generation allowance of a plan; an unknown plan counts as free."""
+    return plan_limits(settings)[effective_plan(plan)]
 
 
 def plan_limits(settings: Settings) -> dict[str, int]:

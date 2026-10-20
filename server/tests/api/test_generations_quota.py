@@ -2,7 +2,7 @@ import io
 
 import pytest
 
-from tests.helpers import grant_bonus
+from tests.helpers import corrupt_plan, grant_bonus
 
 PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -68,6 +68,16 @@ def test_premium_allows_a_fourth(client, user_store):
         assert _submit(client).status_code == 202
 
 
+def test_an_unknown_stored_plan_submits_with_the_free_limit(client, user_store, user_id, caplog):
+    corrupt_plan(user_store, user_id, "gold")
+
+    codes = [_submit(client).status_code for _ in range(4)]
+
+    assert codes == [202, 202, 202, 429]
+    assert user_id in caplog.text
+    assert "gold" not in caplog.text
+
+
 def test_plan_change_applies_without_a_restart(client, user_store):
     for _ in range(3):
         _submit(client)
@@ -107,3 +117,35 @@ def test_anonymous_submission_consumes_nothing(anon_client, client):
 
     assert resp.status_code == 401
     assert _remaining(client) == 3
+
+
+def test_exhausted_account_is_refused_without_reading_the_upload(client, monkeypatch):
+    for _ in range(3):
+        assert _submit(client).status_code == 202
+
+    async def must_not_run(*args, **kwargs):
+        raise AssertionError("an exhausted account's upload must not be read")
+
+    monkeypatch.setattr(
+        "image_edit_server.services.generation_service._read_and_validate_faces",
+        must_not_run,
+    )
+
+    resp = _submit(client)
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"]["error"] == "quota_exceeded"
+
+
+def test_one_left_and_an_invalid_image_gives_400_and_keeps_the_last_one(client):
+    for _ in range(2):
+        assert _submit(client).status_code == 202
+
+    bad_type = client.post(
+        "/generations",
+        data={"prompt": "x"},
+        files=[("faces", ("f.txt", io.BytesIO(b"x"), "text/plain"))],
+    )
+
+    assert bad_type.status_code == 400
+    assert _remaining(client) == 1

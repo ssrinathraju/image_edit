@@ -16,9 +16,9 @@ class _FailingPipeline:
         raise RuntimeError("intentional failure")
 
 
-async def _drain(store, settings, pipeline, timeout=2.0):
+async def _drain(store, settings, pipeline, timeout=2.0, **worker_kwargs):
     """Run the worker until all queued jobs are terminal, then cancel."""
-    task = asyncio.create_task(run_worker(store, pipeline, settings))
+    task = asyncio.create_task(run_worker(store, pipeline, settings, **worker_kwargs))
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         jobs = list(store.list_queued())
@@ -285,3 +285,37 @@ async def test_success_settles_the_reservation(tmp_path):
     await _run_for(store, StubPipeline(), settings, settle=settled.append)
 
     assert settled == ["r1"]
+
+
+FINISH_TIME = datetime(2026, 10, 20, 9, 30, tzinfo=timezone.utc)
+
+
+async def test_a_succeeded_job_records_when_it_finished(tmp_path):
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, StubPipeline(), clock=lambda: FINISH_TIME)
+
+    assert store.get(job_id).status == JobStatus.succeeded
+    assert store.get(job_id).finished_at == FINISH_TIME
+
+
+async def test_a_failed_job_records_when_it_finished(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _FailingPipeline(), clock=lambda: FINISH_TIME)
+
+    assert store.get(job_id).status == JobStatus.failed
+    assert store.get(job_id).finished_at == FINISH_TIME
+
+
+async def test_a_job_that_has_not_finished_has_no_finish_time(tmp_path):
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+
+    assert store.get(job_id).finished_at is None

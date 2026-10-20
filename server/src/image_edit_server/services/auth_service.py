@@ -106,7 +106,7 @@ class AuthService:
         self,
         email: str,
         password: str,
-        date_of_birth: str,
+        date_of_birth: object,
         referral_code: Optional[str],
         background: BackgroundTasks,
     ) -> None:
@@ -235,7 +235,7 @@ class AuthService:
         *,
         nonce: Optional[str] = None,
         authorization_code: Optional[str] = None,
-        date_of_birth: Optional[str] = None,
+        date_of_birth: object = None,
     ) -> tuple[str, User, bool]:
         """Sign in to the account for a provider token, linking or creating it; returns (session, user, created)."""
         adult_confirmed = self._adult_confirmed(date_of_birth)
@@ -274,7 +274,7 @@ class AuthService:
         logger.info("Provider sign-in: user %s via %s created=%s", user.id, provider, created)
         return self._start_session(user), user, created
 
-    def confirm_age(self, user: User, date_of_birth: str) -> None:
+    def confirm_age(self, user: User, date_of_birth: object) -> None:
         """Mark the account's age confirmed for an adult date; the date itself is never kept."""
         if user.age_confirmed:
             raise _error(409, "age_already_confirmed", "this account's age is already confirmed")
@@ -374,7 +374,7 @@ class AuthService:
     def _today(self) -> date:
         return self._clock().astimezone(timezone.utc).date()
 
-    def _require_adult_date_of_birth(self, date_of_birth: str) -> None:
+    def _require_adult_date_of_birth(self, date_of_birth: object) -> None:
         try:
             check_date_of_birth(date_of_birth, self._today())
         except InvalidDateOfBirth as error:
@@ -383,7 +383,7 @@ class AuthService:
             logger.info("Refused a registration: under 18")
             raise _under_age()
 
-    def _adult_confirmed(self, date_of_birth: Optional[str]) -> Optional[bool]:
+    def _adult_confirmed(self, date_of_birth: object) -> Optional[bool]:
         """None when no date was sent, otherwise whether it shows an adult."""
         if date_of_birth is None:
             return None

@@ -30,8 +30,11 @@ async def submit(
     quota: QuotaService,
     settings: Settings,
 ) -> str:
-    """Require age and consent, validate inputs, reserve a generation, persist uploads, queue a job."""
+    """Require age and consent, refuse an exhausted account, validate inputs, reserve a generation, persist uploads, queue a job."""
     _require_age_and_consent(user, settings)
+    # Read-only: an exhausted account is refused before any upload is read or decoded.
+    if not await asyncio.to_thread(quota.has_remaining, user):
+        raise _quota_exceeded()
     _validate_face_count(faces, settings)
     face_data = await _read_and_validate_faces(faces, settings)
     resolved_prompt = _resolve_prompt(prompt, template_id, catalog, settings)
@@ -90,17 +93,21 @@ def _forbidden(code: str, detail: str) -> HTTPException:
     return HTTPException(403, ErrorBody(error=code, detail=detail).model_dump())
 
 
+def _quota_exceeded() -> HTTPException:
+    return HTTPException(
+        429,
+        ErrorBody(
+            error="quota_exceeded",
+            detail="the daily generation limit has been reached",
+        ).model_dump(),
+    )
+
+
 async def _reserve(quota: QuotaService, user: User) -> str:
     try:
         return await asyncio.to_thread(quota.reserve, user)
     except QuotaExceeded:
-        raise HTTPException(
-            429,
-            ErrorBody(
-                error="quota_exceeded",
-                detail="the daily generation limit has been reached",
-            ).model_dump(),
-        )
+        raise _quota_exceeded()
     except UserNotFound:
         raise HTTPException(
             401,

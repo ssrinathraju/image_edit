@@ -83,6 +83,11 @@ Future<_Harness> _pump(
   return _Harness(client: fakeClient, actions: actions);
 }
 
+const _pipelineFailedText =
+    "We couldn't create your image this time. This one wasn't counted, so try again.";
+const _generalFailureText =
+    "Something went wrong and this one wasn't counted. Please try again.";
+
 void main() {
   testWidgets('a succeeded job shows the image and every action', (tester) async {
     await _pump(tester, lastRequest: _request());
@@ -116,11 +121,24 @@ void main() {
           GenerationJob(jobId: id, status: JobStatus.failed, error: 'pipeline_failed');
     await _pump(tester, client: client, lastRequest: _request());
 
-    expect(find.text('pipeline_failed'), findsOneWidget);
+    expect(find.text(_pipelineFailedText), findsOneWidget);
+    expect(find.text('pipeline_failed'), findsNothing);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('New Generation'), findsOneWidget);
     expect(find.text('Download'), findsNothing);
   });
+
+  for (final code in <String?>['quota_exploded', null]) {
+    testWidgets('a failed job with code $code shows the general message', (tester) async {
+      final client = FakeApiClient()
+        ..onStatus = (id) async =>
+            GenerationJob(jobId: id, status: JobStatus.failed, error: code);
+      await _pump(tester, client: client);
+
+      expect(find.text(_generalFailureText), findsOneWidget);
+      if (code != null) expect(find.text(code), findsNothing);
+    });
+  }
 
   testWidgets('Retry resubmits the same request and tracks the new job', (tester) async {
     final client = FakeApiClient();
@@ -154,7 +172,8 @@ void main() {
           GenerationJob(jobId: id, status: JobStatus.failed, error: 'pipeline_failed');
     await _pump(tester, client: client, lastRequest: _request(), jobId: 'job-9');
 
-    expect(find.text('pipeline_failed'), findsOneWidget);
+    expect(find.text(_pipelineFailedText), findsOneWidget);
+    expect(find.text('pipeline_failed'), findsNothing);
     expect(find.text('Retry'), findsNothing);
   });
 

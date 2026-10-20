@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,7 +15,6 @@ MAX_NEW_PASSWORD_TRANSPORT_CHARS = 1024
 MAX_CODE_CHARS = 16
 MAX_PROVIDER_TOKEN_CHARS = 8192
 MAX_NONCE_CHARS = 256
-MAX_DATE_OF_BIRTH_CHARS = 32
 MAX_CONSENT_VERSION_CHARS = 32
 
 
@@ -55,12 +54,15 @@ class Credentials(BaseModel):
     referral_code: Optional[str] = Field(default=None, max_length=MAX_REFERRAL_CODE_CHARS)
 
 
+# date_of_birth is typed Any on purpose: check_date_of_birth answers a wrong JSON
+# type or an over-long string with 400 invalid_date_of_birth, where a typed field
+# would give pydantic's 422.
 class RegisterRequest(Credentials):
-    date_of_birth: str = Field(max_length=MAX_DATE_OF_BIRTH_CHARS)
+    date_of_birth: Any
 
 
 class AgeConfirmRequest(BaseModel):
-    date_of_birth: str = Field(max_length=MAX_DATE_OF_BIRTH_CHARS)
+    date_of_birth: Any
 
 
 class ConsentRequest(BaseModel):
@@ -79,14 +81,14 @@ class SocialAuthResponse(AuthResponse):
 
 class GoogleSignInRequest(BaseModel):
     id_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
-    date_of_birth: Optional[str] = Field(default=None, max_length=MAX_DATE_OF_BIRTH_CHARS)
+    date_of_birth: Any = None
 
 
 class AppleSignInRequest(BaseModel):
     identity_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
     nonce: str = Field(max_length=MAX_NONCE_CHARS)
     authorization_code: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
-    date_of_birth: Optional[str] = Field(default=None, max_length=MAX_DATE_OF_BIRTH_CHARS)
+    date_of_birth: Any = None
 
 
 class ReferralRedeemRequest(BaseModel):
