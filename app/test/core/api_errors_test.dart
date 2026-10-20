@@ -95,4 +95,41 @@ void main() {
     expect(isUnderAge(coded('age_required')), isFalse);
     expect(isConsentRequired(StateError('boom')), isFalse);
   });
+
+  test('each safety error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 400);
+
+    expect(isPromptBlocked(coded('prompt_blocked')), isTrue);
+    expect(isPhotoBlocked(coded('photo_blocked')), isTrue);
+    expect(isGenerationSuspended(coded('generation_suspended')), isTrue);
+    expect(isSafetyUnavailable(coded('safety_unavailable')), isTrue);
+    expect(isTooManyReports(coded('too_many_reports')), isTrue);
+    expect(isPromptBlocked(coded('photo_blocked')), isFalse);
+  });
+
+  test('suspendedUntilOf reads the end of the pause', () {
+    final error = _error({
+      'detail': {
+        'error': 'generation_suspended',
+        'detail': 'paused',
+        'suspended_until': '2026-10-21T15:05:00+00:00',
+      },
+    }, status: 403);
+
+    expect(suspendedUntilOf(error), DateTime.utc(2026, 10, 21, 15, 5));
+  });
+
+  test('suspendedUntilOf is null without a readable time', () {
+    expect(suspendedUntilOf(_error({'detail': {'error': 'generation_suspended'}})), isNull);
+    expect(
+      suspendedUntilOf(_error({
+        'detail': {'suspended_until': 'not a time'},
+      })),
+      isNull,
+    );
+    expect(suspendedUntilOf(_error('plain')), isNull);
+    expect(suspendedUntilOf(StateError('boom')), isNull);
+  });
 }

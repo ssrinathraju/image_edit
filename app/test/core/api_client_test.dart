@@ -113,6 +113,41 @@ void main() {
     });
   });
 
+  group('submitReport', () {
+    test('posts the job id, category, note and image as multipart', () async {
+      final adapter = _FakeAdapter({'report_id': 'r1'});
+
+      await _client(adapter).submitReport(
+        jobId: 'job-1',
+        category: 'violence',
+        note: 'looks wrong',
+        imageBytes: Uint8List.fromList([1, 2, 3]),
+      );
+
+      final form = adapter.last!.data as FormData;
+      expect(adapter.last!.path, '/reports');
+      expect(adapter.last!.method, 'POST');
+      expect({for (final f in form.fields) f.key: f.value},
+          {'job_id': 'job-1', 'category': 'violence', 'note': 'looks wrong'});
+      expect(form.files.single.key, 'image');
+      expect(form.files.single.value.contentType.toString(), 'image/png');
+    });
+
+    test('omits an empty note', () async {
+      final adapter = _FakeAdapter({'report_id': 'r1'});
+
+      await _client(adapter).submitReport(
+        jobId: 'job-1',
+        category: 'other',
+        note: '',
+        imageBytes: Uint8List.fromList([1]),
+      );
+
+      final form = adapter.last!.data as FormData;
+      expect(form.fields.map((f) => f.key), ['job_id', 'category']);
+    });
+  });
+
   group('listTemplates', () {
     final payload = [
       {

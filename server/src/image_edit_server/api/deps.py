@@ -11,6 +11,7 @@ from image_edit_server.schemas.user import User
 from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
+from image_edit_server.services.safety.safety_service import SafetyService
 
 BEARER_PREFIX = "bearer "
 
@@ -35,6 +36,10 @@ def get_referral_service() -> ReferralService:
     raise RuntimeError("referral service is not configured; override get_referral_service")
 
 
+def get_safety_service() -> SafetyService:
+    raise RuntimeError("safety service is not configured; override get_safety_service")
+
+
 def _unauthorized() -> HTTPException:
     return HTTPException(
         401,
@@ -57,6 +62,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 UserStoreDep = Annotated[UserStore, Depends(get_user_store)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 QuotaDep = Annotated[QuotaService, Depends(get_quota_service)]
+SafetyDep = Annotated[SafetyService, Depends(get_safety_service)]
 ReferralDep = Annotated[ReferralService, Depends(get_referral_service)]
 
 

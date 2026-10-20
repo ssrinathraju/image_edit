@@ -16,4 +16,12 @@ void main() {
     expect(failureMessageFor('something_new'), isNot(contains('something_new')));
     expect(failureMessageFor(null), contains("wasn't counted"));
   });
+
+  test('content_blocked says it was blocked by the content rules and not counted', () {
+    final message = failureMessageFor('content_blocked');
+
+    expect(message, contains('content rules'));
+    expect(message, contains("wasn't counted"));
+    expect(message, isNot(contains('content_blocked')));
+  });
 }

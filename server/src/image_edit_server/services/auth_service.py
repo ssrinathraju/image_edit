@@ -33,6 +33,7 @@ from image_edit_server.core.user_store import (
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
 from image_edit_server.services import email_code_service
+from image_edit_server.services.account_cleanup import purge_report_images
 from image_edit_server.services.apple_revocation import AppleRevocationClient
 
 logger = logging.getLogger(__name__)
@@ -322,8 +323,11 @@ class AuthService:
         # The user goes first so a submit that was already in flight cannot
         # attach a job to an account that is about to disappear; the worker
         # drops any job whose owner is gone.
+        # Read before the user row goes: the cascade removes the report rows.
+        report_images = self._users.report_image_names(user.id)
         self._users.delete_user(user.id)
         self._purge_user_jobs(user.id)
+        purge_report_images(report_images, self._settings.STORAGE_ROOT)
         self._schedule_apple_revocation(apple_token, background)
         logger.info("Deleted account %s", user.id)
 

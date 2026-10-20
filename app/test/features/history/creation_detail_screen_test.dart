@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,6 +120,56 @@ void main() {
 
     expect(find.byType(Image, skipOffstage: false), findsOneWidget);
     expect(client.statusCalls, isEmpty);
+  });
+
+  testWidgets('Report on an old creation sends its job id and stored image', (tester) async {
+    final store = InMemoryCreationStore();
+    await store.save(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'old one',
+      bytes: tinyPng,
+      finishedAt: DateTime.now().subtract(const Duration(days: 3)),
+    );
+    final client = FakeApiClient();
+    client.onFetchBytes = (_) async => throw StateError('offline');
+    await _pump(tester, store, client: client);
+
+    await tester.tap(find.text('Report'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other'));
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+
+    final report = client.submittedReports.single;
+    expect(report.jobId, 'job-1');
+    expect(report.category, 'other');
+    expect(report.imageBytes, tinyPng);
+    expect(find.text("Thanks, we'll review it."), findsOneWidget);
+  });
+
+  testWidgets('Report offline keeps the sheet open with the values', (tester) async {
+    final store = InMemoryCreationStore();
+    await _save(store);
+    final client = FakeApiClient()
+      ..onSubmitReport = () async => throw DioException(
+            requestOptions: RequestOptions(path: '/reports'),
+            type: DioExceptionType.connectionError,
+          );
+    await _pump(tester, store, client: client);
+
+    await tester.tap(find.text('Report'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other'));
+    await tester.enterText(find.byType(TextField), 'later');
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Couldn't send the report. Try again."), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'later');
+    expect(find.text("Thanks, we'll review it."), findsNothing);
   });
 
   testWidgets('Download saves the stored bytes and confirms', (tester) async {

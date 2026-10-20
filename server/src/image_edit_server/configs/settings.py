@@ -66,10 +66,29 @@ class Settings(BaseSettings):
     SANA_OUTPUT_WIDTH: int = 1024
     SANA_OUTPUT_HEIGHT: int = 1024
 
+    SAFETY_TERMS_FILE: str = "./seed/safety/blocked_terms.txt"
+    SAFETY_MODEL_ID: str = "Falconsai/nsfw_image_detection"
+    SAFETY_DEVICE: str = "cpu"
+    SAFETY_NSFW_THRESHOLD: float = Field(default=0.7, ge=0, le=1)
+    SAFETY_STUB_FLAG: Literal["none", "outputs", "all"] = "none"
+    STRIKE_LIMIT: int = Field(default=3, ge=1)
+    STRIKE_WINDOW_HOURS: int = Field(default=24, ge=1)
+    REPORTS_PER_DAY: int = Field(default=20, ge=1)
+    REPORT_RETENTION_DAYS: int = Field(default=30, ge=1)
+
     @model_validator(mode="after")
     def _require_sender_address_with_smtp(self) -> "Settings":
         if self.SMTP_HOST and not self.SMTP_FROM:
             raise ValueError("SMTP_FROM must be set when SMTP_HOST is set")
+        return self
+
+    @model_validator(mode="after")
+    def _refuse_stub_flagging_with_a_real_backend(self) -> "Settings":
+        if self.SAFETY_STUB_FLAG != "none" and self.MODEL_BACKEND != "stub":
+            raise ValueError(
+                "SAFETY_STUB_FLAG is for the stub backend only; "
+                f"it is {self.SAFETY_STUB_FLAG!r} with MODEL_BACKEND {self.MODEL_BACKEND!r}"
+            )
         return self
 
     @field_validator("GOOGLE_CLIENT_IDS", mode="before")

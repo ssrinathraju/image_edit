@@ -191,3 +191,54 @@ def test_a_password_account_linked_to_apple_also_revokes_on_password_delete(
 
     assert _delete(client, password=DEFAULT_PASSWORD).status_code == 204
     assert apple_client.revoked == ["apple-refresh-1"]
+
+
+# ── reports of a deleted account ──
+
+
+def _make_report(client, settings, image=b"png-bytes"):
+    import io
+
+    resp = client.post(
+        "/reports",
+        data={"job_id": "old-job", "category": "other"},
+        files=[("image", ("r.png", io.BytesIO(image), "image/png"))],
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_deleting_the_account_removes_its_reports_and_their_images(
+    client, user_store, settings
+):
+    from image_edit_server.repos import file_storage
+
+    _make_report(client, settings)
+    _make_report(client, settings)
+    assert len(file_storage.list_report_image_files(settings.STORAGE_ROOT)) == 2
+
+    assert _delete(client, password=DEFAULT_PASSWORD).status_code == 204
+
+    assert user_store.list_open_reports() == []
+    assert file_storage.list_report_image_files(settings.STORAGE_ROOT) == []
+
+
+def test_deleting_an_account_leaves_other_accounts_reports_alone(
+    client, anon_client, user_store, settings, second_user_headers
+):
+    import io
+
+    from image_edit_server.repos import file_storage
+
+    resp = anon_client.post(
+        "/reports",
+        data={"job_id": "j", "category": "other"},
+        files=[("image", ("r.png", io.BytesIO(b"x"), "image/png"))],
+        headers=second_user_headers,
+    )
+    assert resp.status_code == 201
+    _make_report(client, settings)
+
+    assert _delete(client, password=DEFAULT_PASSWORD).status_code == 204
+
+    assert len(user_store.list_open_reports()) == 1
+    assert len(file_storage.list_report_image_files(settings.STORAGE_ROOT)) == 1

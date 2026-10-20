@@ -18,6 +18,10 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ReportCreated(BaseModel):
+    report_id: str
+
+
 class ErrorBody(BaseModel):
     error: str
     detail: str

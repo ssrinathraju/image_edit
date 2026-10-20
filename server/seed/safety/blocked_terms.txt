@@ -1,0 +1,50 @@
+# Blocked prompt terms: one word or phrase per line, matched as whole words after
+# normalising case, accents, letter swaps (0->o, @->a, ...) and separators.
+# A starter list for the operator to curate; keep it short and purposeful.
+
+# Sexual content
+nude
+nudes
+naked
+topless
+porn
+porno
+pornographic
+hentai
+erotic
+nsfw
+genitals
+blowjob
+orgasm
+sex scene
+sexual intercourse
+
+# Minors in a sexual context
+child porn
+loli
+lolicon
+shota
+nude child
+naked child
+nude kid
+naked kid
+underage sex
+sexy child
+
+# Graphic violence
+gore
+gory
+dismembered
+dismemberment
+beheading
+decapitated
+mutilated
+disemboweled
+
+# Slurs
+nigger
+faggot
+kike
+chink
+spic
+tranny

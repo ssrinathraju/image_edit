@@ -8,7 +8,21 @@ from image_edit_server.configs.settings import Settings
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos import file_storage
 from image_edit_server.schemas.job import Job, JobStatus
+from image_edit_server.core.safety import TermMatcher
+from image_edit_server.repos.user_store import SqliteUserStore
+from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.worker import run_worker
+from tests.helpers import FakeClassifier
+
+
+def _safety(users=None, output=None):
+    return SafetyService(
+        Settings(),
+        users or SqliteUserStore(":memory:"),
+        TermMatcher(["blockedword"]),
+        FakeClassifier(),
+        output or FakeClassifier(),
+    )
 
 
 class _FailingPipeline:
@@ -18,6 +32,7 @@ class _FailingPipeline:
 
 async def _drain(store, settings, pipeline, timeout=2.0, **worker_kwargs):
     """Run the worker until all queued jobs are terminal, then cancel."""
+    worker_kwargs.setdefault("safety", _safety())
     task = asyncio.create_task(run_worker(store, pipeline, settings, **worker_kwargs))
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
@@ -123,6 +138,8 @@ class _CountingPipeline:
 
     async def run(self, faces, prompt, output_path):
         self.runs += 1
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
 
 
 async def test_job_whose_owner_is_gone_is_dropped_without_running(tmp_path):
@@ -134,7 +151,7 @@ async def test_job_whose_owner_is_gone_is_dropped_without_running(tmp_path):
     pipeline = _CountingPipeline()
 
     task = asyncio.create_task(
-        run_worker(store, pipeline, settings, lambda user_id: user_id == "here")
+        run_worker(store, pipeline, settings, _safety(), lambda user_id: user_id == "here")
     )
     await asyncio.sleep(0.3)
     task.cancel()
@@ -165,7 +182,7 @@ async def _run_with_refund(tmp_path, pipeline, grant_bonus_credit=False):
     store.create(Job(id="", prompt="p", user_id=user.id, reservation_id=reservation))
 
     task = asyncio.create_task(
-        run_worker(store, pipeline, settings, refund=users.refund_generation)
+        run_worker(store, pipeline, settings, _safety(users), refund=users.refund_generation)
     )
     await asyncio.sleep(0.4)
     task.cancel()
@@ -200,6 +217,7 @@ async def test_failed_job_paid_with_a_bonus_credit_restores_the_credit(tmp_path)
 
 
 async def _run_for(store, pipeline, settings, seconds=0.5, **callbacks):
+    callbacks.setdefault("safety", _safety())
     task = asyncio.create_task(run_worker(store, pipeline, settings, **callbacks))
     await asyncio.sleep(seconds)
     died = task.done()
@@ -319,3 +337,156 @@ async def test_a_job_that_has_not_finished_has_no_finish_time(tmp_path):
     job_id = store.create(Job(id="", prompt="sunset"))
 
     assert store.get(job_id).finished_at is None
+
+
+# ── output screening ──
+
+
+async def _screened_run(tmp_path, output_classifier, pipeline=None, strike_hook=None):
+    """One job for a real account, with its reservation, through a worker that screens outputs."""
+    from image_edit_server.services.pipelines.stub import StubPipeline
+
+    users = SqliteUserStore(":memory:")
+    user = users.create_user("ana@example.com", "hash")
+    safety = _safety(users, output_classifier)
+    if strike_hook is not None:
+        safety.record_strike = strike_hook
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    reservation = users.reserve_generation(user.id, 3, datetime.now(timezone.utc))
+    job_id = store.create(
+        Job(id="", prompt="p", user_id=user.id, reservation_id=reservation)
+    )
+    await _drain(
+        store, settings, pipeline or StubPipeline(), safety=safety,
+        refund=users.refund_generation, settle=users.settle_generation,
+    )
+    return store, job_id, users, user
+
+
+def _usage(users, user) -> int:
+    return users.usage_snapshot(user.id, 3, datetime.now(timezone.utc)).used_today
+
+
+def _strikes_of(users, user) -> int:
+    return users._conn.execute(
+        "SELECT COUNT(*) FROM safety_strikes WHERE user_id = ?", (user.id,)
+    ).fetchone()[0]
+
+
+async def test_a_safe_output_succeeds_lands_in_outputs_and_leaves_no_staging(tmp_path):
+    store, job_id, users, user = await _screened_run(tmp_path, FakeClassifier(0.1))
+
+    assert store.get(job_id).status == JobStatus.succeeded
+    assert (tmp_path / "outputs" / f"{job_id}.png").is_file()
+    assert not (tmp_path / "staging" / f"{job_id}.png").exists()
+    assert _usage(users, user) == 1
+
+
+async def test_a_flagged_output_fails_is_deleted_refunded_and_struck(tmp_path):
+    store, job_id, users, user = await _screened_run(tmp_path, FakeClassifier(0.95))
+
+    job = store.get(job_id)
+    assert (job.status, job.error) == (JobStatus.failed, "content_blocked")
+    assert job.result_url is None and job.finished_at is not None
+    assert not (tmp_path / "outputs" / f"{job_id}.png").exists()
+    assert not (tmp_path / "staging" / f"{job_id}.png").exists()
+    assert _usage(users, user) == 0
+    assert _strikes_of(users, user) == 1
+
+
+async def test_a_classifier_error_fails_closed_with_a_refund_and_no_strike(tmp_path):
+    broken = FakeClassifier()
+    broken.error = RuntimeError("model crashed")
+
+    store, job_id, users, user = await _screened_run(tmp_path, broken)
+
+    job = store.get(job_id)
+    assert (job.status, job.error) == (JobStatus.failed, "safety_check_failed")
+    assert not (tmp_path / "outputs" / f"{job_id}.png").exists()
+    assert not (tmp_path / "staging" / f"{job_id}.png").exists()
+    assert _usage(users, user) == 0
+    assert _strikes_of(users, user) == 0
+
+
+async def test_a_flagged_output_is_not_settled(tmp_path):
+    store, job_id, users, user = await _screened_run(tmp_path, FakeClassifier(0.95))
+
+    assert _usage(users, user) == 0
+    assert users.refund_unsettled_generations() == 0
+
+
+async def test_a_raising_record_strike_does_not_stop_the_worker(tmp_path):
+    def locked(_user_id):
+        raise RuntimeError("database is locked")
+
+    class _FlaggedThenSafe(FakeClassifier):
+        def score(self, image_bytes):
+            self.seen.append(image_bytes)
+            return 0.95 if len(self.seen) == 1 else 0.0
+
+    class _Writes:
+        async def run(self, faces, prompt, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"png")
+
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    first = store.create(Job(id="", prompt="p", reservation_id="r1"))
+    second = store.create(Job(id="", prompt="p", reservation_id="r2"))
+    safety = _safety(output=_FlaggedThenSafe())
+    safety.record_strike = locked
+
+    died = await _run_for(store, _Writes(), settings, safety=safety)
+
+    assert not died
+    assert store.get(first).error == "content_blocked"
+    assert store.get(second).status == JobStatus.succeeded
+
+
+async def test_a_job_deleted_during_the_check_leaves_no_files(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    holder = {"id": store.create(Job(id="", prompt="p"))}
+
+    class _DeleteWhileChecking(FakeClassifier):
+        def score(self, image_bytes):
+            store.delete(holder["id"])
+            return 0.0
+
+    class _Writes:
+        async def run(self, faces, prompt, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"png")
+
+    await _drain(
+        store, settings, _Writes(), safety=_safety(output=_DeleteWhileChecking())
+    )
+
+    assert not (tmp_path / "outputs").exists() or not list((tmp_path / "outputs").glob("*"))
+    assert not list((tmp_path / "staging").glob("*"))
+
+
+async def test_the_pipeline_writes_to_staging_not_to_outputs(tmp_path):
+    seen = []
+
+    class _Recording:
+        async def run(self, faces, prompt, output_path):
+            seen.append(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"png")
+
+    await _screened_run(tmp_path, FakeClassifier(0.0), pipeline=_Recording())
+
+    assert seen[0].parent == tmp_path / "staging"
+
+
+def test_clearing_staging_removes_leftover_files(tmp_path):
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "a.png").write_bytes(b"x")
+    (staging / "b.png").write_bytes(b"x")
+
+    assert file_storage.clear_staging(str(tmp_path)) == 2
+    assert list(staging.iterdir()) == []
+    assert file_storage.clear_staging(str(tmp_path / "missing")) == 0

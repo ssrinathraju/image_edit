@@ -16,17 +16,21 @@ from image_edit_server.api.deps import (
     get_auth_service,
     get_quota_service,
     get_referral_service,
+    get_safety_service,
     get_settings,
     get_user_store,
 )
 from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router as generations_router
+from image_edit_server.api.reports import get_report_service, router as reports_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_terms
+from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
@@ -39,6 +43,11 @@ from image_edit_server.services.identity.apple_verifier import AppleVerifier
 from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
+from image_edit_server.services.safety.local_classifier import LocalImageClassifier
+from image_edit_server.services.safety.report_service import ReportService
+from image_edit_server.services.safety.safety_service import SafetyService
+from image_edit_server.services.safety.stub_classifier import StubClassifier
+from image_edit_server.services.report_retention import run_report_retention, sweep_reports
 from image_edit_server.services.retention_service import run_retention, sweep
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
@@ -54,6 +63,24 @@ def _make_pipeline(cfg: Settings) -> GenerationPipeline:
         from image_edit_server.services.pipelines.sana import SanaPipeline
         return SanaPipeline(cfg)
     raise ValueError(f"Unknown MODEL_BACKEND: {cfg.MODEL_BACKEND!r}")
+
+
+def _make_classifiers(cfg: Settings) -> tuple[ImageClassifier, ImageClassifier]:
+    """Return the (upload, output) classifiers; a real backend must load the real model."""
+    if cfg.MODEL_BACKEND == "stub":
+        return (
+            StubClassifier(flag=cfg.SAFETY_STUB_FLAG == "all"),
+            StubClassifier(flag=cfg.SAFETY_STUB_FLAG in ("outputs", "all")),
+        )
+    try:
+        shared = LocalImageClassifier(cfg.SAFETY_MODEL_ID, cfg.SAFETY_DEVICE)
+    except Exception as error:
+        logger.exception("Image classifier %r failed to load", cfg.SAFETY_MODEL_ID)
+        raise RuntimeError(
+            f"image classifier could not be loaded ({cfg.SAFETY_MODEL_ID!r}): {error}; "
+            "install the `ml` dependency group and pre-fetch the model"
+        ) from error
+    return shared, shared
 
 
 def _make_email_sender(cfg: Settings) -> EmailSender:
@@ -102,6 +129,7 @@ def create_app(
     store = InMemoryJobStore()
     templates_dir = Path(cfg.TEMPLATES_DIR)
     catalog = load_catalog(templates_dir)
+    upload_classifier, output_classifier = _make_classifiers(cfg)
     pipeline = _make_pipeline(cfg)
     user_store = _open_user_store(cfg)
     auth_service = AuthService(
@@ -115,12 +143,21 @@ def create_app(
     )
 
     quota_service = QuotaService(user_store, cfg)
+    safety_service = SafetyService(
+        cfg,
+        user_store,
+        TermMatcher(load_terms(cfg.SAFETY_TERMS_FILE)),
+        upload_classifier,
+        output_classifier,
+    )
     referral_service = ReferralService(cfg, user_store)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
         outputs_dir.mkdir(parents=True, exist_ok=True)
+        # A crash mid-job can leave an unchecked image here; it was never served.
+        file_storage.clear_staging(cfg.STORAGE_ROOT)
 
         # Jobs are in memory, so none survived the restart; give their
         # generations back before the first request is served.
@@ -137,6 +174,11 @@ def create_app(
             logger.exception("Startup retention sweep failed")
 
         try:
+            await sweep_reports(user_store, cfg, datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Startup report sweep failed")
+
+        try:
             user_store.prune_email_rows(datetime.now(timezone.utc))
         except Exception:
             logger.exception("Startup pruning of email-keyed rows failed")
@@ -146,6 +188,7 @@ def create_app(
                 store,
                 pipeline,
                 cfg,
+                safety_service,
                 lambda user_id: user_store.get_by_id(user_id) is not None,
                 quota_service.release,
                 quota_service.settle,
@@ -153,10 +196,12 @@ def create_app(
             for _ in range(cfg.JOB_CONCURRENCY)
         ]
         retention = asyncio.create_task(run_retention(store, cfg))
+        report_retention = asyncio.create_task(run_report_retention(user_store, cfg))
         yield
-        for w in [*workers, retention]:
-            w.cancel()
-        await asyncio.gather(*workers, retention, return_exceptions=True)
+        background = [*workers, retention, report_retention]
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         user_store.close()
 
     app = FastAPI(title="image-edit", version="0.1.0", lifespan=lifespan)
@@ -173,10 +218,13 @@ def create_app(
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
+    app.dependency_overrides[get_report_service] = lambda: ReportService(cfg, user_store, store)
+    app.dependency_overrides[get_safety_service] = lambda: safety_service
     app.dependency_overrides[get_referral_service] = lambda: referral_service
     app.include_router(auth_router)
     app.include_router(generations_router)
     app.include_router(templates_router)
+    app.include_router(reports_router)
 
     outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)

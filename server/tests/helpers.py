@@ -275,3 +275,21 @@ def write_apple_key_file(path: Path) -> Path:
         )
     )
     return path
+
+
+class FakeClassifier:
+    """An image classifier whose score, failure and delay a test controls."""
+
+    def __init__(self, score: float = 0.0, delay: float = 0.0) -> None:
+        self.next_score = score
+        self.error: Optional[Exception] = None
+        self.delay = delay
+        self.seen: list[bytes] = []
+
+    def score(self, image_bytes: bytes) -> float:
+        self.seen.append(image_bytes)
+        if self.delay:
+            time.sleep(self.delay)
+        if self.error is not None:
+            raise self.error
+        return self.next_score

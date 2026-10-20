@@ -11,6 +11,7 @@ from image_edit_server.core.email_codes import (
     IssueResult,
 )
 from image_edit_server.core.identity_verifier import ProviderIdentity
+from image_edit_server.schemas.report import Report
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 
@@ -32,6 +33,10 @@ class PendingRegistration:
 
 class QuotaExceeded(Exception):
     """Raised when an account has no daily allowance or bonus credits left."""
+
+
+class TooManyReports(Exception):
+    """Raised when an account has reached its daily report limit."""
 
 
 class InvalidReferralCode(Exception):
@@ -252,4 +257,47 @@ class UserStore(Protocol):
         Raises ReferralNotAllowed, InvalidReferralCode or UserNotFound; nothing is
         written then.
         """
+        ...
+
+    def record_strike(self, user_id: str, now: datetime, window: timedelta) -> None:
+        """Record a blocked result and prune strikes older than the window; raises UserNotFound."""
+        ...
+
+    def suspended_until(
+        self, user_id: str, now: datetime, window: timedelta, threshold: int
+    ) -> Optional[datetime]:
+        """The time the pause ends (window after the threshold-th most recent strike), or None."""
+        ...
+
+    def add_report(
+        self,
+        report_id: str,
+        reporter_id: str,
+        job_id: str,
+        category: str,
+        note: str,
+        image_source: str,
+        image_name: Optional[str],
+        now: datetime,
+        daily_limit: int,
+    ) -> None:
+        """Insert a report; raises TooManyReports at the daily cap and UserNotFound for a deleted reporter."""
+        ...
+
+    def get_report(self, report_id: str) -> Optional[Report]: ...
+
+    def list_open_reports(self) -> list[Report]:
+        """Unresolved reports, newest first."""
+        ...
+
+    def resolve_report(self, report_id: str, outcome: str, now: datetime) -> bool:
+        """Mark an open report resolved; False when it is unknown or already resolved."""
+        ...
+
+    def expired_reports(self, now: datetime, max_age: timedelta) -> list[Report]: ...
+
+    def delete_report(self, report_id: str) -> None: ...
+
+    def report_image_names(self, reporter_id: Optional[str] = None) -> list[str]:
+        """Report image file names, for one reporter or for every report."""
         ...

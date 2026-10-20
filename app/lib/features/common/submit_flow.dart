@@ -12,6 +12,7 @@ import '../plans/account_notifier.dart';
 import '../plans/limit_reached_dialog.dart';
 import 'clock.dart';
 import 'error_message.dart';
+import 'paused_dialog.dart';
 import 'generation_request.dart';
 import 'submit_controller.dart';
 
@@ -63,8 +64,26 @@ Future<void> submitAndOpenStatus(
       await showLimitReachedDialog(context, resetsAt: resetsAt);
       return;
     }
-    messenger.showSnackBar(SnackBar(content: Text(describeError(error))));
+    if (isGenerationSuspended(error) && context.mounted) {
+      await showPausedDialog(context, until: suspendedUntilOf(error));
+      return;
+    }
+    messenger.showSnackBar(SnackBar(content: Text(_submitFailureMessage(error))));
   }
+}
+
+const String _promptBlockedMessage = "Your prompt contains words we don't allow.";
+const String _photoBlockedMessage = "This photo can't be used. Choose another.";
+const String _safetyUnavailableMessage =
+    'Checks are unavailable right now, try again.';
+
+/// The app's own wording for the refusals the safety checks produce; anything
+/// else falls back to the server's explanation.
+String _submitFailureMessage(Object error) {
+  if (isPromptBlocked(error)) return _promptBlockedMessage;
+  if (isPhotoBlocked(error)) return _photoBlockedMessage;
+  if (isSafetyUnavailable(error)) return _safetyUnavailableMessage;
+  return describeError(error);
 }
 
 Future<bool> _askConsent(GoRouter router) async =>

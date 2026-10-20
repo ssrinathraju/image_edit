@@ -23,11 +23,12 @@ from image_edit_server.repos.user_store_identities import (
     IdentitiesMixin,
 )
 from image_edit_server.repos.user_store_referrals import ReferralsMixin
+from image_edit_server.repos.user_store_safety import _SAFETY_SCHEMA, SafetyMixin
 from image_edit_server.repos.user_store_usage import _USAGE_SCHEMA, UsageMixin
 from image_edit_server.schemas.user import User
 
 SESSION_TOKEN_BYTES = 32
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 CODE_ATTEMPTS = 5
 
 _SCHEMA = """
@@ -100,7 +101,7 @@ def auth_db_path(settings: Settings) -> str:
 
 
 class SqliteUserStore(
-    CodesMixin, IdentitiesMixin, ReferralsMixin, UsageMixin, ConsentMixin
+    CodesMixin, IdentitiesMixin, ReferralsMixin, UsageMixin, ConsentMixin, SafetyMixin
 ):
     def __init__(
         self, path: str = ":memory:", clock: Callable[[], datetime] = _utc_now
@@ -142,7 +143,7 @@ class SqliteUserStore(
                     "UPDATE users SET email_verified = 1 WHERE email_verified = 0"
                 )
                 self._drop_user_keyed_code_tables()
-                schema = _USAGE_SCHEMA + _IDENTITY_SCHEMA + _EMAIL_SCHEMA
+                schema = _USAGE_SCHEMA + _IDENTITY_SCHEMA + _EMAIL_SCHEMA + _SAFETY_SCHEMA
                 for statement in schema.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
