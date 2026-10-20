@@ -50,7 +50,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 - [x] 5.2 Add report expiry to the retention sweep, image cleanup on account deletion, and orphan-image cleanup (Decision 6). Verify:
   - `tests/services/test_retention_service.py` covers a 31-day-old report and its image being removed, a 29-day-old one being kept, a reported image surviving the 24-hour output sweep, and a per-report error not stopping the sweep;
   - `tests/api/test_delete_account.py` covers a deleted reporter's reports and images being gone.
-- [ ] 5.3 Add `scripts/reports.py` (`list`, `show --out`, `resolve --outcome`). Verify that `tests/scripts/test_reports_cli.py` covers each command against a temporary database and an unknown id.
+- [x] 5.3 Add `scripts/reports.py` (`list`, `show --out`, `resolve --outcome`). Verify that `tests/scripts/test_reports_cli.py` covers each command against a temporary database and an unknown id.
 - [ ] 5.4 Update `server/README.md` (the safety settings, the term list, the model download and pre-fetch, staging, the reports API and CLI, the new error codes, schema version 6). Add `todo.md` items: tune the threshold and term list against real outputs before launch, and add reported-image retention to the privacy review. Verify the curl examples against a local stub server on a temporary storage root with `SAFETY_STUB_FLAG` set to `outputs` and to `all`, using your own free port and stopping only your own process.
 
 ## 6. App
