@@ -2,6 +2,10 @@
 
 Items deferred from PR #1 review. None block the merge.
 
+## Manual testing log
+
+- **2026-10-20 — iOS simulator pass (by the user), all current flows OK:** against a local log-mode server on a temporary storage root. Covered: register with the age gate and emailed code, sign in and out, password reset (the code appears once the 60-second per-address limit has passed), template and custom generation, the consent screen (decline, accept, withdraw), My creations (grid, detail, download, share, delete), referrals, the profile, and a second account. **Not covered:** a pre-upgrade `app.db`, the Android emulator and APK build, the backup-exclusion checks, real SMTP, and anything needing the Google or Apple consoles. Archived task boxes stay unticked, because each one bundles steps outside this run. What is still open is listed in the items below.
+
 ## Deferred
 
 - [ ] **Android release pass** — polish, not a bug:
@@ -27,8 +31,12 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From archive
 
-- [ ] **Manual device pass not recorded** — the full manual simulator checklist for trending templates (add-trending-templates 9.2) and auth/profile (add-auth-and-profile 11.2) was not recorded. Only registration and sign-in against the real server were confirmed. Both tasks are left unchecked in the archived `tasks.md`.
-- [ ] **Plans/referrals manual device pass not recorded** — the manual simulator pass for add-plans-and-referrals (10.2) was not recorded, including upgrading a copy of a real data-bearing `app.db` and the full referral flow (register with a code, both accounts +5, generate with bonus, limit dialog, promote with `set_plan.py`). Left unchecked in the archived `tasks.md`.
+- [ ] **Remaining steps of the early manual passes** — the iOS simulator flows were checked on 2026-10-20 (see the log above). Still unconfirmed:
+  - add-trending-templates 9.2: the specific search ("beach"), Retry and Download-to-Photos steps;
+  - add-auth-and-profile 11.2: the cross-account `curl` 404 check and deleting the second account;
+  - add-plans-and-referrals 10.2: the upgrade of a data-bearing `app.db` copy, the limit dialog after 3 generations, and promoting an account with `set_plan.py`.
+
+  The archived boxes stay unticked until these are run.
 
 ## From PR #4 review (plans and referrals)
 
@@ -50,20 +58,20 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
 - [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
-- [ ] **Manual passes never recorded for add-email-verification-and-reset** — tasks 11.2 (iOS simulator pass) and 11.3 (optional real SMTP send) were not run.
+- [ ] **Remaining manual checks for add-email-verification-and-reset** — the current registration and reset flows passed on the iOS simulator on 2026-10-20. Still open: 11.2's pre-upgrade `app.db` step (its Verify-email steps were superseded by add-social-sign-in's registration rework), and 11.3, a real SMTP send.
 
 ## From add-social-sign-in
 
 - [ ] **Encrypt the stored Apple refresh token** — `identities.apple_refresh_token` is plain text in `app.db`. Someone holding the database can use it only to get Apple tokens that identify the user to this app, but encrypting it needs a key-management design.
 - [ ] **Sign in with Apple entitlement blocks signed device builds until the Apple Developer membership exists** — `app/ios/Runner.xcodeproj/project.pbxproj` sets `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements` for Debug, Release and Profile, and a free Personal Team cannot sign `com.apple.developer.applesignin`. The simulator and `--no-codesign` builds are unaffected. Documented in `server/README.md` (device note after the console checklist). Confirm on a device during the manual pass (14.3, never recorded, see the item below), and move the entitlement to a Release-only configuration if development devices must keep working before the membership.
-- [ ] **Manual passes never recorded for add-social-sign-in** — tasks 14.2 (iOS simulator pass, including the pre-upgrade `app.db` check) and 14.3 (real Google/Apple sign-in; needs the consoles, App ID and key, and also covers the device-signing check in the entitlement item above) were not run.
+- [ ] **Remaining manual checks for add-social-sign-in** — 14.2's registration flows passed on the iOS simulator on 2026-10-20. Still open: 14.2's pre-upgrade `app.db` step (an unverified account still signs in and can generate), and 14.3 (real Google/Apple sign-in; needs the consoles, App ID and key, and also covers the device-signing check in the entitlement item above).
 - [ ] **Mutual referral redemption** — two fresh provider accounts can redeem each other's codes (each gets +5 once, within 24 hours of creation). Bounded by the referrer cap and by the one-redemption-per-account rule. Closing it needs a rule such as "a code from an account that itself redeemed in the last 24 hours is refused", which is a spec change. Part of the wider referral-farming item above (disposable emails, no per-IP limits).
 
 - [ ] **Confirm screen `_backToRegistration` fallback loses typed values** — `context.go('/register')` opens a fresh screen when Confirm is the root route; unreachable in normal flow.
 
 ## From add-on-device-history
 
-- [ ] **Manual passes never recorded for add-on-device-history** — tasks 3.2 (Android build and merged-manifest check, no Android SDK), 8.2 (simulator/emulator pass) and 8.3 (backup-exclusion check) were never run.
+- [ ] **Remaining manual checks for add-on-device-history** — 8.2's iOS simulator flows passed on 2026-10-20. Still open: 3.2 (the Android build and merged-manifest check; needs the Android SDK), 8.2's Android emulator half, and 8.3 (the backup-exclusion check on iOS and Android).
 
 ## From add-age-gate-and-face-consent
 
@@ -72,4 +80,4 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Spec follow-up** — add the 'Update the app to continue' behaviour for an unknown consent version to the account-ui spec through a /prod-pm change (CLAUDE.md forbids editing openspec/specs directly; archive only syncs this change's deltas).
 - [ ] **Router notes** — `ageConfirmed ?? true` (router.dart) and the `/me`-fails-to-load case send an unconfirmed user home until the server answers `age_not_confirmed`; a future `ref.invalidate(accountProvider)` would redirect through the splash screen mid-flow. Add `/referral-prompt` and `/confirm-registration` to the router test's list of routes an unconfirmed account cannot open.
 - [ ] **Split `repos/user_store.py`** (about 975 lines, limit 1000) — move age, consent and identities out in the next change.
-- [ ] **Manual passes never run for add-age-gate-and-face-consent** — tasks 7.2 (iOS simulator) and 7.3 (consoles) were never run, nor the reviewer's extra manual checks: a pending registration across the upgrade, an unknown consent version, a version change while the consent screen is open, and the date-of-birth transport limit.
+- [ ] **Remaining manual checks for add-age-gate-and-face-consent** — 7.2's iOS simulator flows (the under-18 refusal, consent decline and accept, withdraw) passed on 2026-10-20. Still open: 7.2's pre-upgrade `app.db` step (Confirm your age, and the blocked screen), 7.3 (the consoles), and the reviewer's extra manual checks: a pending registration across the upgrade, an unknown consent version, a version change while the consent screen is open, and the date-of-birth transport limit.
