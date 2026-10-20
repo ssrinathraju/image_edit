@@ -4,10 +4,10 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 1. Server: matcher, classifier interface, settings
 
-- [ ] 1.1 Add `core/safety.py`: `TermMatcher` (normalising and whole-word matching, plus the joined form for single-letter runs, Decision 1), `load_terms(path)`, and the `ImageClassifier` protocol. Add the settings from Decision 8, with their startup checks. Add `seed/safety/blocked_terms.txt` with a short starter list. Verify:
+- [x] 1.1 Add `core/safety.py`: `TermMatcher` (normalising and whole-word matching, plus the joined form for single-letter runs, Decision 1), `load_terms(path)`, and the `ImageClassifier` protocol. Add the settings from Decision 8, with their startup checks. Add `seed/safety/blocked_terms.txt` with a short starter list. Verify:
   - `tests/core/test_safety.py` covers each scenario of "Screen custom prompts against a term list" at the unit level (`N-U-D-3`, `Nüde`, `grassy`, `classic`), multi-word phrases, comment lines, and an empty list refusing to load;
   - `tests/configs/test_settings.py` covers the defaults, the bounds, an unknown `SAFETY_STUB_FLAG` value being refused, and a `SAFETY_STUB_FLAG` other than `none` with a non-stub backend being refused.
-- [ ] 1.2 Add `services/safety/stub_classifier.py` and `services/safety/local_classifier.py` (lazy `transformers` import, `nsfw` label score, a `threading.Lock` around inference). Wire them in `main.py` with startup enforcement (Decision 2). Verify:
+- [x] 1.2 Add `services/safety/stub_classifier.py` and `services/safety/local_classifier.py` (lazy `transformers` import, `nsfw` label score, a `threading.Lock` around inference). Wire them in `main.py` with startup enforcement (Decision 2). Verify:
   - `tests/services/safety/test_classifiers.py` covers the stub returning 0.0, and 1.0 when set to flag;
   - `tests/test_main.py` covers `SAFETY_STUB_FLAG` `none`, `outputs` and `all` building the right pair of stubs;
   - the local classifier works with a fake injected `transformers` pipeline (no real model), picking the `nsfw` score and serialising concurrent calls;

@@ -274,3 +274,54 @@ def test_startup_prunes_email_rows_and_survives_a_failure(tmp_path, templates_di
         assert client.get("/templates").status_code == 200
 
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "flag,upload_flags,output_flags",
+    [("none", False, False), ("outputs", False, True), ("all", True, True)],
+)
+def test_stub_flag_builds_the_matching_pair_of_stub_classifiers(flag, upload_flags, output_flags):
+    from image_edit_server.main import _make_classifiers
+
+    upload, output = _make_classifiers(Settings(SAFETY_STUB_FLAG=flag))
+
+    assert (upload.score(b"x") == 1.0) is upload_flags
+    assert (output.score(b"x") == 1.0) is output_flags
+
+
+def test_stub_backend_starts_without_loading_a_classifier_model(tmp_path, templates_dir, monkeypatch):
+    def explode(*args, **kwargs):
+        raise AssertionError("the stub backend must not load a classifier model")
+
+    monkeypatch.setattr("image_edit_server.main.LocalImageClassifier", explode)
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+
+    create_app(settings)
+
+
+def test_real_backend_refuses_to_start_when_the_classifier_cannot_load(tmp_path, templates_dir, monkeypatch):
+    def cannot_load(*args, **kwargs):
+        raise ImportError("no module named transformers")
+
+    monkeypatch.setattr("image_edit_server.main.LocalImageClassifier", cannot_load)
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"), MODEL_BACKEND="sana"
+    )
+
+    with pytest.raises(RuntimeError, match="image classifier could not be loaded"):
+        create_app(settings)
+
+
+def test_real_backend_shares_one_classifier_between_uploads_and_outputs(monkeypatch):
+    from image_edit_server.main import _make_classifiers
+
+    built = []
+    monkeypatch.setattr(
+        "image_edit_server.main.LocalImageClassifier",
+        lambda model_id, device: built.append((model_id, device)) or object(),
+    )
+
+    upload, output = _make_classifiers(Settings(MODEL_BACKEND="sana", SAFETY_DEVICE="cpu"))
+
+    assert upload is output
+    assert built == [("Falconsai/nsfw_image_detection", "cpu")]

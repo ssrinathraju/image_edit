@@ -199,3 +199,52 @@ def test_empty_consent_version_refuses_to_start(monkeypatch):
     monkeypatch.setenv("IMAGE_EDIT_CONSENT_VERSION", "")
     with pytest.raises(ValidationError, match="CONSENT_VERSION"):
         Settings()
+
+
+def test_safety_defaults():
+    s = Settings()
+    assert s.SAFETY_TERMS_FILE == "./seed/safety/blocked_terms.txt"
+    assert s.SAFETY_MODEL_ID == "Falconsai/nsfw_image_detection"
+    assert s.SAFETY_DEVICE == "cpu"
+    assert s.SAFETY_NSFW_THRESHOLD == 0.7
+    assert s.SAFETY_STUB_FLAG == "none"
+    assert s.STRIKE_LIMIT == 3
+    assert s.STRIKE_WINDOW_HOURS == 24
+    assert s.REPORTS_PER_DAY == 20
+    assert s.REPORT_RETENTION_DAYS == 30
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("SAFETY_NSFW_THRESHOLD", -0.1),
+        ("SAFETY_NSFW_THRESHOLD", 1.1),
+        ("STRIKE_LIMIT", 0),
+        ("STRIKE_WINDOW_HOURS", 0),
+        ("REPORTS_PER_DAY", 0),
+        ("REPORT_RETENTION_DAYS", 0),
+    ],
+)
+def test_safety_bounds_are_enforced_by_name(field, value):
+    with pytest.raises(ValidationError, match=field):
+        Settings(**{field: value})
+
+
+def test_threshold_bounds_are_inclusive():
+    assert Settings(SAFETY_NSFW_THRESHOLD=0).SAFETY_NSFW_THRESHOLD == 0
+    assert Settings(SAFETY_NSFW_THRESHOLD=1).SAFETY_NSFW_THRESHOLD == 1
+
+
+def test_unknown_stub_flag_is_refused():
+    with pytest.raises(ValidationError, match="SAFETY_STUB_FLAG"):
+        Settings(SAFETY_STUB_FLAG="sometimes")
+
+
+@pytest.mark.parametrize("flag", ["outputs", "all"])
+def test_stub_flag_with_a_real_backend_is_refused(flag):
+    with pytest.raises(ValidationError, match="SAFETY_STUB_FLAG"):
+        Settings(SAFETY_STUB_FLAG=flag, MODEL_BACKEND="sana")
+
+
+def test_stub_flag_none_is_fine_with_a_real_backend():
+    assert Settings(MODEL_BACKEND="sana").SAFETY_STUB_FLAG == "none"

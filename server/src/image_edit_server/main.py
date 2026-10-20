@@ -27,6 +27,7 @@ from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.safety import ImageClassifier
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
@@ -39,6 +40,8 @@ from image_edit_server.services.identity.apple_verifier import AppleVerifier
 from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
+from image_edit_server.services.safety.local_classifier import LocalImageClassifier
+from image_edit_server.services.safety.stub_classifier import StubClassifier
 from image_edit_server.services.retention_service import run_retention, sweep
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
@@ -54,6 +57,24 @@ def _make_pipeline(cfg: Settings) -> GenerationPipeline:
         from image_edit_server.services.pipelines.sana import SanaPipeline
         return SanaPipeline(cfg)
     raise ValueError(f"Unknown MODEL_BACKEND: {cfg.MODEL_BACKEND!r}")
+
+
+def _make_classifiers(cfg: Settings) -> tuple[ImageClassifier, ImageClassifier]:
+    """Return the (upload, output) classifiers; a real backend must load the real model."""
+    if cfg.MODEL_BACKEND == "stub":
+        return (
+            StubClassifier(flag=cfg.SAFETY_STUB_FLAG == "all"),
+            StubClassifier(flag=cfg.SAFETY_STUB_FLAG in ("outputs", "all")),
+        )
+    try:
+        shared = LocalImageClassifier(cfg.SAFETY_MODEL_ID, cfg.SAFETY_DEVICE)
+    except Exception as error:
+        logger.exception("Image classifier %r failed to load", cfg.SAFETY_MODEL_ID)
+        raise RuntimeError(
+            f"image classifier could not be loaded ({cfg.SAFETY_MODEL_ID!r}): {error}; "
+            "install the `ml` dependency group and pre-fetch the model"
+        ) from error
+    return shared, shared
 
 
 def _make_email_sender(cfg: Settings) -> EmailSender:
@@ -102,6 +123,7 @@ def create_app(
     store = InMemoryJobStore()
     templates_dir = Path(cfg.TEMPLATES_DIR)
     catalog = load_catalog(templates_dir)
+    upload_classifier, output_classifier = _make_classifiers(cfg)
     pipeline = _make_pipeline(cfg)
     user_store = _open_user_store(cfg)
     auth_service = AuthService(
