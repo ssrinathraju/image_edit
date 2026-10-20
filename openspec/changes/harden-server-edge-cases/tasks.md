@@ -4,7 +4,7 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
 
 ## 1. Server: split `repos/user_store.py` (no behaviour change)
 
-- [ ] 1.1 Move the `SqliteUserStore` methods into the mixin modules from Decision 6, keeping every name, signature and SQL statement unchanged. Verify:
+- [x] 1.1 Move the `SqliteUserStore` methods into the mixin modules from Decision 6, keeping every name, signature and SQL statement unchanged. Verify:
   - every file under `server/src` is under 1000 lines (`wc -l`);
   - `uv run pytest -q` passes with **no test file edited** in this commit;
   - a new `tests/repos/test_user_store_surface.py` asserts that every public method listed in the `UserStore` protocol exists on `SqliteUserStore`.
