@@ -34,4 +34,4 @@ Work on branch `feat/harden-server-edge-cases`. Do not push to `main`. Server ta
 
 - [x] 4.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `server/storage/inputs` count and `app.db` md5 are unchanged, and that `openspec validate harden-server-edge-cases --strict` passes.
 - [ ] 4.2 **Manual. iOS simulator** against a local log-mode server on a temporary storage root: use up the daily allowance, then submit again with a photo. The limit dialog appears at once, and generation works normally before the limit. The failure text is covered by widget tests only, because the stub pipeline can't be made to fail. This box stays unticked until someone runs it.
-- [ ] 4.3 Push `feat/harden-server-edge-cases`. Verify with `git log origin/feat/harden-server-edge-cases -1` that it matches the local HEAD.
+- [x] 4.3 Push `feat/harden-server-edge-cases`. Verify with `git log origin/feat/harden-server-edge-cases -1` that it matches the local HEAD.
