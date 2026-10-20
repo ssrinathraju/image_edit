@@ -22,6 +22,7 @@ from image_edit_server.api.deps import (
 )
 from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router as generations_router
+from image_edit_server.api.reports import get_report_service, router as reports_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.email_sender import EmailSender
@@ -43,6 +44,7 @@ from image_edit_server.services.identity.google_verifier import GoogleVerifier
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.safety.local_classifier import LocalImageClassifier
+from image_edit_server.services.safety.report_service import ReportService
 from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.safety.stub_classifier import StubClassifier
 from image_edit_server.services.retention_service import run_retention, sweep
@@ -208,11 +210,13 @@ def create_app(
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
+    app.dependency_overrides[get_report_service] = lambda: ReportService(cfg, user_store, store)
     app.dependency_overrides[get_safety_service] = lambda: safety_service
     app.dependency_overrides[get_referral_service] = lambda: referral_service
     app.include_router(auth_router)
     app.include_router(generations_router)
     app.include_router(templates_router)
+    app.include_router(reports_router)
 
     outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)

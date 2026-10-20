@@ -98,3 +98,32 @@ def list_input_job_ids(storage_root: str | None = None) -> list[str]:
 def delete_output(job_id: str, storage_root: str | None = None) -> None:
     """Remove outputs/<job_id>.png if it exists."""
     output_path(job_id, storage_root).unlink(missing_ok=True)
+
+
+def report_image_path(image_name: str, storage_root: str | None = None) -> Path:
+    return _root(storage_root) / "reports" / image_name
+
+
+def copy_output_to_report(job_id: str, image_name: str, storage_root: str | None = None) -> None:
+    """Copy outputs/<job_id>.png into reports/; raises FileNotFoundError when the output is gone."""
+    destination = report_image_path(image_name, storage_root)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(output_path(job_id, storage_root), destination)
+
+
+def save_report_image(image_name: str, data: bytes, storage_root: str | None = None) -> None:
+    destination = report_image_path(image_name, storage_root)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(data)
+
+
+def delete_report_image(image_name: str, storage_root: str | None = None) -> None:
+    report_image_path(image_name, storage_root).unlink(missing_ok=True)
+
+
+def list_report_image_files(storage_root: str | None = None) -> list[Path]:
+    """Regular files directly in reports/, never symlinks."""
+    folder = _root(storage_root) / "reports"
+    if not folder.is_dir():
+        return []
+    return [entry for entry in folder.iterdir() if entry.is_file() and not entry.is_symlink()]
