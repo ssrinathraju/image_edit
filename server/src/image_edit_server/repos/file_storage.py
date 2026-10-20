@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,36 @@ def input_dir(job_id: str, storage_root: str | None = None) -> Path:
 def output_path(job_id: str, storage_root: str | None = None) -> Path:
     root = Path(storage_root or _settings().STORAGE_ROOT)
     return root / "outputs" / f"{job_id}.png"
+
+
+def staging_path(job_id: str, storage_root: str | None = None) -> Path:
+    """Where a pipeline writes before the safety check; outside the publicly served outputs/."""
+    return _root(storage_root) / "staging" / f"{job_id}.png"
+
+
+def promote_staged_output(job_id: str, storage_root: str | None = None) -> Path:
+    """Atomically move a checked image from staging/ into outputs/ and return its path."""
+    destination = output_path(job_id, storage_root)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(staging_path(job_id, storage_root), destination)
+    return destination
+
+
+def delete_staged(job_id: str, storage_root: str | None = None) -> None:
+    staging_path(job_id, storage_root).unlink(missing_ok=True)
+
+
+def clear_staging(storage_root: str | None = None) -> int:
+    """Delete every file in staging/ (only a crash mid-job leaves any) and return how many."""
+    folder = _root(storage_root) / "staging"
+    if not folder.is_dir():
+        return 0
+    removed = 0
+    for entry in folder.iterdir():
+        if entry.is_file() or entry.is_symlink():
+            entry.unlink(missing_ok=True)
+            removed += 1
+    return removed
 
 
 def save_upload(job_id: str, index: int, data: bytes, storage_root: str | None = None) -> Path:

@@ -36,7 +36,7 @@ Work on branch `feat/add-content-safety`. Do not push to `main`. Server tasks ru
 
 ## 4. Server: output screening and strikes
 
-- [ ] 4.1 Write pipeline output to `staging/`, check it, and move safe images into `outputs/`. Handle the flagged and error paths, the refunds, and strikes through `_call_safely`. Clean `staging/` in `finally` and at startup (Decision 4). Verify that `tests/services/test_worker.py` covers:
+- [x] 4.1 Write pipeline output to `staging/`, check it, and move safe images into `outputs/`. Handle the flagged and error paths, the refunds, and strikes through `_call_safely`. Clean `staging/` in `finally` and at startup (Decision 4). Verify that `tests/services/test_worker.py` covers:
   - safe output: `succeeded`, the image in `outputs/` and nothing in `staging/`;
   - flagged output: `failed/content_blocked`, no file in either folder, a refund and one strike;
   - a classifier error: `failed/safety_check_failed`, a refund and no strike;

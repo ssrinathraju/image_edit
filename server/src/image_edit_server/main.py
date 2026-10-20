@@ -29,6 +29,7 @@ from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_terms
+from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.repos.template_catalog import load_catalog
@@ -152,6 +153,8 @@ def create_app(
     async def lifespan(app: FastAPI):
         outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
         outputs_dir.mkdir(parents=True, exist_ok=True)
+        # A crash mid-job can leave an unchecked image here; it was never served.
+        file_storage.clear_staging(cfg.STORAGE_ROOT)
 
         # Jobs are in memory, so none survived the restart; give their
         # generations back before the first request is served.
@@ -177,6 +180,7 @@ def create_app(
                 store,
                 pipeline,
                 cfg,
+                safety_service,
                 lambda user_id: user_store.get_by_id(user_id) is not None,
                 quota_service.release,
                 quota_service.settle,
