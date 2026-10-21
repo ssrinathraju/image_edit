@@ -350,3 +350,15 @@ async def test_both_folders_unreadable_is_survivable(settings, store, monkeypatc
 
     assert result.errors == 2
     assert result.outputs_removed == result.input_folders_removed == 0
+
+
+async def test_sweep_never_deletes_an_image_before_its_expires_at(settings, store):
+    job_id = _job(store)
+    path = _output(settings, job_id, age_hours=0)
+    expires_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) + timedelta(hours=24)
+
+    await sweep(store, settings, expires_at - timedelta(seconds=1))
+    assert path.exists()
+
+    await sweep(store, settings, expires_at)
+    assert not path.exists()

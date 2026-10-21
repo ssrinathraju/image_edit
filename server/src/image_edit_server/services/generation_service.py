@@ -80,6 +80,7 @@ def get_status(job_id: str, user_id: str, store: JobStore) -> Optional[JobStatus
         status=job.status,
         result_url=job.result_url,
         error=job.error,
+        expires_at=job.expires_at,
     )
 
 

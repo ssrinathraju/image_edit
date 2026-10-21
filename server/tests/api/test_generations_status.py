@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
@@ -71,3 +73,28 @@ def test_other_users_job_is_404_not_403(client, store, second_user_headers):
 
     assert other.status_code == 404
     assert client.get(f"/generations/{job_id}").status_code == 200
+
+
+def test_succeeded_job_reports_expires_at_in_utc_iso(client, store, user_id):
+    job_id = store.create(Job(id="", prompt="test", user_id=user_id))
+    expiry = datetime(2026, 10, 23, 10, 0, tzinfo=timezone.utc)
+    store.update(
+        job_id,
+        status=JobStatus.succeeded,
+        result_url=f"/images/{job_id}.png",
+        expires_at=expiry,
+    )
+
+    body = client.get(f"/generations/{job_id}").json()
+
+    assert body["expires_at"] in ("2026-10-23T10:00:00Z", "2026-10-23T10:00:00+00:00")
+
+
+@pytest.mark.parametrize("status", [JobStatus.queued, JobStatus.running, JobStatus.failed])
+def test_unfinished_or_failed_job_has_null_expires_at(client, store, user_id, status):
+    job_id = store.create(Job(id="", prompt="test", user_id=user_id))
+    store.update(job_id, status=status)
+
+    body = client.get(f"/generations/{job_id}").json()
+
+    assert body["expires_at"] is None

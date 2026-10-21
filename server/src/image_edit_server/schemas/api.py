@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ class JobStatusResponse(BaseModel):
     status: JobStatus
     result_url: Optional[str] = None
     error: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 
 class ReportCreated(BaseModel):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
@@ -73,12 +73,14 @@ async def run_worker(
                 logger.info("Job %s was deleted while running; output discarded", job_id)
                 continue
             if verdict is _Verdict.safe:
-                file_storage.promote_staged_output(job_id, settings.STORAGE_ROOT)
+                promoted = file_storage.promote_staged_output(job_id, settings.STORAGE_ROOT)
+                finished_at = clock()
                 store.update(
                     job_id,
                     status=JobStatus.succeeded,
                     result_url=f"/images/{job_id}.png",
-                    finished_at=clock(),
+                    finished_at=finished_at,
+                    expires_at=_expiry_of(promoted, job_id, finished_at, settings),
                 )
                 logger.info("Job %s succeeded", job_id)
                 if settle is not None and job.reservation_id:
@@ -102,6 +104,16 @@ async def run_worker(
                 # Owner deleted the account mid-run; never leave an output behind,
                 # whether the pipeline succeeded, failed, or wrote a partial file.
                 out_path.unlink(missing_ok=True)
+
+
+def _expiry_of(promoted: Path, job_id: str, finished_at: datetime, settings: Settings) -> datetime:
+    """The sweep ages images by mtime, so expiry is mtime plus retention."""
+    retention = timedelta(hours=settings.OUTPUT_RETENTION_HOURS)
+    try:
+        return datetime.fromtimestamp(promoted.stat().st_mtime, timezone.utc) + retention
+    except OSError:
+        logger.warning("expires_at_fallback job=%s", job_id)
+        return finished_at + retention
 
 
 class _Verdict(Enum):

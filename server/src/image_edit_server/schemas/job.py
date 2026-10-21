@@ -25,3 +25,4 @@ class Job:
     reservation_id: Optional[str] = None
     face_paths: list[str] = field(default_factory=list)
     finished_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
