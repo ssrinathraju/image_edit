@@ -30,9 +30,9 @@ If the stat fails (practically impossible right after a successful `os.replace`)
 - **Alternative rejected: computing it in `get_status`** by stat-ing the file per request. That adds file I/O to a 2-second polling endpoint and needs settings plumbing.
 
 ### 2. The app tracks the save outcome and renders the note from it
-The status screen's state gains `_SaveState { pending, saved, failed }`, set by the existing save call: `saved` on success, and `failed` where the SnackBar is shown today. `_SuccessView` shows the note under the image when `job.expiresAt != null` and the state isn't `pending`.
+The status screen's state gains `_SaveState { pending, saved, failed }`, set by the existing save call: `saved` on success, and `failed` on an error (with the SnackBar) or when there is no session (no SnackBar, because the save is skipped). `_SuccessView` shows the note under the image when `job.expiresAt != null` and the state isn't `pending`.
 
-The time is formatted with `MaterialLocalizations.formatMediumDate` plus `formatTimeOfDay` on `expiresAt.toLocal()`. `intl` isn't a dependency, and My creations already formats dates this way.
+The time is formatted with `MaterialLocalizations.formatMediumDate` plus `formatTimeOfDay` on the local time from an injectable `expiryToLocalProvider`, which defaults to `utc.toLocal()` and which tests replace to fix a time zone. `intl` isn't a dependency, and My creations already formats dates this way.
 
 The existing "Couldn't save" SnackBar stays. The note repeats the advice in a lasting place.
 
