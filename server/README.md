@@ -357,8 +357,11 @@ Template prompts stay on the server. Sending both `prompt` and `template_id`, or
 ```bash
 curl http://localhost:8000/generations/<job_id> -H "Authorization: Bearer $TOKEN"
 # → {"job_id": "...", "status": "queued"|"running"|"succeeded"|"failed",
-#    "result_url": "/images/<job_id>.png"}
+#    "result_url": "/images/<job_id>.png", "expires_at": "2026-10-23T10:00:00Z"}
 ```
+
+`expires_at` (UTC, ISO 8601) is set only for `succeeded` jobs and is null otherwise. It is when the
+image was written plus `OUTPUT_RETENTION_HOURS`: the retention sweep never deletes the image before it.
 
 ## Download the result
 
