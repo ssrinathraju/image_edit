@@ -98,4 +98,4 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From add-first-run-onboarding
 
-- [ ] **Corrections to apply at archive time** (the engineer may not edit openspec/): (1) add an Android step to manual task 4.2: install, skip onboarding, uninstall, reinstall, and onboarding shows again (the marker is excluded from Auto Backup in `backup_rules.xml` and `data_extraction_rules.xml`); (2) add to design.md that the `onboarding_seen` marker is excluded from Android backup and device transfer; (3) add one line to design.md that a signed-out deep link (for example `/reset-password?email=...`) on a fresh install is replaced by `/onboarding` then `/login`, so the link is lost (accepted).
+- [ ] **Manual check 4.2 never run** for add-first-run-onboarding: the iOS simulator run and the Android reinstall check (plus the optional adb backup check), and the accessibility check of the untitled How it works screen (screen reader announcement with no app bar title).
