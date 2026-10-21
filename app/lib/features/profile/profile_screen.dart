@@ -59,6 +59,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/invite'),
           ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('How it works'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/how-it-works'),
+          ),
           if (links.supportEmail != null)
             _LinkTile(
               icon: Icons.help_outline,

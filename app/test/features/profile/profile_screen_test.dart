@@ -13,12 +13,14 @@ import '../../support/app_harness.dart';
 import '../../support/fake_api_client.dart';
 import '../../support/fake_provider_sign_in.dart';
 import '../../support/fake_session_storage.dart';
+import '../../support/in_memory_onboarding_store.dart';
 
 late FakeApiClient client;
 late FakeSessionStorage storage;
 
 Future<FakeLinkLauncher> _openProfile(
   WidgetTester tester, {
+  InMemoryOnboardingStore? onboarding,
   ProfileLinks links = const ProfileLinks(),
   FakeProviderSignIn? google,
   FakeProviderSignIn? apple,
@@ -29,6 +31,7 @@ Future<FakeLinkLauncher> _openProfile(
     tester,
     client: client,
     storage: storage,
+    onboarding: onboarding,
     links: links,
     launcher: launcher,
     google: google,
@@ -54,6 +57,34 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text('Trending'), findsOneWidget);
+  });
+
+  testWidgets('How it works reopens the pages and returns to the profile', (tester) async {
+    final onboarding = InMemoryOnboardingStore(seen: true);
+    await _openProfile(tester, onboarding: onboarding);
+
+    await tester.tap(find.text('How it works'));
+    await tester.pumpAndSettle();
+    expect(find.text('Skip'), findsOneWidget);
+    expect(find.textContaining('trending template'), findsOneWidget);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('ana@example.com'), findsOneWidget);
+
+    await tester.tap(find.text('How it works'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('ana@example.com'), findsOneWidget);
+    expect(onboarding.saveCalls, 0);
+    expect(storage.saved, savedSession);
   });
 
   testWidgets('the header shows the email, its initial, and the version', (tester) async {
