@@ -21,4 +21,4 @@ Work on branch `feat/show-result-expiry`. Do not push to `main`. Server tasks ru
 
 - [x] 3.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `app.db` md5 and `inputs` count are unchanged, and that `openspec validate show-result-expiry --strict` passes.
 - [ ] 3.2 **Manual. iOS simulator** against a local stub server on a temporary storage root: generate an image. The status screen shows "Saved to My creations on this device. Our copy is deleted on …" with tomorrow's date at the right local time. This box stays unticked until someone runs it.
-- [ ] 3.3 Push `feat/show-result-expiry`. Verify with `git log origin/feat/show-result-expiry -1` that it matches the local HEAD.
+- [x] 3.3 Push `feat/show-result-expiry`. Verify with `git log origin/feat/show-result-expiry -1` that it matches the local HEAD.
