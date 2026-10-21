@@ -2,8 +2,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="creations/" />
+        <exclude domain="file" path="onboarding_seen" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="creations/" />
+        <exclude domain="file" path="onboarding_seen" />
     </device-transfer>
 </data-extraction-rules>

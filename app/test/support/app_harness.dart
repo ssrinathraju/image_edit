@@ -8,6 +8,7 @@ import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/consent/date_of_birth_field.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/history/creation_store.dart';
+import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/features/plans/invite_screen.dart';
 import 'package:image_edit/features/profile/profile_providers.dart';
 import 'package:image_edit/router.dart';
@@ -16,6 +17,7 @@ import 'package:image_edit/services/generation_providers.dart';
 import 'fake_api_client.dart';
 import 'fake_image_picker.dart';
 import 'in_memory_creation_store.dart';
+import 'in_memory_onboarding_store.dart';
 import 'fake_provider_sign_in.dart';
 import 'fake_session_storage.dart';
 
@@ -73,6 +75,7 @@ Future<ProviderContainer> pumpApp(
   TargetPlatform platform = TargetPlatform.android,
   bool settle = true,
   InMemoryCreationStore? store,
+  OnboardingStore? onboardingStore,
   DateTime? birthDate,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
@@ -88,6 +91,9 @@ Future<ProviderContainer> pumpApp(
               birthDate ?? defaultBirthDate,
         ),
         creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
+        onboardingStoreProvider.overrideWithValue(
+          onboardingStore ?? InMemoryOnboardingStore(),
+        ),
         sessionStorageProvider.overrideWithValue(storage),
         profileLinksProvider.overrideWithValue(links),
         linkLauncherProvider.overrideWithValue(launcher ?? FakeLinkLauncher()),

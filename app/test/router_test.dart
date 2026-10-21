@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/schemas/session.dart';
 
@@ -12,8 +14,9 @@ import 'support/app_harness.dart';
 import 'support/fake_api_client.dart';
 import 'support/fake_image_picker.dart';
 import 'support/fake_provider_sign_in.dart';
-import 'support/in_memory_creation_store.dart';
 import 'support/fake_session_storage.dart';
+import 'support/in_memory_creation_store.dart';
+import 'support/in_memory_onboarding_store.dart';
 
 void main() {
   late FakeApiClient client;
@@ -371,6 +374,93 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
     expect(find.text('My creations'), findsNothing);
+  });
+
+  group('onboarding', () {
+    testWidgets('a first signed-out launch shows onboarding, then sign-in after Skip',
+        (tester) async {
+      final onboarding = InMemoryOnboardingStore(seen: false);
+      await pumpApp(tester,
+          client: client, storage: FakeSessionStorage(), onboardingStore: onboarding);
+
+      expect(find.text('How it works'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsNothing);
+
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+      expect(onboarding.seen, isTrue);
+    });
+
+    testWidgets('a seen signed-out launch lands on sign-in', (tester) async {
+      await pumpApp(tester,
+          client: client,
+          storage: FakeSessionStorage(),
+          onboardingStore: InMemoryOnboardingStore(seen: true));
+
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    });
+
+    testWidgets('a signed-in launch with an unseen record lands on home',
+        (tester) async {
+      await pumpApp(tester,
+          client: client,
+          storage: FakeSessionStorage(savedSession),
+          onboardingStore: InMemoryOnboardingStore(seen: false));
+
+      expect(find.text('Trending'), findsOneWidget);
+    });
+
+    testWidgets('a signed-in unconfirmed-age launch with an unseen record lands on Confirm your age',
+        (tester) async {
+      client.onFetchMe = () async => fakeProfile(ageConfirmed: false);
+      await pumpApp(tester,
+          client: client,
+          storage: FakeSessionStorage(savedSession),
+          onboardingStore: InMemoryOnboardingStore(seen: false));
+
+      expect(find.text('Confirm your age'), findsOneWidget);
+    });
+
+    testWidgets('/onboarding while signed out and seen redirects to sign-in',
+        (tester) async {
+      final container =
+          await pumpApp(tester, client: client, storage: FakeSessionStorage());
+
+      container.read(routerProvider).go('/onboarding');
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    });
+
+    testWidgets('an unreadable record shows onboarding', (tester) async {
+      // The real store reads false on any failure.
+      final unreadable = OnboardingStore(
+        resolveRoot: () async => throw const FileSystemException('unreadable'),
+      );
+      await pumpApp(tester,
+          client: client,
+          storage: FakeSessionStorage(),
+          onboardingStore: unreadable);
+
+      expect(find.text('How it works'), findsOneWidget);
+    });
+
+    testWidgets('a failed save still reaches sign-in', (tester) async {
+      final unsavable = OnboardingStore(
+        resolveRoot: () async => throw const FileSystemException('read-only'),
+      );
+      await pumpApp(tester,
+          client: client,
+          storage: FakeSessionStorage(),
+          onboardingStore: unsavable);
+
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    });
   });
 
   group('age gate', () {
