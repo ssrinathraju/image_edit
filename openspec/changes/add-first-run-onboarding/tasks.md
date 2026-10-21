@@ -41,4 +41,4 @@ Work on branch `feat/add-first-run-onboarding`. Do not push to `main`. All work 
   - check the text wraps at the largest Dynamic Type size.
 
   This box stays unticked until someone runs it.
-- [ ] 4.3 Push `feat/add-first-run-onboarding`. Verify with `git log origin/feat/add-first-run-onboarding -1` that it matches the local HEAD.
+- [x] 4.3 Push `feat/add-first-run-onboarding`. Verify with `git log origin/feat/add-first-run-onboarding -1` that it matches the local HEAD.
