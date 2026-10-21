@@ -31,7 +31,7 @@ Future<FakeLinkLauncher> _openProfile(
     tester,
     client: client,
     storage: storage,
-    onboarding: onboarding,
+    onboardingStore: onboarding,
     links: links,
     launcher: launcher,
     google: google,

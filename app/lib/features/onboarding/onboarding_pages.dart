@@ -180,7 +180,7 @@ class HowItWorksScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('How it works')),
+        appBar: AppBar(),
         body: OnboardingPages(onDone: () => _close(context)),
       );
 }

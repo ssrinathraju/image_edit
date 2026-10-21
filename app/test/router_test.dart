@@ -14,9 +14,9 @@ import 'support/app_harness.dart';
 import 'support/fake_api_client.dart';
 import 'support/fake_image_picker.dart';
 import 'support/fake_provider_sign_in.dart';
+import 'support/fake_session_storage.dart';
 import 'support/in_memory_creation_store.dart';
 import 'support/in_memory_onboarding_store.dart';
-import 'support/fake_session_storage.dart';
 
 void main() {
   late FakeApiClient client;
@@ -381,7 +381,7 @@ void main() {
         (tester) async {
       final onboarding = InMemoryOnboardingStore(seen: false);
       await pumpApp(tester,
-          client: client, storage: FakeSessionStorage(), onboarding: onboarding);
+          client: client, storage: FakeSessionStorage(), onboardingStore: onboarding);
 
       expect(find.text('How it works'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Sign in'), findsNothing);
@@ -397,7 +397,7 @@ void main() {
       await pumpApp(tester,
           client: client,
           storage: FakeSessionStorage(),
-          onboarding: InMemoryOnboardingStore(seen: true));
+          onboardingStore: InMemoryOnboardingStore(seen: true));
 
       expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
     });
@@ -407,7 +407,7 @@ void main() {
       await pumpApp(tester,
           client: client,
           storage: FakeSessionStorage(savedSession),
-          onboarding: InMemoryOnboardingStore(seen: false));
+          onboardingStore: InMemoryOnboardingStore(seen: false));
 
       expect(find.text('Trending'), findsOneWidget);
     });
@@ -418,7 +418,7 @@ void main() {
       await pumpApp(tester,
           client: client,
           storage: FakeSessionStorage(savedSession),
-          onboarding: InMemoryOnboardingStore(seen: false));
+          onboardingStore: InMemoryOnboardingStore(seen: false));
 
       expect(find.text('Confirm your age'), findsOneWidget);
     });

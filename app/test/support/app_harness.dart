@@ -75,7 +75,6 @@ Future<ProviderContainer> pumpApp(
   TargetPlatform platform = TargetPlatform.android,
   bool settle = true,
   InMemoryCreationStore? store,
-  InMemoryOnboardingStore? onboarding,
   OnboardingStore? onboardingStore,
   DateTime? birthDate,
 }) async {
@@ -92,7 +91,9 @@ Future<ProviderContainer> pumpApp(
               birthDate ?? defaultBirthDate,
         ),
         creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
-        onboardingStoreProvider.overrideWithValue(onboardingStore ?? onboarding ?? InMemoryOnboardingStore()),
+        onboardingStoreProvider.overrideWithValue(
+          onboardingStore ?? InMemoryOnboardingStore(),
+        ),
         sessionStorageProvider.overrideWithValue(storage),
         profileLinksProvider.overrideWithValue(links),
         linkLauncherProvider.overrideWithValue(launcher ?? FakeLinkLauncher()),

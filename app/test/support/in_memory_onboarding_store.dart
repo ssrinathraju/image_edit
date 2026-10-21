@@ -3,10 +3,9 @@ import 'dart:io';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
 
 class InMemoryOnboardingStore implements OnboardingStore {
-  InMemoryOnboardingStore({this.seen = true, this.failSave = false});
+  InMemoryOnboardingStore({this.seen = true});
 
   bool seen;
-  final bool failSave;
   int saveCalls = 0;
 
   @override
@@ -19,6 +18,6 @@ class InMemoryOnboardingStore implements OnboardingStore {
   @override
   Future<void> markSeen() async {
     saveCalls++;
-    if (!failSave) seen = true;
+    seen = true;
   }
 }
