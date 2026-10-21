@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,11 +22,37 @@ import '../../support/fake_image_picker.dart';
 import '../../support/fake_session_storage.dart';
 import '../../support/in_memory_creation_store.dart';
 
-GenerationJob _succeeded(String id) => GenerationJob(
+GenerationJob _succeeded(String id, {DateTime? expiresAt}) => GenerationJob(
       jobId: id,
       status: JobStatus.succeeded,
       resultUrl: 'http://fake/images/$id.png',
+      expiresAt: expiresAt,
     );
+
+final _expiry = DateTime.utc(2026, 10, 23, 10);
+
+/// A store whose save finishes only when the test says so.
+class _SlowStore extends InMemoryCreationStore {
+  final release = Completer<void>();
+
+  @override
+  Future<void> save({
+    required String userId,
+    required String jobId,
+    required String label,
+    required Uint8List bytes,
+    required DateTime finishedAt,
+  }) async {
+    await release.future;
+    return super.save(
+      userId: userId,
+      jobId: jobId,
+      label: label,
+      bytes: bytes,
+      finishedAt: finishedAt,
+    );
+  }
+}
 
 GenerationRequest _request() => GenerationRequest(
       photo: XFile.fromData(tinyPng, name: 'me.png'),
@@ -44,6 +73,7 @@ Future<_Harness> _pump(
   bool showActions = true,
   String jobId = 'job-1',
   InMemoryCreationStore? store,
+  DateTime Function(DateTime)? toLocal,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -72,6 +102,7 @@ Future<_Harness> _pump(
         sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
         imageActionsProvider.overrideWithValue(actions),
         showImageActionsProvider.overrideWithValue(showActions),
+        if (toLocal != null) expiryToLocalProvider.overrideWithValue(toLocal),
         lastRequestProvider.overrideWith(
           (_) => lastRequest == null ? null : (jobId: 'job-1', request: lastRequest),
         ),
@@ -327,5 +358,63 @@ void main() {
 
     expect(store.savedJobs, isEmpty);
     expect(find.text("Couldn't save to My creations"), findsNothing);
+  });
+
+  group('expiry note', () {
+    FakeApiClient clientWith(DateTime? expiresAt) => FakeApiClient()
+      ..onStatus = (id) async => _succeeded(id, expiresAt: expiresAt);
+
+    testWidgets('a saved result shows the reassuring note', (tester) async {
+      await _pump(tester, client: clientWith(_expiry));
+
+      expect(
+        find.textContaining(
+          'Saved to My creations on this device. Our copy is deleted on',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an unsaved result shows the warning', (tester) async {
+      final store = InMemoryCreationStore()..saveError = StateError('disk full');
+
+      await _pump(tester, client: clientWith(_expiry), store: store);
+
+      expect(find.textContaining('Not saved on this device. Download or share it before'),
+          findsOneWidget);
+      expect(find.textContaining("when it's deleted."), findsOneWidget);
+      expect(find.textContaining('Saved to My creations'), findsNothing);
+    });
+
+    testWidgets('no note while the save is in progress', (tester) async {
+      final store = _SlowStore();
+
+      await _pump(tester, client: clientWith(_expiry), store: store);
+      expect(find.textContaining('deleted'), findsNothing);
+
+      store.release.complete();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Our copy is deleted on'), findsOneWidget);
+    });
+
+    testWidgets('no expires_at means no note and the actions stay', (tester) async {
+      await _pump(tester, client: clientWith(null));
+
+      expect(find.textContaining('deleted'), findsNothing);
+      expect(find.byType(Image, skipOffstage: false), findsOneWidget);
+      expect(find.text('Download'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+    });
+
+    testWidgets('the time is shown in the device time zone (+05:30)', (tester) async {
+      await _pump(
+        tester,
+        client: clientWith(_expiry),
+        toLocal: (utc) => utc.add(const Duration(hours: 5, minutes: 30)),
+      );
+
+      expect(find.textContaining('Fri, Oct 23, 3:30 PM'), findsOneWidget);
+    });
   });
 }
