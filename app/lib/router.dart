@@ -24,6 +24,8 @@ import 'features/home/home_screen.dart';
 import 'features/plans/account_notifier.dart';
 import 'features/plans/invite_screen.dart';
 import 'features/plans/upgrade_screen.dart';
+import 'features/onboarding/onboarding_pages.dart';
+import 'features/onboarding/onboarding_store.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/template_detail/template_screen.dart';
 import 'schemas/template.dart';
@@ -38,6 +40,8 @@ const String _referralPrompt = '/referral-prompt';
 const String _providerAge = '/age';
 const String _confirmAge = '/confirm-age';
 const String _ageBlocked = '/age-blocked';
+const String _onboarding = '/onboarding';
+const String _howItWorks = '/how-it-works';
 
 /// Pages a signed-out user may open.
 const Set<String> _signedOutPages = {
@@ -57,6 +61,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final sessionChanges = ValueNotifier<int>(0);
   ref.listen(sessionProvider, (_, _) => sessionChanges.value++);
   ref.listen(accountProvider, (_, _) => sessionChanges.value++);
+  ref.listen(onboardingSeenProvider, (_, _) => sessionChanges.value++);
   ref.onDispose(sessionChanges.dispose);
 
   String? redirect(Object _, GoRouterState state) {
@@ -66,6 +71,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       return location == _splash ? null : _splash;
     }
     if (session.value == null) {
+      final seen = ref.read(onboardingSeenProvider);
+      if (seen.isLoading) return location == _splash ? null : _splash;
+      // An unreadable record counts as not seen.
+      final hasSeenOnboarding = seen.valueOrNull ?? false;
+      if (!hasSeenOnboarding) return location == _onboarding ? null : _onboarding;
+      if (location == _onboarding) return _login;
       if (location == _confirmRegistration &&
           ref.read(registrationDraftProvider) == null) {
         return _register;
@@ -82,7 +93,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     final ageConfirmed = account.valueOrNull?.ageConfirmed ?? true;
     if (!ageConfirmed) return _ageGatePages.contains(location) ? null : _confirmAge;
     if (_ageGatePages.contains(location)) return '/';
-    final isAuthPage = _signedOutPages.contains(location) || location == _splash;
+    final isAuthPage = _signedOutPages.contains(location) ||
+        location == _splash ||
+        location == _onboarding;
     if (!isAuthPage) return null;
     final notifier = ref.read(sessionProvider.notifier);
     if (notifier.justCreatedViaProvider) return _referralPrompt;
@@ -95,6 +108,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: _splash,
     routes: [
       GoRoute(path: _splash, builder: (_, _) => const SplashScreen()),
+      GoRoute(path: _onboarding, builder: (_, _) => const OnboardingScreen()),
+      GoRoute(path: _howItWorks, builder: (_, _) => const HowItWorksScreen()),
       GoRoute(path: _login, builder: (_, _) => const LoginScreen()),
       GoRoute(path: _register, builder: (_, _) => const RegisterScreen()),
       GoRoute(
