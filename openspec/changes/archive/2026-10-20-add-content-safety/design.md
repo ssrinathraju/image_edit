@@ -7,7 +7,7 @@ See `proposal.md` for the motivation and `specs/` for the behaviour. The current
 - **Submit.** `generation_service.submit` runs in this order: the age and consent gate, the quota pre-check, face count, reading and validating uploads (`_read_and_validate_faces` returns bytes), resolving the prompt (`_resolve_prompt` returns the template prompt or the custom one), reserving, then creating the job and saving uploads.
 - **Worker.** The worker calls `pipeline.run(faces, prompt, out_path)`, then marks the job `succeeded` and settles. Any exception gives `failed / pipeline_failed` and a refund. Inputs are deleted in `finally`.
 - **Pipelines.** `main._make_pipeline` picks `stub` or `sana`. The `ml` dependency group holds `torch` and `transformers`; the default install doesn't.
-- **Store and retention.** The store is `SqliteUserStore` composed from mixins (schema version 5), and the retention sweep lives in `services/retention_service.py`. Account deletion goes through `AuthService.delete_account`, then the store's `delete_user` (with cascades) and the job purge.
+- **Store and retention.** The store is `SqliteUserStore` composed from mixins (schema version 5), and the retention sweep lives in `services/retention_service.py`, with the report pass in `services/report_retention.py`. Account deletion goes through `AuthService.delete_account`, then the store's `delete_user` (with cascades) and the job purge.
 - **App.** `failure_messages.dart` maps job error codes, `submit_flow.dart` handles submit errors, and `ImageActionRow` is shared by the status and creation detail screens.
 
 ## Goals / Non-Goals
@@ -33,7 +33,8 @@ See `proposal.md` for the motivation and `specs/` for the behaviour. The current
   4. replace each run of non-letters with one space;
   5. wrap the result in spaces.
 - **Terms** are normalised the same way. Each term matches if `" " + term + " "` occurs in the normalised prompt, which gives whole-word and whole-phrase matching.
-- **Spelled-out words.** A prompt like `N-U-D-3` normalises to `n u d e`, which a plain term wouldn't match. So the matcher also checks a second form of the prompt in which runs of single letters separated by spaces are joined (`n u d e` → `nude`). That second form is matched against single-word terms only.
+- **Spelled-out words.** A prompt like `N-U-D-3` normalises to `n u d e`, which a plain term wouldn't match. So the matcher also joins each run of spelled-out single letters (`n u d e` → `nude`) and tests every single-word term as a substring of each joined run. A neighbouring one-letter word therefore cannot hide a term: in `a N-U-D-3 woman` the run is `a n u d e`, which joins to `anude` and contains `nude`. Multi-word terms match only through the whole-phrase check above.
+  - **Trade-off:** a spelled-out word that merely contains a term, such as `g r a p e`, is also blocked.
 - **The list** lives in `seed/safety/blocked_terms.txt`: one term or phrase per line, with `#` comments. It's loaded at startup and must contain at least one term, or the server won't start.
 - **The starter list** covers sexual content, minors in a sexual context, graphic violence and slurs. It's kept short and is meant to be curated by the operator.
 
@@ -95,11 +96,11 @@ A new mixin, `repos/user_store_safety.py`.
 - **Location:** `<STORAGE_ROOT>/reports/<report_id>.png`, outside `outputs/`, so the 24-hour sweep never sees them.
 - **The server's copy:** `file_storage.copy_output_to_report(job_id, report_id)`, used when the job exists, belongs to the reporter, is `succeeded` and still has its output.
 - **The device's copy:** used otherwise, after the existing upload checks (size and type). If no image comes with the report, it's recorded with source `none`.
-- **Expiry:** the retention sweep gains a pass that deletes reports older than `REPORT_RETENTION_DAYS` (default 30), and their image files. Errors are caught per report.
+- **Expiry:** `services/report_retention.py` (a separate module from `retention_service.py`) holds a pass that deletes reports older than `REPORT_RETENTION_DAYS` (default 30), and their image files. Errors are caught per report.
 - **Account deletion:** the cascade removes the report rows, and the account-cleanup step deletes the image files of that reporter's reports, which are read before the user row is deleted. A crash between the two leaves orphan files, which the sweep removes as images with no row.
 
 ### 7. Reports API and operator CLI
-- **`api/reports.py`:** `POST /reports` takes multipart `job_id`, `category`, `note?` and `image?`. It runs as a plain `def`, so the copy and the database write happen in the thread pool.
+- **`api/reports.py`:** `POST /reports` takes multipart `job_id`, `category`, `note?` and `image?`. It is an `async def`; the image copy and the database write run off the event loop.
 - **Errors:** 400 `invalid_report`, 404 for another account's live job, 429 `too_many_reports`.
 - **`scripts/reports.py`:** `list`, `show <id> --out <file>` and `resolve <id> --outcome <text>`. It uses `auth_db_path(Settings())` and the storage root, like `set_plan.py`.
 
@@ -124,7 +125,7 @@ The pause lasts `STRIKE_WINDOW_HOURS` from the third-most-recent strike.
 **Errors and messages:**
 - `api_errors.dart` adds `prompt_blocked`, `photo_blocked`, `generation_suspended` (with `suspended_until` read from the body), `too_many_reports`, `invalid_report`, `content_blocked` and `safety_unavailable`.
 - `failure_messages.dart` adds `content_blocked`: "This image was blocked by our content rules and wasn't counted."
-- `submit_flow.dart` shows inline messages for `prompt_blocked` and `photo_blocked`, and a dialog for `generation_suspended`, with the time in local time.
+- `submit_flow.dart` shows SnackBars for `prompt_blocked`, `photo_blocked` and `safety_unavailable`, and a dialog for `generation_suspended`, with the time in local time.
 
 **Reporting:**
 - `features/report/report_sheet.dart` is a bottom sheet with the five category radios, a note field (max 500), and Send and Cancel buttons.
@@ -135,7 +136,7 @@ Screen states:
 
 | Screen | Loading | Empty / initial | Error | Success |
 |---|---|---|---|---|
-| Submit form (added behaviour) | Unchanged | Unchanged | `prompt_blocked`: inline "Your prompt contains words we don't allow." `photo_blocked`: inline "This photo can't be used. Choose another." `safety_unavailable`: "Checks are unavailable right now, try again." | Unchanged |
+| Submit form (added behaviour) | Unchanged | Unchanged | `prompt_blocked`: SnackBar "Your prompt contains words we don't allow." `photo_blocked`: SnackBar "This photo can't be used. Choose another." `safety_unavailable`: "Checks are unavailable right now, try again." | Unchanged |
 | Paused dialog | n/a | "Generating is paused until <local time> because recent results broke our content rules." with OK | n/a | Closing returns to the form with values kept |
 | Status, failed with `content_blocked` | n/a | n/a | "This image was blocked by our content rules and wasn't counted." with New generation, and no image | n/a |
 | Report sheet | Send spinner, controls disabled | No category: Send disabled | `too_many_reports`: "You've sent too many reports today. Try again tomorrow." Network: "Couldn't send the report. Try again." The category and note are kept in every error case | Sheet closes, SnackBar "Thanks, we'll review it." |
@@ -150,7 +151,7 @@ Screen states:
 - **[Who can read it]**
   - Reports and their images: only the operator, through the CLI on the server. No HTTP endpoint lists or serves them.
   - Strikes: visible to the user only as the paused state with its end time.
-- **[What is logged]** Safety events only: `prompt_blocked`, `photo_blocked`, `output_blocked`, `safety_check_failed`, `strike`, `suspended`, `report_created`. Each carries the account id and the job or report id. Prompts, notes, scores and terms are never logged.
+- **[What is logged]** Safety events only: `prompt_blocked`, `photo_blocked`, `output_blocked`, `safety_check_failed`, `suspended`, `report_created`. Each carries the account id and the job or report id. Prompts, notes, scores and terms are never logged.
 - **[Existing data and migration]** Schema version 6 adds two empty tables, idempotently. Existing jobs and accounts are unaffected. Rollback: the version-5 server ignores the new tables.
 - **[False positives and negatives]**
   - A threshold of 0.7 on a general NSFW model will misfire sometimes, especially on swimwear or beach templates.
