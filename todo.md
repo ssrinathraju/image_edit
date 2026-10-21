@@ -91,3 +91,7 @@ Items deferred from PR #1 review. None block the merge.
 ## From harden-server-edge-cases
 
 - [ ] **Manual check 4.2 never run** — the iOS simulator check (the limit dialog appears at once after 3 generations, and generation works normally before the limit) was not run for harden-server-edge-cases. The plain-language failure text is covered by widget tests only, because the stub pipeline cannot be made to fail.
+
+## From show-result-expiry
+
+- [ ] **Manual check 3.2 never run** — the iOS simulator check (the expiry note shows the correct local time) was not run for show-result-expiry. Include the reviewer's extra manual checks: a simulator time-zone change, 48 h retention, a forced save failure, an older server showing no note, and large text wrapping.
