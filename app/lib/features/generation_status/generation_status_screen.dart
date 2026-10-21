@@ -23,6 +23,14 @@ final _log = Logger('generation_status');
 
 const String _saveFailedMessage = "Couldn't save to My creations";
 
+/// Converts the server's UTC expiry to the time shown; replaceable in tests.
+final expiryToLocalProvider = Provider<DateTime Function(DateTime)>(
+  (_) =>
+      (utc) => utc.toLocal(),
+);
+
+enum _SaveState { pending, saved, failed }
+
 class GenerationStatusScreen extends ConsumerWidget {
   const GenerationStatusScreen({required this.jobId, super.key});
 
@@ -44,16 +52,15 @@ class GenerationStatusScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Generation Status')),
       body: asyncJob.when(
         loading: () => const _ProgressView(message: 'Starting…'),
-        error: (e, _) =>
-            _FailureView(jobId: jobId, message: describeError(e)),
+        error: (e, _) => _FailureView(jobId: jobId, message: describeError(e)),
         data: (job) => switch (job.status) {
           JobStatus.queued => const _ProgressView(message: 'Queued…'),
           JobStatus.running => const _ProgressView(message: 'Generating…'),
           JobStatus.succeeded => _SuccessView(job: job),
           JobStatus.failed => _FailureView(
-              jobId: jobId,
-              message: failureMessageFor(job.error),
-            ),
+            jobId: jobId,
+            message: failureMessageFor(job.error),
+          ),
         },
       ),
     );
@@ -100,16 +107,22 @@ class _SuccessView extends ConsumerWidget {
         message: 'Could not load the image.',
         onReload: () => ref.invalidate(resultImageBytesProvider(url)),
       ),
-      data: (data) => _ResultBody(jobId: job.jobId, bytes: data),
+      data: (data) =>
+          _ResultBody(jobId: job.jobId, bytes: data, expiresAt: job.expiresAt),
     );
   }
 }
 
 class _ResultBody extends ConsumerStatefulWidget {
-  const _ResultBody({required this.jobId, required this.bytes});
+  const _ResultBody({
+    required this.jobId,
+    required this.bytes,
+    required this.expiresAt,
+  });
 
   final String jobId;
   final Uint8List bytes;
+  final DateTime? expiresAt;
 
   @override
   ConsumerState<_ResultBody> createState() => _ResultBodyState();
@@ -117,6 +130,7 @@ class _ResultBody extends ConsumerStatefulWidget {
 
 class _ResultBodyState extends ConsumerState<_ResultBody> {
   bool _saveStarted = false;
+  _SaveState _saveState = _SaveState.pending;
 
   String get jobId => widget.jobId;
   Uint8List get bytes => widget.bytes;
@@ -139,9 +153,13 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
     final finishedAt = ref.read(clockProvider)();
     try {
       final session = await sessionFuture;
-      if (session == null) return;
+      if (session == null) {
+        _setSaveState(_SaveState.failed);
+        return;
+      }
       final pending = await store.pending(session.userId);
-      final label = pending.where((p) => p.jobId == jobId).firstOrNull?.label ?? '';
+      final label =
+          pending.where((p) => p.jobId == jobId).firstOrNull?.label ?? '';
       await store.save(
         userId: session.userId,
         jobId: jobId,
@@ -149,22 +167,68 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
         bytes: bytes,
         finishedAt: finishedAt,
       );
+      _setSaveState(_SaveState.saved);
     } on Object catch (error) {
       _log.warning('save_failed job=$jobId ${error.runtimeType}');
+      _setSaveState(_SaveState.failed);
       messenger.showSnackBar(const SnackBar(content: Text(_saveFailedMessage)));
     }
   }
 
+  void _setSaveState(_SaveState state) {
+    if (mounted) setState(() => _saveState = state);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final expiresAt = widget.expiresAt;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Image.memory(bytes, fit: BoxFit.contain),
+        if (expiresAt != null && _saveState != _SaveState.pending) ...[
+          const SizedBox(height: 12),
+          _ExpiryNote(
+            saved: _saveState == _SaveState.saved,
+            expiresAt: expiresAt,
+          ),
+        ],
         const SizedBox(height: 16),
         ImageActionRow(bytes: bytes, name: jobId, jobId: jobId),
         const SizedBox(height: 12),
         _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
+      ],
+    );
+  }
+}
+
+class _ExpiryNote extends ConsumerWidget {
+  const _ExpiryNote({required this.saved, required this.expiresAt});
+
+  final bool saved;
+  final DateTime expiresAt;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final local = ref.watch(expiryToLocalProvider)(expiresAt);
+    final localizations = MaterialLocalizations.of(context);
+    final when =
+        '${localizations.formatMediumDate(local)}, '
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+    final text = saved
+        ? 'Saved to My creations on this device. Our copy is deleted on $when.'
+        : "Not saved on this device. Download or share it before $when, when it's deleted.";
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          saved ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+        ),
       ],
     );
   }

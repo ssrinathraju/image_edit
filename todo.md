@@ -23,8 +23,6 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From enforce-output-retention
 
-- [ ] **Tell users when a result expires** — add `expires_at` to the status response and a note on the result screen. Results are deleted after the retention period (24 hours by default) with no warning today; Download and Share are the only way to keep one.
-
 - [x] **`generation_service.submit` ignores the app's settings** — it takes its settings from a module-level `Settings()` default and the router never passes the app's own settings. With an app built from an explicit `Settings(...)`, reference-face uploads and the validation limits (`MAX_FACES`, `MAX_UPLOAD_BYTES`, prompt length, accepted types) come from the environment default instead, so uploads land in `./storage/inputs` while the worker deletes under the configured root. Dormant in a normal deployment because both read the same environment variables. Visible in tests: every test run leaves face folders in the real `server/storage/inputs`. Fix: provide the app's settings to the generations router through a dependency and use them in `submit`, with a test that an explicit storage root receives the upload.
 
 ## From archive

@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pathlib import Path
@@ -490,3 +491,69 @@ def test_clearing_staging_removes_leftover_files(tmp_path):
     assert file_storage.clear_staging(str(tmp_path)) == 2
     assert list(staging.iterdir()) == []
     assert file_storage.clear_staging(str(tmp_path / "missing")) == 0
+
+
+WRITTEN_AT = datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)
+
+
+class _BackdatedPipeline:
+    """Writes the staged image with a fixed mtime, as a slow pipeline would."""
+
+    async def run(self, faces, prompt, output_path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        os.utime(output_path, (WRITTEN_AT.timestamp(), WRITTEN_AT.timestamp()))
+
+
+async def test_succeeded_job_expires_at_is_output_mtime_plus_retention(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path), OUTPUT_RETENTION_HOURS=48)
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _BackdatedPipeline())
+
+    assert store.get(job_id).expires_at == WRITTEN_AT + timedelta(hours=48)
+
+
+async def test_expires_at_falls_back_to_finished_at_when_stat_fails(tmp_path, monkeypatch, caplog):
+    settings = Settings(STORAGE_ROOT=str(tmp_path), OUTPUT_RETENTION_HOURS=48)
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+    real_promote = file_storage.promote_staged_output
+
+    def promote_and_hide(job_id, storage_root=None):
+        real_promote(job_id, storage_root)
+        return tmp_path / "missing.png"
+
+    monkeypatch.setattr(file_storage, "promote_staged_output", promote_and_hide)
+    finished = datetime(2026, 10, 22, 11, 0, tzinfo=timezone.utc)
+
+    await _drain(store, settings, _BackdatedPipeline(), clock=lambda: finished)
+
+    job = store.get(job_id)
+    assert job.status == JobStatus.succeeded
+    assert job.expires_at == finished + timedelta(hours=48)
+    assert f"expires_at_fallback job={job_id}" in caplog.text
+
+
+async def test_failed_job_has_no_expires_at(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+
+    await _drain(store, settings, _FailingPipeline())
+
+    assert store.get(job_id).expires_at is None
+
+
+async def test_blocked_job_has_no_expires_at(tmp_path):
+    settings = Settings(STORAGE_ROOT=str(tmp_path))
+    store = InMemoryJobStore()
+    job_id = store.create(Job(id="", prompt="sunset"))
+    await _drain(
+        store, settings, _BackdatedPipeline(), safety=_safety(output=FakeClassifier(0.95))
+    )
+
+    job = store.get(job_id)
+    assert job.status == JobStatus.failed
+    assert job.expires_at is None
