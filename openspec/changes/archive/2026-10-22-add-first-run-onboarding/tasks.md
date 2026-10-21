@@ -40,5 +40,9 @@ Work on branch `feat/add-first-run-onboarding`. Do not push to `main`. All work 
   - delete and reinstall the app: onboarding shows again;
   - check the text wraps at the largest Dynamic Type size.
 
+  **Android:**
+  - install the app, skip onboarding, then uninstall and reinstall: onboarding shows again;
+  - optionally, run `adb backup` and restore to confirm the `onboarding_seen` marker is not restored.
+
   This box stays unticked until someone runs it.
 - [x] 4.3 Push `feat/add-first-run-onboarding`. Verify with `git log origin/feat/add-first-run-onboarding -1` that it matches the local HEAD.

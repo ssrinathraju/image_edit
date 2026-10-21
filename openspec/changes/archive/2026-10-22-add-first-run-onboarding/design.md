@@ -24,6 +24,7 @@ See `proposal.md` for the motivation and `specs/` for the behaviour. The current
 `features/onboarding/onboarding_store.dart` (`OnboardingStore`) provides `hasSeen()` and `markSeen()`. The marker is `<appSupport>/onboarding_seen`, created empty, and its presence means "seen".
 - **`hasSeen()`** returns false on any exception, which gives the spec's "unreadable means show".
 - **`markSeen()`** catches and logs any exception and never throws, which gives "unsavable means continue".
+- **Backup.** The marker is excluded from Android Auto Backup and device transfer, alongside `creations/`: in `backup_rules.xml` and in both the `cloud-backup` and `device-transfer` sections of `data_extraction_rules.xml`. Without that, a restore would bring the marker back and onboarding would not show after a reinstall.
 
 It's exposed through a Riverpod provider, so tests use an in-memory fake.
 
@@ -42,6 +43,8 @@ The redirect gets this order:
 
 A launch with a saved session never consults the record (steps 1 and 5), which gives "a signed-in launch is not interrupted".
 
+A signed-out deep link on a fresh install (for example `/reset-password?email=...`) is replaced by `/onboarding` and then `/login`, so the link is lost. This is accepted.
+
 ### 3. One pages widget, two routes
 `OnboardingPages({required VoidCallback onDone})` contains:
 - a `PageView` of three `_OnboardingPage`s, each with a Material icon, a title and a body;
@@ -51,7 +54,7 @@ A launch with a saved session never consults the record (steps 1 and 5), which g
 
 It's used by two routes:
 - **`/onboarding` (first launch):** `onDone` calls `markSeen()`, and the redirect then moves to `/login`.
-- **`/how-it-works` (signed in, from the profile row):** `onDone` pops back to the profile. The app bar's back button also returns. It never changes the record.
+- **`/how-it-works` (signed in, from the profile row):** `onDone` pops back to the profile (or goes to `/` if there is nothing to pop). The screen has an app bar with a back button and no title, which also returns. It never changes the record.
 
 **Page text:**
 - **How it works:** "Pick a trending template or describe your own scene, add a photo of yourself, and we'll create a new image of you."
