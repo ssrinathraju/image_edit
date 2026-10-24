@@ -149,7 +149,7 @@ previous server needs the backup, because the old code tables had a different sh
 Registration and password reset both use a 6-digit code emailed to the address. A code is valid for
 15 minutes, is invalidated after 5 wrong tries, and is stored hashed. Codes and their limits are
 **per email address**: at most one code email every 60 seconds and 5 per hour, counting
-registration and reset codes together. A limited request sends nothing and keeps the earlier code
+registration, reset and email-change codes together. A limited request sends nothing and keeps the earlier code
 valid; `POST /auth/register` then answers `429 too_many_requests` with a `Retry-After` header.
 
 ```bash
@@ -289,6 +289,65 @@ Profile). A free Personal Team cannot sign that capability, so a signed device b
 provision. The simulator and `flutter build ios --no-codesign` are unaffected. Until the membership
 exists, either use the simulator or clear `CODE_SIGN_ENTITLEMENTS` for the Debug configuration in
 Xcode for device runs (and restore it afterwards: do not commit the change).
+
+## Sign-in and security
+
+A signed-in account can change how it signs in. Every request needs a bearer token, and every
+change except linking a provider carries a `reauth` object that proves it is really the owner:
+either `{"password": "<current password>"}`, or `{"provider": "google"|"apple", "token": "<FRESH
+PROVIDER TOKEN>", "nonce": "<RAW NONCE, Apple only>"}` for an account without a password (the token
+must be issued within the last 5 minutes for an identity linked to the account). Anything else is
+`422`. A wrong password, or a provider token that is rejected, old or for another identity, is
+`403 reauth_failed` and changes nothing. Wrong passwords count toward the same lockout as login:
+after 5, every re-authenticated call and login answers `429 too_many_attempts` until it passes.
+
+```bash
+# Set or change the password → 204. Every OTHER session is signed out; this one stays.
+# The account's address gets a "password changed" email (no code, no password in it).
+# new_password is 8..128 characters, otherwise 400 invalid_credentials_format.
+curl -X POST http://localhost:8000/me/password \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"new_password": "a brand new passphrase", "reauth": {"password": "the current password"}}'
+
+# Change the email, step 1 → 202 {}. A code goes to the NEW address; the email does not change yet.
+# 400 invalid_credentials_format (bad format, or the same as the current email), 409 email_taken,
+# 429 too_many_requests with Retry-After (the per-address code limits, shared with the other purposes).
+curl -X POST http://localhost:8000/me/email \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"new_email": "new@example.com", "reauth": {"password": "the current password"}}'
+
+# Step 2 → 200 {"email": "new@example.com"}. Other sessions are signed out, and the OLD address
+# gets an email naming the new one and saying to reset the password if it was not them.
+# 400 invalid_code (wrong), 400 code_expired (expired, used or never requested),
+# 409 email_taken (someone registered it meanwhile; the pending change is discarded).
+curl -X POST http://localhost:8000/me/email/confirm \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+
+# Link a provider → 200 {}. The token is the proof, so no reauth. The account's email is unchanged.
+# 409 provider_in_use (identity on another account), 409 provider_already_linked (this account
+# already has that provider), 401 invalid_provider_token.
+curl -X POST http://localhost:8000/me/providers/google \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"id_token": "<GOOGLE_ID_TOKEN>"}'
+curl -X POST http://localhost:8000/me/providers/apple \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"identity_token": "<APPLE_IDENTITY_TOKEN>", "nonce": "<RAW_NONCE>", "authorization_code": "<CODE>"}'
+
+# Unlink a provider → 204 (the body is required, as for DELETE /me).
+# 409 last_sign_in_method (no password and no other provider would remain),
+# 404 not_found (not linked). Unlinking Apple asks Apple to revoke its stored token; a failure is
+# only logged.
+curl -X DELETE http://localhost:8000/me/providers/google \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"reauth": {"password": "the current password"}}'
+```
+
+A pending email change is kept per account (a new request replaces it) for at most 24 hours; the
+email-change code follows the usual 15-minute rule. Linked identities keep working after an email
+change. Security events are logged with the user id only (`password_changed`,
+`email_change_requested`, `email_changed`, `provider_linked`, `provider_unlinked`, `reauth_failed`);
+passwords, codes, tokens and addresses are never logged.
 
 ## Age and face-photo consent
 
