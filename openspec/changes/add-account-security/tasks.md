@@ -26,7 +26,7 @@ Work on branch `feat/add-account-security`. Do not push to `main`. Server tasks 
 
 ## 4. Integration and hand-off
 
-- [ ] 4.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `app.db` md5 and `inputs` count are unchanged, and that `openspec validate add-account-security --strict` passes.
+- [x] 4.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/`. Verify that everything passes with zero analyzer warnings, that the `app.db` md5 and `inputs` count are unchanged, and that `openspec validate add-account-security --strict` passes.
 - [ ] 4.2 **Manual. iOS simulator**, against a local log-mode server on a temporary storage root, with two simulators signed in to the same account:
   - Change the password on one: the other is signed out, and the log shows the notification.
   - Change the email: the code is in the log for the new address; confirm it; the other device is signed out, the old-address notification is in the log, and sign-in works with the new email.
