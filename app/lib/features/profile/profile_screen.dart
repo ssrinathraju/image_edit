@@ -34,10 +34,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final email = ref.watch(sessionProvider).valueOrNull?.email ?? '';
     final links = ref.watch(profileLinksProvider);
     final version = ref.watch(appVersionProvider).valueOrNull;
     final account = ref.watch(accountProvider).valueOrNull;
+    // The account is fresher than the session after an email change.
+    final email = account?.email ?? ref.watch(sessionProvider).valueOrNull?.email ?? '';
 
     return Scaffold(
       appBar: AppBar(

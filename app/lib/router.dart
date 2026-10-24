@@ -26,7 +26,10 @@ import 'features/onboarding/onboarding_store.dart';
 import 'features/plans/account_notifier.dart';
 import 'features/plans/invite_screen.dart';
 import 'features/plans/upgrade_screen.dart';
+import 'features/profile/change_email_screen.dart';
 import 'features/profile/change_password_screen.dart';
+import 'features/profile/confirm_email_change_screen.dart';
+import 'features/profile/email_change_draft.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/template_detail/template_screen.dart';
 import 'schemas/template.dart';
@@ -152,6 +155,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile/password',
         builder: (_, _) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/profile/email',
+        builder: (_, _) => const ChangeEmailScreen(),
+      ),
+      GoRoute(
+        path: '/profile/email/confirm',
+        redirect: (_, _) =>
+            ref.read(emailChangeDraftProvider) == null ? '/profile/email' : null,
+        builder: (_, _) => const ConfirmEmailChangeScreen(),
       ),
       GoRoute(path: '/upgrade', builder: (_, _) => const UpgradeScreen()),
       GoRoute(path: '/invite', builder: (_, _) => const InviteScreen()),

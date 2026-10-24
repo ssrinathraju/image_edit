@@ -312,6 +312,7 @@ TemplateSummary fakeTemplate(String id, {String? title, List<String> tags = cons
 
 /// A `/me` payload with usage and referral details, as the new server sends.
 UserProfile fakeProfile({
+  String email = 'ana@example.com',
   Plan plan = Plan.free,
   int dailyLimit = 3,
   int usedToday = 0,
@@ -328,7 +329,7 @@ UserProfile fakeProfile({
 }) =>
     UserProfile(
       id: 'user-1',
-      email: 'ana@example.com',
+      email: email,
       providers: providers,
       hasPassword: hasPassword,
       ageConfirmed: ageConfirmed,
