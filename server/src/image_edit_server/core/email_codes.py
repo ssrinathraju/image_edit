@@ -12,6 +12,7 @@ CODE_DIGITS = 6
 class CodePurpose(str, Enum):
     REGISTRATION = "registration"
     PASSWORD_RESET = "password_reset"
+    EMAIL_CHANGE = "email_change"
 
 
 class ConsumeResult(str, Enum):

@@ -173,7 +173,7 @@ def test_fresh_database_has_the_email_keyed_code_schema(tmp_path):
     assert _columns(path, "pending_registrations") == {
         "email", "password_hash", "referral_code", "created_at"
     }
-    assert _user_version(path) == 6
+    assert _user_version(path) == 7
     assert _verified_flags(SqliteUserStore(path)) == {}
     created = store.create_user("ana@example.com", "hash")
     assert _verified_flags(store) == {created.id: 1}
@@ -187,7 +187,7 @@ def test_upgrading_a_v2_database_verifies_users_and_keeps_everything_else(v2_db)
     assert _verified_flags(store) == {"u0": 1, "u1": 1}
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_user_by_session("v2-token").id == "u0"
-    assert _user_version(v2_db) == 6
+    assert _user_version(v2_db) == 7
 
 
 def test_running_the_migration_twice_changes_nothing_for_new_accounts(v2_db):
@@ -271,7 +271,7 @@ def test_fresh_database_has_the_identity_schema(tmp_path):
     assert _columns(path, "identities") >= {
         "provider", "subject", "user_id", "email", "apple_refresh_token", "created_at"
     }
-    assert _user_version(path) == 6
+    assert _user_version(path) == 7
 
 
 def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
@@ -287,7 +287,7 @@ def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
     assert vias == [("password",)]
     assert (a.has_password, b.has_password) == (True, True)
     assert store.list_providers("u0") == []
-    assert _user_version(v3_db) == 6
+    assert _user_version(v3_db) == 7
 
 
 def test_upgrading_a_v3_database_verifies_an_unverified_account_and_it_can_log_in(v3_db):
@@ -384,7 +384,7 @@ def test_upgrading_a_v4_database_leaves_age_and_consent_empty_and_keeps_the_rest
     assert (a.bonus_credits, a.referral_rewards, b.bonus_credits) == (5, 1, 5)
     assert store.get_password_hash("u0") == "h0"
     assert store.get_user_by_session("v3-token").id == "u0"
-    assert _user_version(v4_db) == 6
+    assert _user_version(v4_db) == 7
 
 
 def test_running_the_v5_migration_twice_changes_nothing(v4_db):
@@ -449,7 +449,7 @@ def test_upgrading_a_v5_database_adds_empty_safety_tables_and_keeps_accounts(v5_
     store = SqliteUserStore(v5_db)
 
     assert SAFETY_TABLES <= _tables(v5_db)
-    assert _user_version(v5_db) == 6
+    assert _user_version(v5_db) == 7
     assert store.list_open_reports() == []
     assert store.get_by_id("u0").bonus_credits == 5
 

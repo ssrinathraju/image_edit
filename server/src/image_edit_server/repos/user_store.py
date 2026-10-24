@@ -1,5 +1,4 @@
 from __future__ import annotations
-import hashlib
 import secrets
 import sqlite3
 import threading
@@ -24,11 +23,12 @@ from image_edit_server.repos.user_store_identities import (
 )
 from image_edit_server.repos.user_store_referrals import ReferralsMixin
 from image_edit_server.repos.user_store_safety import _SAFETY_SCHEMA, SafetyMixin
+from image_edit_server.repos.user_store_security import SecurityMixin, hash_token
 from image_edit_server.repos.user_store_usage import _USAGE_SCHEMA, UsageMixin
 from image_edit_server.schemas.user import User
 
 SESSION_TOKEN_BYTES = 32
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 CODE_ATTEMPTS = 5
 
 _SCHEMA = """
@@ -75,10 +75,6 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
 def _to_user(row: tuple) -> User:
     return User(
         id=row[0],
@@ -101,7 +97,13 @@ def auth_db_path(settings: Settings) -> str:
 
 
 class SqliteUserStore(
-    CodesMixin, IdentitiesMixin, ReferralsMixin, UsageMixin, ConsentMixin, SafetyMixin
+    CodesMixin,
+    IdentitiesMixin,
+    ReferralsMixin,
+    UsageMixin,
+    ConsentMixin,
+    SafetyMixin,
+    SecurityMixin,
 ):
     def __init__(
         self, path: str = ":memory:", clock: Callable[[], datetime] = _utc_now
@@ -265,6 +267,7 @@ class SqliteUserStore(
             if row:
                 self._conn.execute("DELETE FROM email_codes WHERE email = ?", (row[0],))
                 self._conn.execute("DELETE FROM email_sends WHERE email = ?", (row[0],))
+                self._discard_pending_email_change(user_id)
             self._conn.execute(
                 "UPDATE users SET referred_by = NULL WHERE referred_by = ?", (user_id,)
             )
@@ -293,7 +296,7 @@ class SqliteUserStore(
             self._conn.execute(
                 "INSERT INTO sessions (token_hash, user_id, created_at, expires_at)"
                 " VALUES (?, ?, ?, ?)",
-                (_hash_token(token), user_id, now.isoformat(), (now + ttl).isoformat()),
+                (hash_token(token), user_id, now.isoformat(), (now + ttl).isoformat()),
             )
         return token
 
@@ -303,7 +306,7 @@ class SqliteUserStore(
                 f"SELECT {_USER_COLUMNS}, s.expires_at"
                 " FROM sessions s JOIN users u ON u.id = s.user_id"
                 " WHERE s.token_hash = ?",
-                (_hash_token(token),),
+                (hash_token(token),),
             ).fetchone()
         if row is None:
             return None
@@ -314,7 +317,7 @@ class SqliteUserStore(
     def delete_session(self, token: str) -> None:
         with self._lock, self._conn:
             self._conn.execute(
-                "DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),)
+                "DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),)
             )
 
     def _load_user(self, user_id: str) -> User:

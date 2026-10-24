@@ -74,3 +74,26 @@ def test_a_raising_sender_is_logged_without_the_code_and_does_not_raise(caplog):
 
     assert "ConnectionRefusedError" in caplog.text
     assert "123456" not in caplog.text
+
+
+def test_the_password_changed_notice_has_no_code_and_says_to_reset():
+    subject, body = email_code_service.compose_password_changed()
+
+    assert subject and "reset your password" in body
+    assert not any(part.isdigit() and len(part) >= 6 for part in body.split())
+
+
+def test_the_email_changed_notice_names_the_new_address_and_says_to_reset():
+    subject, body = email_code_service.compose_email_changed("new@example.com")
+
+    assert subject and "new@example.com" in body and "reset your password" in body
+
+
+def test_a_failing_notice_is_logged_without_the_address_and_does_not_raise(caplog):
+    with caplog.at_level(logging.ERROR):
+        email_code_service.deliver_notice(
+            FailingSender(), "ana@example.com", email_code_service.compose_password_changed()
+        )
+
+    assert "ConnectionRefusedError" in caplog.text
+    assert "ana@example.com" not in caplog.text
