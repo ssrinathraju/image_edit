@@ -44,6 +44,19 @@ void main() {
     expect(isTooManyRequests(StateError('boom')), isFalse);
   });
 
+  test('each account-security error code is recognised', () {
+    Object coded(String code) => _error({
+          'detail': {'error': code, 'detail': 'x'},
+        }, status: 409);
+
+    expect(isReauthFailed(coded('reauth_failed')), isTrue);
+    expect(isTooManyAttempts(coded('too_many_attempts')), isTrue);
+    expect(isProviderInUse(coded('provider_in_use')), isTrue);
+    expect(isLastSignInMethod(coded('last_sign_in_method')), isTrue);
+    expect(isProviderInUse(coded('provider_already_linked')), isFalse);
+    expect(isReauthFailed(StateError('boom')), isFalse);
+  });
+
   test('Retry-After is read in seconds and ignored when missing or invalid', () {
     DioException withHeader(String? value) => DioException(
           requestOptions: RequestOptions(path: '/x'),

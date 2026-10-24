@@ -19,7 +19,7 @@ Work on branch `feat/add-account-security`. Do not push to `main`. Server tasks 
 
 ## 3. App
 
-- [ ] 3.1 API client methods, the error codes, and `Reauth` (Decision 7). Verify with `test/core/api_client_test.dart` and `test/core/api_errors_test.dart`.
+- [x] 3.1 API client methods, the error codes, and `Reauth` (Decision 7). Verify with `test/core/api_client_test.dart` and `test/core/api_errors_test.dart`.
 - [ ] 3.2 The security section, the re-authentication helper, and the Change or Set password screen. Verify with widget tests for both row variants, re-auth by password and by provider (and a cancelled sheet), `reauth_failed` keeping values, and the success SnackBar.
 - [ ] 3.3 The Change email screen and its code step. Verify with widget tests for `email_taken`, `invalid_code`, `code_expired`, the Resend countdown, and success updating the profile email with the SnackBar.
 - [ ] 3.4 Link and unlink rows. Verify with widget tests for linking (success and `provider_in_use`), unlinking (confirm then re-auth then success), `last_sign_in_method`, cancel, and the Apple row hidden on Android.

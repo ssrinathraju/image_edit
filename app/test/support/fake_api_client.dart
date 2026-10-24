@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:image_edit/core/api_client.dart';
+import 'package:image_edit/core/reauth.dart';
 import 'package:image_edit/features/common/generation_request.dart';
 import 'package:image_edit/schemas/job.dart';
 import 'package:image_edit/schemas/account.dart';
@@ -53,6 +54,25 @@ class FakeApiClient implements GenerationApiClient {
   Future<Session> Function(String email, String code, String newPassword)
       onConfirmPasswordReset = (email, _, _) async =>
           Session(token: 'token-reset', userId: 'user-1', email: email);
+
+  Future<void> Function(String newPassword, Reauth reauth) onChangePassword =
+      (_, _) async {};
+  Future<void> Function(String newEmail, Reauth reauth) onRequestEmailChange =
+      (_, _) async {};
+  Future<String> Function(String code) onConfirmEmailChange =
+      (_) async => 'new@example.com';
+  Future<void> Function(String idToken) onLinkGoogle = (_) async {};
+  Future<void> Function(String identityToken, String nonce, String code)
+      onLinkApple = (_, _, _) async {};
+  Future<void> Function(String provider, Reauth reauth) onUnlinkProvider =
+      (_, _) async {};
+
+  final changedPasswords = <({String newPassword, Reauth reauth})>[];
+  final emailChangeRequests = <({String newEmail, Reauth reauth})>[];
+  final confirmedEmailCodes = <String>[];
+  final linkedGoogleTokens = <String>[];
+  final linkedApple = <List<String>>[];
+  final unlinked = <({String provider, Reauth reauth})>[];
 
   Future<void> Function(DateTime dateOfBirth) onConfirmAge = (_) async {};
   Future<void> Function(String version) onAcceptConsent = (_) async {};
@@ -214,6 +234,55 @@ class FakeApiClient implements GenerationApiClient {
       (jobId: jobId, category: category, note: note, imageBytes: imageBytes),
     );
     return onSubmitReport();
+  }
+
+  @override
+  Future<void> changePassword({
+    required String newPassword,
+    required Reauth reauth,
+  }) {
+    changedPasswords.add((newPassword: newPassword, reauth: reauth));
+    return onChangePassword(newPassword, reauth);
+  }
+
+  @override
+  Future<void> requestEmailChange({
+    required String newEmail,
+    required Reauth reauth,
+  }) {
+    emailChangeRequests.add((newEmail: newEmail, reauth: reauth));
+    return onRequestEmailChange(newEmail, reauth);
+  }
+
+  @override
+  Future<String> confirmEmailChange({required String code}) {
+    confirmedEmailCodes.add(code);
+    return onConfirmEmailChange(code);
+  }
+
+  @override
+  Future<void> linkGoogle({required String idToken}) {
+    linkedGoogleTokens.add(idToken);
+    return onLinkGoogle(idToken);
+  }
+
+  @override
+  Future<void> linkApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+  }) {
+    linkedApple.add([identityToken, nonce, authorizationCode]);
+    return onLinkApple(identityToken, nonce, authorizationCode);
+  }
+
+  @override
+  Future<void> unlinkProvider({
+    required String provider,
+    required Reauth reauth,
+  }) {
+    unlinked.add((provider: provider, reauth: reauth));
+    return onUnlinkProvider(provider, reauth);
   }
 
   @override
