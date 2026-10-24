@@ -11,6 +11,7 @@ import '../common/error_message.dart';
 import 'delete_account_flow.dart';
 import '../plans/account_notifier.dart';
 import 'profile_providers.dart';
+import 'security_section.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -52,6 +53,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (account != null) _ProviderLines(providers: account.providers),
           if (account?.usage != null) _PlanCard(account: account!),
           const Divider(),
+          const SecuritySection(),
           if (account?.consent != null) _ConsentRow(consent: account!.consent!),
           ListTile(
             leading: const Icon(Icons.card_giftcard),

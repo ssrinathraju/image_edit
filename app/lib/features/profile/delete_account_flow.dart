@@ -6,6 +6,7 @@ import '../../core/provider_sign_in.dart';
 import '../../schemas/session.dart';
 import '../auth/session_notifier.dart';
 import '../common/error_message.dart';
+import 'reauth.dart';
 
 /// Confirms with the user, then deletes the account: with the password, or for an
 /// account without one by signing in with a provider again. [onBusyChanged]
@@ -18,7 +19,7 @@ Future<void> runDeleteAccountFlow(
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final provider = account != null && !account.hasPassword
-      ? _providerToConfirmWith(ref, account)
+      ? providerToConfirmWith(ref.read(targetPlatformProvider), account)
       : null;
   final confirmation = await showDialog<String>(
     context: context,
@@ -43,13 +44,6 @@ Future<void> runDeleteAccountFlow(
   } finally {
     onBusyChanged(false);
   }
-}
-
-/// Apple when the account is linked to it and this is an iPhone, otherwise Google.
-SignInProvider _providerToConfirmWith(WidgetRef ref, UserProfile account) {
-  final isIos = ref.read(targetPlatformProvider) == TargetPlatform.iOS;
-  final hasApple = account.providers.contains(SignInProvider.apple.apiName);
-  return hasApple && isIos ? SignInProvider.apple : SignInProvider.google;
 }
 
 String _deleteErrorMessage(Object error, SignInProvider? provider) {
