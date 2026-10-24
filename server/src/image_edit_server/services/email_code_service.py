@@ -93,8 +93,8 @@ def deliver(
 def compose_password_changed() -> tuple[str, str]:
     return (
         "Your image_edit password was changed",
-        "The password for your image_edit account was just changed, and your other devices "
-        "were signed out. If this wasn't you, reset your password now.",
+        "Your image_edit password was changed, and your other devices were signed out. "
+        "If this wasn't you, reset your password now.",
     )
 
 

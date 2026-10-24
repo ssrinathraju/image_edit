@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from image_edit_server.api.auth import router as auth_router
 from image_edit_server.api.deps import (
+    get_account_security_service,
     get_auth_service,
     get_quota_service,
     get_referral_service,
@@ -16,6 +17,7 @@ from image_edit_server.api.deps import (
 )
 from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router
+from image_edit_server.api.me_security import router as me_security_router
 from image_edit_server.api.reports import get_report_service, router as reports_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
@@ -24,6 +26,7 @@ from image_edit_server.core.safety import TermMatcher
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.template_catalog import TemplateCatalog, load_catalog
 from image_edit_server.repos.user_store import SqliteUserStore
+from image_edit_server.services.account_security_service import AccountSecurityService
 from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
@@ -143,6 +146,7 @@ def app(
         verifiers=verifiers,
         apple_client=apple_client,
     )
+    security_service = AccountSecurityService(user_store, auth_service, settings, sender, clock)
     app = FastAPI()
     install_validation_error_handler(app)
     quota_service = QuotaService(user_store, settings)
@@ -150,11 +154,13 @@ def app(
     app.include_router(templates_router)
     app.include_router(reports_router)
     app.include_router(auth_router)
+    app.include_router(me_security_router)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_account_security_service] = lambda: security_service
     app.dependency_overrides[get_quota_service] = lambda: quota_service
     app.dependency_overrides[get_report_service] = lambda: ReportService(settings, user_store, store, clock)
     app.dependency_overrides[get_safety_service] = lambda: safety_service
