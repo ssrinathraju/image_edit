@@ -146,8 +146,8 @@ class MeResponse(BaseModel):
     consent: ConsentState
 
 
-class DeleteAccountRequest(BaseModel):
-    """Confirms deletion with either the password or a fresh provider sign-in token."""
+class Reauth(BaseModel):
+    """Proves the caller is the account owner: the password, or a fresh provider sign-in token."""
 
     password: Optional[str] = Field(default=None, max_length=MAX_PASSWORD_CHARS)
     provider: Optional[Literal["google", "apple"]] = None
@@ -155,10 +155,46 @@ class DeleteAccountRequest(BaseModel):
     nonce: Optional[str] = Field(default=None, max_length=MAX_NONCE_CHARS)
 
     @model_validator(mode="after")
-    def _require_exactly_one_form(self) -> "DeleteAccountRequest":
+    def _require_exactly_one_form(self) -> "Reauth":
         provider_form = self.provider is not None or self.token is not None
         if self.password is not None and provider_form:
             raise ValueError("send either password or provider with token, not both")
         if self.password is None and not (self.provider and self.token):
             raise ValueError("send either password, or provider together with token")
         return self
+
+
+class DeleteAccountRequest(Reauth):
+    """Confirms deletion; the same two forms as any re-authentication."""
+
+
+class PasswordChangeRequest(BaseModel):
+    new_password: str = Field(max_length=MAX_NEW_PASSWORD_TRANSPORT_CHARS)
+    reauth: Reauth
+
+
+class EmailChangeRequest(BaseModel):
+    new_email: str = Field(max_length=MAX_EMAIL_CHARS)
+    reauth: Reauth
+
+
+class EmailChangeConfirm(BaseModel):
+    code: str = Field(max_length=MAX_CODE_CHARS)
+
+
+class EmailChangedResponse(BaseModel):
+    email: str
+
+
+class LinkGoogleRequest(BaseModel):
+    id_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+
+
+class LinkAppleRequest(BaseModel):
+    identity_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+    nonce: str = Field(max_length=MAX_NONCE_CHARS)
+    authorization_code: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+
+
+class UnlinkRequest(BaseModel):
+    reauth: Reauth

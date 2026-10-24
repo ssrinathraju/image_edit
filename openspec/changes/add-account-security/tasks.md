@@ -4,7 +4,7 @@ Work on branch `feat/add-account-security`. Do not push to `main`. Server tasks 
 
 ## 1. Server: re-authentication and storage
 
-- [ ] 1.1 Extract `AuthService.reauthenticate` (Decision 1) and move `delete_account` onto it, keeping its error codes. Verify that the existing `tests/api/test_delete_account.py` passes **unchanged**, and that new `tests/services/test_reauth.py` covers: a password ok and wrong (counting toward the throttle), the throttle at 5, a fresh provider token ok, a stale one, another account's identity, and a provider-only account sending a password.
+- [x] 1.1 Extract `AuthService.reauthenticate` (Decision 1) and move `delete_account` onto it, keeping its error codes. Verify that the existing `tests/api/test_delete_account.py` passes **unchanged**, and that new `tests/services/test_reauth.py` covers: a password ok and wrong (counting toward the throttle), the throttle at 5, a fresh provider token ok, a stale one, another account's identity, and a provider-only account sending a password.
 - [ ] 1.2 Add the `EMAIL_CHANGE` code purpose, the `pending_email_changes` table (schema version 7), and the store methods: upsert and read pending, confirm email change (consume, email-taken check, update, delete other sessions), set the password while deleting other sessions, `link_identity`, and unlink with the last-method check. Verify:
   - repository tests cover each method, including the UNIQUE race giving taken, the last-method refusal, the current session being kept, and the cascade on account deletion;
   - the v6 to v7 migration and a re-run;
