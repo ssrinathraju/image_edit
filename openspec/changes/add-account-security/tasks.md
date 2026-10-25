@@ -34,7 +34,7 @@ Work on branch `feat/add-account-security`. Do not push to `main`. Server tasks 
 
   This box stays unticked until someone runs it.
 - [ ] 4.3 **Manual, needs the consoles.** Link and unlink Google on a password account; set a password on a Google-only account, then unlink Google; the last-method refusal on an Apple-only account; Apple unlink removing the app from Apple ID settings. This box stays unticked until someone runs it.
-- [ ] 4.4 (After group 5.) Push `feat/add-account-security`. Verify with `git log origin/feat/add-account-security -1` that it matches the local HEAD.
+- [x] 4.4 (After group 5.) Push `feat/add-account-security`. Verify with `git log origin/feat/add-account-security -1` that it matches the local HEAD.
 
 ## 5. Fixes from the round-1 review (B1, S1, S2)
 
