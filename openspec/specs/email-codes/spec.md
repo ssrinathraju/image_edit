@@ -7,7 +7,7 @@ One-time codes sent by email that prove a user controls their address. Used to v
 
 ### Requirement: Issue one-time codes per email address and purpose
 
-The system SHALL issue codes of exactly 6 decimal digits, chosen at random, each for one email address and one purpose: registration or password reset. Issuing a code SHALL invalidate any earlier code of the same email address and purpose. A code SHALL be accepted at most once.
+The system SHALL issue codes of exactly 6 decimal digits, chosen at random, each for one email address and one purpose: registration, password reset, or email change. Issuing a code SHALL invalidate any earlier code of the same email address and purpose. A code SHALL be accepted at most once.
 
 #### Scenario: A new code replaces the old one
 
@@ -24,6 +24,11 @@ The system SHALL issue codes of exactly 6 decimal digits, chosen at random, each
 
 - **WHEN** a code has been accepted once
 - **THEN** submitting the same code again is rejected
+
+#### Scenario: Email-change codes are separate
+
+- **WHEN** an address holds a registration code and an email-change code
+- **THEN** the email-change code is accepted only to confirm an email change
 
 ### Requirement: Expire codes
 
@@ -56,7 +61,7 @@ After 5 (configurable) wrong submissions against an email address's code for a p
 
 ### Requirement: Limit how often codes are emailed
 
-The system SHALL NOT email a code to an email address within 60 seconds (configurable) of the previous code email to that address, and SHALL NOT send more than 5 (configurable) code emails to one address in any 60-minute window, counting both purposes together. When a limit applies, no new code SHALL be issued and the existing code SHALL stay valid.
+The system SHALL NOT email a code to an email address within 60 seconds (configurable) of the previous code email to that address, and SHALL NOT send more than 5 (configurable) code emails to one address in any 60-minute window, counting all purposes together. When a limit applies, no new code SHALL be issued and the existing code SHALL stay valid.
 
 #### Scenario: A second email within a minute is not sent
 
@@ -74,6 +79,12 @@ The system SHALL NOT email a code to an email address within 60 seconds (configu
 
 - **WHEN** 61 minutes have passed since the oldest of 5 code emails to an address
 - **THEN** a new code can be emailed to that address
+
+#### Scenario: Email-change codes count toward the cap
+
+- **WHEN** an address has been sent 4 registration emails and 1 email-change email in the last hour, each more than 60 seconds apart
+- **AND** another code of any purpose is requested for it
+- **THEN** no email is sent
 
 ### Requirement: Deliver codes by email
 

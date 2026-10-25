@@ -85,7 +85,7 @@ Every failure raises 403 `reauth_failed`. Deletion keeps its existing error code
 - `password_changed(to)`: "Your password was changed. If this wasn't you, reset your password now."
 - `email_changed(to_old, new_email)`: "Your account email was changed to <new>. If this wasn't you, contact us right away at <SUPPORT_EMAIL>."
   - **No reset advice.** After the change, a reset to the old address finds no account, and a reset to the new one reaches the attacker. So the notice points to support only. This was changed after the round-1 review (S1).
-  - **New setting `SUPPORT_EMAIL`** (default `""`). The server refuses to start when `SMTP_HOST` is set and `SUPPORT_EMAIL` is empty. In log mode an empty value is allowed, and the notice then says "contact support".
+  - **New setting `SUPPORT_EMAIL`** (default `""`). The server refuses to start when `SMTP_HOST` is set and `SUPPORT_EMAIL` is empty. In log mode an empty value is allowed, and the notice then says "contact support right away".
 
 Neither message contains a code or a token. Both are logged as events without the addresses.
 
