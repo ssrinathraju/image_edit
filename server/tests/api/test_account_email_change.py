@@ -121,8 +121,17 @@ def test_the_old_address_is_told_with_the_new_address_and_no_code(client, sender
     to, _, body = sender.sent[-1]
     assert to == ANA
     assert NEW in body and "reset" not in body.lower()
-    assert "contact us right away" in body
+    assert "right away" in body
     assert not any(part.strip(".,").isdigit() and len(part) >= 6 for part in body.split())
+
+
+def test_the_notice_names_the_configured_support_address(client, sender, settings):
+    settings.SUPPORT_EMAIL = "help@example.com"
+    _request(client)
+
+    _confirm(client, sender.last_code(NEW))
+
+    assert "contact us right away at help@example.com" in sender.sent[-1][2]
 
 
 def test_a_wrong_code_is_400_invalid_code_and_the_email_is_unchanged(client, sender):

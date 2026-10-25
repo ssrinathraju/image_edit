@@ -196,6 +196,21 @@ def test_a_stolen_session_cannot_link_the_attackers_google_to_take_over(
     assert _providers(client) == []
 
 
+def test_provider_form_refusals_on_a_password_account_record_no_lockout_failure(
+    client, google_verifier, clock, settings
+):
+    google_verifier.add("attacker", "g-evil", email="evil@gmail.com", issued_at=clock.now)
+    stolen = {"provider": "google", "token": "attacker"}
+
+    for _ in range(settings.LOGIN_MAX_FAILURES + 1):
+        assert _link_google(client, "attacker", reauth=stolen).status_code == 403
+
+    login = client.post(
+        "/auth/login", json={"email": "ana@example.com", "password": DEFAULT_PASSWORD}
+    )
+    assert login.status_code == 200
+
+
 def test_a_password_account_cannot_reauthenticate_with_its_linked_google(
     client, google_verifier, clock
 ):

@@ -94,7 +94,7 @@ def test_the_email_changed_notice_names_the_new_address_and_points_to_support():
 def test_the_email_changed_notice_without_a_support_address_says_contact_support():
     _, body = email_code_service.compose_email_changed("new@example.com", "")
 
-    assert "contact us right away at support" in body
+    assert "contact support right away" in body
 
 
 def test_a_failing_notice_is_logged_without_the_address_and_does_not_raise(caplog):
