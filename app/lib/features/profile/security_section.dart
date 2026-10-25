@@ -7,7 +7,6 @@ import '../../core/provider_sign_in.dart';
 import '../../core/reauth.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
-import '../common/error_message.dart';
 import '../plans/account_notifier.dart';
 import 'reauth.dart';
 
@@ -35,7 +34,9 @@ class SecuritySection extends ConsumerWidget {
         ),
         ListTile(
           leading: const Icon(Icons.password),
-          title: Text(account.hasPassword ? 'Change password' : 'Set a password'),
+          title: Text(
+            account.hasPassword ? 'Change password' : 'Set a password',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => context.push('/profile/password'),
         ),
@@ -82,23 +83,30 @@ class _ProviderRowState extends ConsumerState<_ProviderRow> {
     final api = ref.read(apiClientProvider);
     final accounts = ref.read(accountProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _busy = true);
+    Reauth? reauth;
     try {
+      // Prove it is the owner first; the new provider's sheet comes after.
+      reauth = await requestReauth(context, ref, widget.account);
+      if (reauth == null || !mounted) return;
+      setState(() => _busy = true);
       final credential = await ref.read(signInProviderFor(_provider)).signIn();
       if (credential == null) return;
       switch (_provider) {
         case SignInProvider.google:
-          await api.linkGoogle(idToken: credential.token);
+          await api.linkGoogle(idToken: credential.token, reauth: reauth);
         case SignInProvider.apple:
           await api.linkApple(
             identityToken: credential.token,
             nonce: credential.nonce!,
             authorizationCode: credential.authorizationCode ?? '',
+            reauth: reauth,
           );
       }
       await accounts.refresh();
     } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(_linkMessage(error))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_linkMessage(error, reauth))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -121,13 +129,15 @@ class _ProviderRowState extends ConsumerState<_ProviderRow> {
       await api.unlinkProvider(provider: _provider.apiName, reauth: reauth);
       await accounts.refresh();
     } catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(_unlinkMessage(error, reauth))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_unlinkMessage(error, reauth))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  String _linkMessage(Object error) {
+  String _linkMessage(Object error, Reauth? reauth) {
     final label = _provider.label;
     if (isProviderInUse(error)) {
       return 'That $label account is already linked to a different user.';
@@ -136,7 +146,7 @@ class _ProviderRowState extends ConsumerState<_ProviderRow> {
       return 'This account already has a $label account linked.';
     }
     if (isInvalidProviderToken(error)) return "Couldn't confirm with $label";
-    return describeError(error);
+    return describeSecurityError(error, reauth);
   }
 
   String _unlinkMessage(Object error, Reauth? reauth) {

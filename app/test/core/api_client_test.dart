@@ -531,21 +531,29 @@ void main() {
       final adapter = _FakeAdapter(<String, dynamic>{});
       final client = _client(adapter);
 
-      await client.linkGoogle(idToken: 'g-token');
+      await client.linkGoogle(
+        idToken: 'g-token',
+        reauth: const Reauth.password('pw'),
+      );
       expect(adapter.last!.method, 'POST');
       expect(adapter.last!.path, '/me/providers/google');
-      expect(adapter.last!.data, {'id_token': 'g-token'});
+      expect(adapter.last!.data, {
+        'id_token': 'g-token',
+        'reauth': {'password': 'pw'},
+      });
 
       await client.linkApple(
         identityToken: 'a-token',
         nonce: 'raw',
         authorizationCode: 'code',
+        reauth: const Reauth.password('pw'),
       );
       expect(adapter.last!.path, '/me/providers/apple');
       expect(adapter.last!.data, {
         'identity_token': 'a-token',
         'nonce': 'raw',
         'authorization_code': 'code',
+        'reauth': {'password': 'pw'},
       });
     });
 
@@ -572,15 +580,44 @@ void main() {
       );
 
       await expectLater(
-        client.linkGoogle(idToken: 'bad'),
+        client.linkGoogle(idToken: 'bad', reauth: const Reauth.password('pw')),
         throwsA(isA<DioException>()),
       );
       await expectLater(
-        client.linkApple(identityToken: 'bad', nonce: 'n', authorizationCode: 'c'),
+        client.linkApple(
+          identityToken: 'bad',
+          nonce: 'n',
+          authorizationCode: 'c',
+          reauth: const Reauth.password('pw'),
+        ),
         throwsA(isA<DioException>()),
       );
 
       expect(fired, 0);
+    });
+
+    test('a 401 session expiry on a link call still signs the user out', () async {
+      var fired = 0;
+      final client = _client(
+        _FakeAdapter({'detail': {'error': 'unauthorized'}}, status: 401),
+        onUnauthorized: () => fired++,
+      );
+
+      await expectLater(
+        client.linkGoogle(idToken: 'g', reauth: const Reauth.password('pw')),
+        throwsA(isA<DioException>()),
+      );
+      await expectLater(
+        client.linkApple(
+          identityToken: 'a',
+          nonce: 'n',
+          authorizationCode: 'c',
+          reauth: const Reauth.password('pw'),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(fired, 2);
     });
 
     test('a 401 from changing the password still expires the session', () async {
