@@ -23,7 +23,15 @@ See `proposal.md` for the motivation and `specs/` for the behaviour. The current
 ## Decisions
 
 ### 1. A shared re-authentication helper
-`AuthService.reauthenticate(user, reauth: Reauth)`, where `Reauth` is `{password?: str, provider?: "google"|"apple", token?: str, nonce?: str}`. It's extracted from `delete_account`'s existing logic, and `delete_account` now calls it too, with its behaviour unchanged.
+`AuthService.reauthenticate(user, reauth: Reauth)`, where `Reauth` is `{password?: str, provider?: "google"|"apple", token?: str, nonce?: str}`. It's extracted from `delete_account`'s existing logic, and `delete_account` now calls it too.
+
+**After the round-1 review (account takeover, B1).** The first version accepted a provider token from any account, and linking needed no re-authentication. So a stolen session could link the attacker's own Google, then use it to change the password or email. The rules are now:
+- **The form is chosen by the account, not by the request.** An account with a password must give the password; a provider form from it is refused. An account without a password must use a provider.
+- **The provider must already be linked.** It's checked against the identities that existed **before** the request. A link request re-authenticates first, so the identity being linked can never vouch for itself.
+- **Linking requires re-authentication** like every other change.
+- **Account deletion gets the same rule:** a password account can no longer delete with a provider token. This modifies social-sign-in's "Confirm account deletion with a provider". Deletion keeps its own error codes (`invalid_password`, `invalid_provider_token`).
+
+- **Alternative rejected: ignoring identities linked during the current session.** It needs session-to-identity bookkeeping, and it still lets a stolen session add a provider for later use.
 - **A password:** checked against the throttle first (429 `too_many_attempts`), then verified. A failure records a throttle failure.
 - **No password:** the provider path, as for deletion.
 
@@ -60,10 +68,11 @@ Every failure raises 403 `reauth_failed`. Deletion keeps its existing error code
 
 ### 4. Linking and unlinking
 - **Linking:**
-  - The provider's token is verified exactly as at sign-in, and a new store method, `link_identity(user_id, identity)`, inserts the row.
+  - The request body carries the new provider's token plus a `reauth` (Decision 1). `reauthenticate` runs first, against the identities linked before the request, and nothing is linked if it fails.
+  - The new provider's token is then verified exactly as at sign-in, and a new store method, `link_identity(user_id, identity)`, inserts the row.
   - An existing `(provider, subject)` on another user gives `provider_in_use`. An existing row for `(user_id, provider)` gives `provider_already_linked`.
   - Apple linking does the code exchange and stores the refresh token, as at sign-in.
-  - No email check: possession of the provider token is the proof.
+  - No email check: re-authentication proves it's the account's owner, and the new token proves they own the provider identity.
 - **Unlinking:**
   1. Re-authenticate.
   2. In one transaction, check that another method remains (`password_hash != ''`, or another identity row). If none does, answer 409 `last_sign_in_method`.
@@ -74,7 +83,9 @@ Every failure raises 403 `reauth_failed`. Deletion keeps its existing error code
 ### 5. Notification emails
 `email_code_service` gains two plain-text messages, sent with the same `deliver` path (background, fail-safe):
 - `password_changed(to)`: "Your password was changed. If this wasn't you, reset your password now."
-- `email_changed(to_old, new_email)`: "Your account email was changed to <new>. If this wasn't you, reset your password using this address." The reset still works on the old address only until the change, so the message also says to contact support (`AppConfig.supportEmail` on the app side; plain text here).
+- `email_changed(to_old, new_email)`: "Your account email was changed to <new>. If this wasn't you, contact us right away at <SUPPORT_EMAIL>."
+  - **No reset advice.** After the change, a reset to the old address finds no account, and a reset to the new one reaches the attacker. So the notice points to support only. This was changed after the round-1 review (S1).
+  - **New setting `SUPPORT_EMAIL`** (default `""`). The server refuses to start when `SMTP_HOST` is set and `SUPPORT_EMAIL` is empty. In log mode an empty value is allowed, and the notice then says "contact support".
 
 Neither message contains a code or a token. Both are logged as events without the addresses.
 

@@ -6,7 +6,23 @@ Lets a signed-in user manage how they sign in: set or change their password, cha
 
 ### Requirement: Confirm identity before a sensitive change
 
-Every request in this capability SHALL carry a re-authentication. An account with a password SHALL give its current `password`. An account without a password SHALL give a `provider` and a fresh provider `token` (issued within the last 5 minutes) for an identity linked to it, checked as for account deletion. A wrong password or rejected token SHALL get HTTP 403 with error `reauth_failed`, and nothing SHALL change. Wrong passwords SHALL count toward the existing failed-login lockout for the account's email.
+Every request in this capability, including linking a provider, SHALL carry a re-authentication. The form depends on the account:
+- **An account with a password** SHALL give its current `password`, and SHALL NOT be accepted with a provider token.
+- **An account without a password** SHALL give a `provider` and a fresh provider `token` (issued within the last 5 minutes) for an identity that was already linked to it before the request, checked as for account deletion.
+
+An identity linked by the same request SHALL never count as re-authentication. A wrong password, a provider token from a password account, or a rejected token SHALL get HTTP 403 with error `reauth_failed`, and nothing SHALL change. Wrong passwords SHALL count toward the existing failed-login lockout for the account's email.
+
+#### Scenario: Password account cannot re-authenticate with a provider
+
+- **WHEN** an account with a password and a linked Google identity asks to change its password, giving a fresh Google token instead of its password
+- **THEN** the system responds with HTTP 403 and error `reauth_failed`
+- **AND** the password is unchanged
+
+#### Scenario: A stolen session cannot take over the account
+
+- **WHEN** a client holding only a password account's session links its own Google identity without the password
+- **THEN** the link is refused with HTTP 403 and error `reauth_failed`
+- **AND** the account's password and email cannot be changed with that Google identity
 
 #### Scenario: Wrong current password changes nothing
 
@@ -95,13 +111,28 @@ A wrong code SHALL get HTTP 400 `invalid_code`. An expired or missing code SHALL
 
 ### Requirement: Link a provider to the signed-in account
 
-The system SHALL expose `POST /me/providers/google`, with an `id_token`, and `POST /me/providers/apple`, with an `identity_token`, a `nonce` and an `authorization_code`. Each SHALL be checked as for sign-in and SHALL link that identity to the signed-in account, responding with HTTP 200. The provider's email does not need to match the account's email, and the account's email SHALL NOT change. An identity already linked to another account SHALL get HTTP 409 `provider_in_use`. An account that already has that provider SHALL get HTTP 409 `provider_already_linked`. An invalid token SHALL get HTTP 401 `invalid_provider_token`. The token itself proves ownership, so no further re-authentication is needed.
+The system SHALL expose `POST /me/providers/google`, with an `id_token`, and `POST /me/providers/apple`, with an `identity_token`, a `nonce` and an `authorization_code`. Each SHALL be checked as for sign-in and SHALL link that identity to the signed-in account, responding with HTTP 200. The provider's email does not need to match the account's email, and the account's email SHALL NOT change. An identity already linked to another account SHALL get HTTP 409 `provider_in_use`. An account that already has that provider SHALL get HTTP 409 `provider_already_linked`. An invalid token SHALL get HTTP 401 `invalid_provider_token`. Each request SHALL also carry a re-authentication, as described in "Confirm identity before a sensitive change": the current password, or a fresh token from a provider already linked to the account. It SHALL be checked before anything is linked. The new identity's own token SHALL NOT serve as re-authentication.
 
 #### Scenario: Link Google
 
-- **WHEN** a password account links a Google identity that is not linked anywhere
+- **WHEN** a password account links a Google identity that is not linked anywhere, giving its current password
 - **THEN** the system responds with HTTP 200 and `GET /me` lists `google`
 - **AND** signing in with that Google identity later reaches this account
+
+#### Scenario: Linking without re-authentication is refused
+
+- **WHEN** a password account links a Google identity without its password, or with a wrong one
+- **THEN** the system responds with HTTP 403 and error `reauth_failed` and nothing is linked
+
+#### Scenario: Provider-only account links with its existing provider
+
+- **WHEN** an account created through Google links Apple, giving a fresh token for its already-linked Google identity
+- **THEN** the system responds with HTTP 200 and `GET /me` lists both providers
+
+#### Scenario: The new identity cannot vouch for itself
+
+- **WHEN** an account created through Google tries to link Apple, giving only the new Apple identity's token as re-authentication
+- **THEN** the system responds with HTTP 403 and error `reauth_failed` and nothing is linked
 
 #### Scenario: Identity used by another account
 
@@ -130,9 +161,23 @@ The system SHALL expose `DELETE /me/providers/{provider}` with a re-authenticati
 
 ### Requirement: Keep security changes private
 
-The system SHALL NOT log passwords, codes, tokens or the new email address. Notification emails SHALL contain no code, password or token. They SHALL tell the reader to reset their password if they did not make the change.
+The system SHALL NOT log passwords, codes, tokens or the new email address. Notification emails SHALL contain no code, password or token, and SHALL say what to do if the reader did not make the change:
+- the password-changed notice SHALL tell the reader to reset their password;
+- the email-changed notice, sent to the old address, SHALL name the new address and tell the reader to contact support right away at the configured support address. It SHALL NOT suggest a password reset, which cannot reach the account after the email has changed.
 
-#### Scenario: Notification wording
+The support address SHALL be a server setting, and the server SHALL refuse to start when SMTP is configured and the support address is empty.
 
-- **WHEN** an email-change notification is sent to the old address
-- **THEN** it names the new address, contains no code, and tells the reader to reset their password if they did not make the change
+#### Scenario: Email-changed notice points to support
+
+- **WHEN** an email-change notification is sent to the old address with the support address set to `help@example.com`
+- **THEN** it names the new address, contains no code, tells the reader to contact `help@example.com` right away if they did not make the change, and does not mention resetting the password
+
+#### Scenario: Password-changed notice suggests a reset
+
+- **WHEN** a password-changed notification is sent
+- **THEN** it contains no code or password and tells the reader to reset their password if they did not make the change
+
+#### Scenario: SMTP without a support address
+
+- **WHEN** the server starts with SMTP configured and an empty support address
+- **THEN** it refuses to start with an error naming the support address setting

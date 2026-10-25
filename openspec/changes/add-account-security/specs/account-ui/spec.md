@@ -54,12 +54,17 @@ The Change email screen SHALL take the new email and the re-authentication. It S
 
 ### Requirement: Link and unlink providers in the app
 
-Link SHALL run the provider's sign-in sheet and link the result. Success SHALL show the row as Linked. `provider_in_use` SHALL say that account is already linked to a different user. Unlink SHALL ask for confirmation and re-authentication, and on success show the row as Not linked. `last_sign_in_method` SHALL say to set a password or link another provider first. Cancelling a sheet SHALL change nothing.
+Link SHALL first ask for re-authentication, as for other changes: the current password, or a sign-in with a provider already linked to the account. It SHALL then run the new provider's sign-in sheet and link the result. A refused re-authentication SHALL be explained, and nothing SHALL be linked. Success SHALL show the row as Linked. `provider_in_use` SHALL say that account is already linked to a different user. Unlink SHALL ask for confirmation and re-authentication, and on success show the row as Not linked. `last_sign_in_method` SHALL say to set a password or link another provider first. Cancelling a sheet SHALL change nothing.
 
 #### Scenario: Link Google
 
-- **WHEN** the user taps Link on Google and completes the sheet
+- **WHEN** the user taps Link on Google, enters their current password, and completes the Google sheet
 - **THEN** the Google row shows Linked
+
+#### Scenario: Link asks for re-authentication first
+
+- **WHEN** the user taps Link on Google
+- **THEN** the app asks for the current password (or a sign-in with an already-linked provider) before showing the Google sheet
 
 #### Scenario: Last sign-in method
 
