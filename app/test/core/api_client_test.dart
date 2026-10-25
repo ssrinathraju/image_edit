@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/core/api_client.dart';
+import 'package:image_edit/core/provider_sign_in.dart';
+import 'package:image_edit/core/reauth.dart';
 import 'package:image_edit/features/common/generation_request.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -453,6 +455,187 @@ void main() {
 
       expect(me.providers, ['google']);
       expect(me.hasPassword, isFalse);
+    });
+  });
+
+  group('account security calls', () {
+    const googleReauth = Reauth.provider(
+      ProviderCredential(provider: SignInProvider.google, token: 'fresh'),
+    );
+    const appleReauth = Reauth.provider(
+      ProviderCredential(
+        provider: SignInProvider.apple,
+        token: 'fresh-apple',
+        nonce: 'raw',
+        authorizationCode: 'code',
+      ),
+    );
+
+    test('changePassword posts the new password with the password reauth', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).changePassword(
+        newPassword: 'new password 1',
+        reauth: const Reauth.password('old password'),
+      );
+
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/password');
+      expect(adapter.last!.data, {
+        'new_password': 'new password 1',
+        'reauth': {'password': 'old password'},
+      });
+    });
+
+    test('a provider reauth sends the token, and the nonce only for Apple', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+      final client = _client(adapter);
+
+      await client.changePassword(newPassword: 'new password 1', reauth: googleReauth);
+      expect(adapter.last!.data['reauth'], {'provider': 'google', 'token': 'fresh'});
+
+      await client.changePassword(newPassword: 'new password 1', reauth: appleReauth);
+      expect(adapter.last!.data['reauth'], {
+        'provider': 'apple',
+        'token': 'fresh-apple',
+        'nonce': 'raw',
+      });
+    });
+
+    test('requestEmailChange posts the new email and reauth', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).requestEmailChange(
+        newEmail: 'new@example.com',
+        reauth: const Reauth.password('old password'),
+      );
+
+      expect(adapter.last!.path, '/me/email');
+      expect(adapter.last!.data, {
+        'new_email': 'new@example.com',
+        'reauth': {'password': 'old password'},
+      });
+    });
+
+    test('confirmEmailChange posts the code and returns the new email', () async {
+      final adapter = _FakeAdapter({'email': 'new@example.com'});
+
+      final email = await _client(adapter).confirmEmailChange(code: '123456');
+
+      expect(adapter.last!.path, '/me/email/confirm');
+      expect(adapter.last!.data, {'code': '123456'});
+      expect(email, 'new@example.com');
+    });
+
+    test('linkGoogle and linkApple post the provider token fields', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+      final client = _client(adapter);
+
+      await client.linkGoogle(
+        idToken: 'g-token',
+        reauth: const Reauth.password('pw'),
+      );
+      expect(adapter.last!.method, 'POST');
+      expect(adapter.last!.path, '/me/providers/google');
+      expect(adapter.last!.data, {
+        'id_token': 'g-token',
+        'reauth': {'password': 'pw'},
+      });
+
+      await client.linkApple(
+        identityToken: 'a-token',
+        nonce: 'raw',
+        authorizationCode: 'code',
+        reauth: const Reauth.password('pw'),
+      );
+      expect(adapter.last!.path, '/me/providers/apple');
+      expect(adapter.last!.data, {
+        'identity_token': 'a-token',
+        'nonce': 'raw',
+        'authorization_code': 'code',
+        'reauth': {'password': 'pw'},
+      });
+    });
+
+    test('unlinkProvider deletes with the reauth in the body', () async {
+      final adapter = _FakeAdapter(<String, dynamic>{});
+
+      await _client(adapter).unlinkProvider(
+        provider: 'google',
+        reauth: const Reauth.password('old password'),
+      );
+
+      expect(adapter.last!.method, 'DELETE');
+      expect(adapter.last!.path, '/me/providers/google');
+      expect(adapter.last!.data, {
+        'reauth': {'password': 'old password'},
+      });
+    });
+
+    test('a 401 from linking is a rejected token, not an expired session', () async {
+      var fired = 0;
+      final client = _client(
+        _FakeAdapter({'detail': {'error': 'invalid_provider_token'}}, status: 401),
+        onUnauthorized: () => fired++,
+      );
+
+      await expectLater(
+        client.linkGoogle(idToken: 'bad', reauth: const Reauth.password('pw')),
+        throwsA(isA<DioException>()),
+      );
+      await expectLater(
+        client.linkApple(
+          identityToken: 'bad',
+          nonce: 'n',
+          authorizationCode: 'c',
+          reauth: const Reauth.password('pw'),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(fired, 0);
+    });
+
+    test('a 401 session expiry on a link call still signs the user out', () async {
+      var fired = 0;
+      final client = _client(
+        _FakeAdapter({'detail': {'error': 'unauthorized'}}, status: 401),
+        onUnauthorized: () => fired++,
+      );
+
+      await expectLater(
+        client.linkGoogle(idToken: 'g', reauth: const Reauth.password('pw')),
+        throwsA(isA<DioException>()),
+      );
+      await expectLater(
+        client.linkApple(
+          identityToken: 'a',
+          nonce: 'n',
+          authorizationCode: 'c',
+          reauth: const Reauth.password('pw'),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(fired, 2);
+    });
+
+    test('a 401 from changing the password still expires the session', () async {
+      var fired = 0;
+      final client = _client(
+        _FakeAdapter({'detail': {'error': 'unauthorized'}}, status: 401),
+        onUnauthorized: () => fired++,
+      );
+
+      await expectLater(
+        client.changePassword(
+          newPassword: 'new password 1',
+          reauth: const Reauth.password('x'),
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(fired, 1);
     });
   });
 

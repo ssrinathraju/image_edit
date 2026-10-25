@@ -22,6 +22,7 @@ from image_edit_server.schemas.user import User
 
 SEND_WINDOW = timedelta(hours=1)
 PENDING_REGISTRATION_MAX_AGE = timedelta(hours=24)
+PENDING_EMAIL_CHANGE_MAX_AGE = timedelta(hours=24)
 
 # Codes are keyed by email address because a registration code exists before its
 # account does; deleting an account therefore removes its rows explicitly.
@@ -46,6 +47,11 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
     email TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
     referral_code TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pending_email_changes (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    new_email TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
 """
@@ -291,6 +297,10 @@ class CodesMixin:
         self._conn.execute(
             "DELETE FROM pending_registrations WHERE created_at <= ?",
             ((now - PENDING_REGISTRATION_MAX_AGE).isoformat(),),
+        )
+        self._conn.execute(
+            "DELETE FROM pending_email_changes WHERE created_at <= ?",
+            ((now - PENDING_EMAIL_CHANGE_MAX_AGE).isoformat(),),
         )
 
     def _create_confirmed_user(

@@ -48,7 +48,7 @@ def fake_smtplib(monkeypatch):
 
 def _sender(**overrides) -> SmtpSender:
     values = dict(
-        SMTP_HOST="smtp.example.com", SMTP_PORT=2525, SMTP_FROM="noreply@example.com"
+        SMTP_HOST="smtp.example.com", SMTP_PORT=2525, SMTP_FROM="noreply@example.com", SUPPORT_EMAIL="help@example.com"
     )
     return SmtpSender(Settings(**{**values, **overrides}))
 

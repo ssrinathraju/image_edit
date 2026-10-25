@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../configs/app_config.dart';
+import 'api_errors.dart';
 import 'date_of_birth.dart';
+import 'reauth.dart';
 import '../features/common/generation_request.dart';
 import '../schemas/job.dart';
 import '../schemas/session.dart';
@@ -64,6 +66,32 @@ abstract class GenerationApiClient {
     required Uint8List imageBytes,
   });
 
+  /// Sets or changes the password; the server signs out every other session.
+  Future<void> changePassword({
+    required String newPassword,
+    required Reauth reauth,
+  });
+
+  /// Asks for a code to be emailed to [newEmail]; the email changes only on confirm.
+  Future<void> requestEmailChange({
+    required String newEmail,
+    required Reauth reauth,
+  });
+
+  /// Returns the account's new email.
+  Future<String> confirmEmailChange({required String code});
+  Future<void> linkGoogle({required String idToken, required Reauth reauth});
+  Future<void> linkApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+    required Reauth reauth,
+  });
+  Future<void> unlinkProvider({
+    required String provider,
+    required Reauth reauth,
+  });
+
   Future<void> requestPasswordReset({required String email});
   Future<Session> confirmPasswordReset({
     required String email,
@@ -76,6 +104,8 @@ const String _loginPath = '/auth/login';
 const String _registerPath = '/auth/register';
 const String _googlePath = '/auth/oauth/google';
 const String _applePath = '/auth/oauth/apple';
+const String _linkGooglePath = '/me/providers/google';
+const String _linkApplePath = '/me/providers/apple';
 
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 60);
@@ -83,10 +113,10 @@ const Duration receiveTimeout = Duration(seconds: 60);
 /// Default options for the real client: without timeouts a stalled server
 /// would leave every awaiting screen waiting forever.
 BaseOptions apiBaseOptions(String baseUrl) => BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: connectTimeout,
-      receiveTimeout: receiveTimeout,
-    );
+  baseUrl: baseUrl,
+  connectTimeout: connectTimeout,
+  receiveTimeout: receiveTimeout,
+);
 
 class DioApiClient implements GenerationApiClient {
   /// [tokenProvider] supplies the bearer token for every request;
@@ -97,8 +127,8 @@ class DioApiClient implements GenerationApiClient {
     String? baseUrl,
     String? Function()? tokenProvider,
     void Function()? onUnauthorized,
-  })  : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl,
-        _dio = dio ?? Dio(apiBaseOptions(baseUrl ?? AppConfig.apiBaseUrl)) {
+  }) : _baseUrl = baseUrl ?? AppConfig.apiBaseUrl,
+       _dio = dio ?? Dio(apiBaseOptions(baseUrl ?? AppConfig.apiBaseUrl)) {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -114,7 +144,14 @@ class DioApiClient implements GenerationApiClient {
             _googlePath,
             _applePath,
           }.contains(path);
-          if (error.response?.statusCode == 401 && !isCredentialCall) {
+          // A rejected new provider token is a 401 on the link calls, but a
+          // real session expiry there still signs the user out.
+          final isRejectedLinkToken =
+              const {_linkGooglePath, _linkApplePath}.contains(path) &&
+              isInvalidProviderToken(error);
+          if (error.response?.statusCode == 401 &&
+              !isCredentialCall &&
+              !isRejectedLinkToken) {
             onUnauthorized?.call();
           }
           handler.next(error);
@@ -131,7 +168,9 @@ class DioApiClient implements GenerationApiClient {
     final trimmed = query?.trim();
     final response = await _dio.get<List<dynamic>>(
       '/templates',
-      queryParameters: {if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed},
+      queryParameters: {
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+      },
     );
     final templates = [
       for (final item in response.data!.cast<Map<String, dynamic>>())
@@ -241,26 +280,24 @@ class DioApiClient implements GenerationApiClient {
     String? provider,
     String? token,
     String? nonce,
-  }) =>
-      _dio.delete<void>(
-        '/me',
-        data: {
-          'password': ?password,
-          'provider': ?provider,
-          'token': ?token,
-          'nonce': ?nonce,
-        },
-      );
+  }) => _dio.delete<void>(
+    '/me',
+    data: {
+      'password': ?password,
+      'provider': ?provider,
+      'token': ?token,
+      'nonce': ?nonce,
+    },
+  );
 
   @override
   Future<ProviderSession> signInWithGoogle({
     required String idToken,
     DateTime? dateOfBirth,
-  }) =>
-      _signInWithProvider(_googlePath, {
-        'id_token': idToken,
-        'date_of_birth': ?_formatOptional(dateOfBirth),
-      });
+  }) => _signInWithProvider(_googlePath, {
+    'id_token': idToken,
+    'date_of_birth': ?_formatOptional(dateOfBirth),
+  });
 
   @override
   Future<ProviderSession> signInWithApple({
@@ -268,19 +305,77 @@ class DioApiClient implements GenerationApiClient {
     required String nonce,
     required String authorizationCode,
     DateTime? dateOfBirth,
-  }) =>
-      _signInWithProvider(_applePath, {
-        'identity_token': identityToken,
-        'nonce': nonce,
-        'authorization_code': authorizationCode,
-        'date_of_birth': ?_formatOptional(dateOfBirth),
-      });
+  }) => _signInWithProvider(_applePath, {
+    'identity_token': identityToken,
+    'nonce': nonce,
+    'authorization_code': authorizationCode,
+    'date_of_birth': ?_formatOptional(dateOfBirth),
+  });
+
+  @override
+  Future<void> changePassword({
+    required String newPassword,
+    required Reauth reauth,
+  }) => _dio.post<void>(
+    '/me/password',
+    data: {'new_password': newPassword, 'reauth': reauth.toJson()},
+  );
+
+  @override
+  Future<void> requestEmailChange({
+    required String newEmail,
+    required Reauth reauth,
+  }) => _dio.post<void>(
+    '/me/email',
+    data: {'new_email': newEmail, 'reauth': reauth.toJson()},
+  );
+
+  @override
+  Future<String> confirmEmailChange({required String code}) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/me/email/confirm',
+      data: {'code': code},
+    );
+    return response.data!['email'] as String;
+  }
+
+  @override
+  Future<void> linkGoogle({required String idToken, required Reauth reauth}) =>
+      _dio.post<void>(
+        _linkGooglePath,
+        data: {'id_token': idToken, 'reauth': reauth.toJson()},
+      );
+
+  @override
+  Future<void> linkApple({
+    required String identityToken,
+    required String nonce,
+    required String authorizationCode,
+    required Reauth reauth,
+  }) => _dio.post<void>(
+    _linkApplePath,
+    data: {
+      'identity_token': identityToken,
+      'nonce': nonce,
+      'authorization_code': authorizationCode,
+      'reauth': reauth.toJson(),
+    },
+  );
+
+  @override
+  Future<void> unlinkProvider({
+    required String provider,
+    required Reauth reauth,
+  }) => _dio.delete<void>(
+    '/me/providers/$provider',
+    data: {'reauth': reauth.toJson()},
+  );
 
   @override
   Future<void> confirmAge({required DateTime dateOfBirth}) => _dio.post<void>(
-        '/me/age',
-        data: {'date_of_birth': formatIsoDate(dateOfBirth)},
-      );
+    '/me/age',
+    data: {'date_of_birth': formatIsoDate(dateOfBirth)},
+  );
 
   @override
   Future<void> acceptConsent({required String version}) =>
@@ -299,20 +394,19 @@ class DioApiClient implements GenerationApiClient {
     required String category,
     required String note,
     required Uint8List imageBytes,
-  }) =>
-      _dio.post<void>(
-        '/reports',
-        data: FormData.fromMap({
-          'job_id': jobId,
-          'category': category,
-          if (note.isNotEmpty) 'note': note,
-          'image': MultipartFile.fromBytes(
-            imageBytes,
-            filename: '$jobId.png',
-            contentType: DioMediaType.parse('image/png'),
-          ),
-        }),
-      );
+  }) => _dio.post<void>(
+    '/reports',
+    data: FormData.fromMap({
+      'job_id': jobId,
+      'category': category,
+      if (note.isNotEmpty) 'note': note,
+      'image': MultipartFile.fromBytes(
+        imageBytes,
+        filename: '$jobId.png',
+        contentType: DioMediaType.parse('image/png'),
+      ),
+    }),
+  );
 
   Future<ProviderSession> _signInWithProvider(
     String path,
@@ -339,7 +433,11 @@ class DioApiClient implements GenerationApiClient {
     return Session.fromJson(response.data!);
   }
 
-  Future<Session> _authenticate(String path, String email, String password) async {
+  Future<Session> _authenticate(
+    String path,
+    String email,
+    String password,
+  ) async {
     final response = await _dio.post<Map<String, dynamic>>(
       path,
       data: {'email': email, 'password': password},

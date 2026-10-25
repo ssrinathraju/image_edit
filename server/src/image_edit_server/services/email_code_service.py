@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 _PURPOSE_TEXT = {
     CodePurpose.REGISTRATION: ("registration code", "finish creating your account"),
     CodePurpose.PASSWORD_RESET: ("password reset code", "reset your password"),
+    CodePurpose.EMAIL_CHANGE: ("email change code", "confirm your new email address"),
 }
 
 
@@ -87,3 +88,29 @@ def deliver(
         logger.error(
             "Could not send %s email: %s", purpose.value, type(error).__name__
         )
+
+
+def compose_password_changed() -> tuple[str, str]:
+    return (
+        "Your image_edit password was changed",
+        "Your image_edit password was changed, and your other devices were signed out. "
+        "If this wasn't you, reset your password now.",
+    )
+
+
+def compose_email_changed(new_email: str, support_email: str) -> tuple[str, str]:
+    contact = f"contact us right away at {support_email}" if support_email else "contact support right away"
+    return (
+        "Your image_edit email address was changed",
+        f"The email address of your image_edit account was changed to {new_email}. "
+        f"If this wasn't you, {contact}.",
+    )
+
+
+def deliver_notice(sender: EmailSender, to: str, message: tuple[str, str]) -> None:
+    """Send a notification; a failure is logged without the address and never raised."""
+    try:
+        subject, body = message
+        sender.send(to, subject, body)
+    except Exception as error:
+        logger.error("Could not send a security notification: %s", type(error).__name__)

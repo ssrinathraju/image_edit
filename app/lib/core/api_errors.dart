@@ -36,6 +36,17 @@ bool isRegistrationChanged(Object error) =>
     errorCodeOf(error) == registrationChangedCode;
 bool isTooManyRequests(Object error) => errorCodeOf(error) == tooManyRequestsCode;
 
+const String reauthFailedCode = 'reauth_failed';
+const String tooManyAttemptsCode = 'too_many_attempts';
+const String providerInUseCode = 'provider_in_use';
+const String lastSignInMethodCode = 'last_sign_in_method';
+
+bool isReauthFailed(Object error) => errorCodeOf(error) == reauthFailedCode;
+bool isTooManyAttempts(Object error) => errorCodeOf(error) == tooManyAttemptsCode;
+bool isProviderInUse(Object error) => errorCodeOf(error) == providerInUseCode;
+bool isLastSignInMethod(Object error) =>
+    errorCodeOf(error) == lastSignInMethodCode;
+
 const String invalidProviderTokenCode = 'invalid_provider_token';
 const String providerEmailUnverifiedCode = 'provider_email_unverified';
 const String providerEmailMissingCode = 'provider_email_missing';

@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
     SMTP_SECURITY: Literal["starttls", "ssl", "none"] = "starttls"
+    SUPPORT_EMAIL: str = ""  # named in the email-changed notice; required with SMTP_HOST
     EMAIL_CODE_TTL_MINUTES: int = Field(default=15, ge=1)
     EMAIL_CODE_MAX_ATTEMPTS: int = Field(default=5, ge=1)
     EMAIL_RESEND_SECONDS: int = Field(default=60, ge=1)
@@ -80,6 +81,8 @@ class Settings(BaseSettings):
     def _require_sender_address_with_smtp(self) -> "Settings":
         if self.SMTP_HOST and not self.SMTP_FROM:
             raise ValueError("SMTP_FROM must be set when SMTP_HOST is set")
+        if self.SMTP_HOST and not self.SUPPORT_EMAIL:
+            raise ValueError("SUPPORT_EMAIL must be set when SMTP_HOST is set")
         return self
 
     @model_validator(mode="after")

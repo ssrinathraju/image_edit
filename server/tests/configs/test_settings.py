@@ -105,7 +105,18 @@ def test_email_env_override(monkeypatch):
 def test_smtp_host_without_sender_address_is_rejected():
     with pytest.raises(ValidationError, match="SMTP_FROM"):
         Settings(SMTP_HOST="smtp.example.com")
-    assert Settings(SMTP_HOST="smtp.example.com", SMTP_FROM="a@example.com")
+    assert Settings(
+        SMTP_HOST="smtp.example.com", SMTP_FROM="a@example.com", SUPPORT_EMAIL="help@example.com"
+    )
+
+
+def test_smtp_host_without_a_support_address_is_rejected():
+    with pytest.raises(ValidationError, match="SUPPORT_EMAIL"):
+        Settings(SMTP_HOST="smtp.example.com", SMTP_FROM="a@example.com")
+
+
+def test_the_support_address_is_optional_in_log_mode():
+    assert Settings().SUPPORT_EMAIL == ""
 
 
 def test_unknown_smtp_security_is_rejected():

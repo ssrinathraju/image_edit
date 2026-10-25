@@ -38,6 +38,8 @@ Future<FakeLinkLauncher> _openProfile(
     apple: apple,
     platform: platform,
   );
+  // The security section makes the list taller than the default test screen.
+  tester.view.physicalSize = const Size(430, 2000);
   await tester.tap(find.byTooltip('Profile'));
   await tester.pumpAndSettle();
   return launcher;

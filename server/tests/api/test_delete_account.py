@@ -43,6 +43,21 @@ def test_password_account_with_a_wrong_password_keeps_the_account(client):
     assert client.get("/me").status_code == 200
 
 
+def test_a_password_account_cannot_delete_with_its_linked_google(client, google_verifier, clock):
+    google_verifier.add("tok", "g-1", email="other@gmail.com", issued_at=clock.now)
+    link = client.post(
+        "/me/providers/google",
+        json={"id_token": "tok", "reauth": {"password": DEFAULT_PASSWORD}},
+    )
+    assert link.status_code == 200
+
+    resp = _delete(client, provider="google", token="tok")
+
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["error"] == "invalid_provider_token"
+    assert client.get("/me").status_code == 200
+
+
 # ── provider form ──
 
 

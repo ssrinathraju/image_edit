@@ -31,6 +31,14 @@ class PendingRegistration:
     created_at: str
 
 
+@dataclass(frozen=True)
+class EmailChange:
+    """An account's email before and after a confirmed change."""
+
+    old_email: str
+    new_email: str
+
+
 class QuotaExceeded(Exception):
     """Raised when an account has no daily allowance or bonus credits left."""
 
@@ -57,6 +65,18 @@ class ProviderEmailUnverified(Exception):
 
 class ProviderAlreadyLinked(Exception):
     """Raised when linking would give an account a second identity of one provider."""
+
+
+class ProviderInUse(Exception):
+    """Raised when a provider identity is already linked to a different account."""
+
+
+class ProviderNotLinked(Exception):
+    """Raised when unlinking a provider the account does not have."""
+
+
+class LastSignInMethod(Exception):
+    """Raised when unlinking would leave the account with no way to sign in."""
 
 
 class ReferralNotAllowed(Exception):
@@ -156,6 +176,55 @@ class UserStore(Protocol):
     ) -> ConsumeResult:
         """Consume a reset code and, on ok, change the password and drop every
         session of the account, all in one transaction."""
+        ...
+
+    def set_password(self, user_id: str, new_hash: str, keep_token: str) -> None:
+        """Set the password hash and drop every session of the account except `keep_token`'s."""
+        ...
+
+    def request_email_change(
+        self,
+        user_id: str,
+        new_email: str,
+        code_hash: str,
+        now: datetime,
+        limits: CodeLimits,
+    ) -> IssueResult:
+        """Store an email-change code for the new address and remember the pending change.
+
+        Replaces any earlier pending change. Raises EmailTakenError, writing nothing,
+        when an account has the address; a limited send keeps the earlier pending change.
+        """
+        ...
+
+    def get_pending_email_change(self, user_id: str) -> Optional[str]:
+        """The new address of the account's pending email change, or None."""
+        ...
+
+    def confirm_email_change(
+        self, user_id: str, code: str, now: datetime, max_attempts: int, keep_token: str
+    ) -> tuple[ConsumeResult, Optional[EmailChange]]:
+        """Consume the pending change's code and, on ok, switch the email and drop other sessions.
+
+        A missing pending change counts as expired. Raises EmailTakenError, after
+        discarding the pending change, when an account has the address by now.
+        """
+        ...
+
+    def link_identity(self, user_id: str, identity: ProviderIdentity, now: datetime) -> None:
+        """Attach a provider identity to the account.
+
+        Raises ProviderInUse when another account has it and ProviderAlreadyLinked
+        when this account already has that provider.
+        """
+        ...
+
+    def unlink_identity(self, user_id: str, provider: str) -> Optional[str]:
+        """Remove the provider's identity and return its stored Apple refresh token, if any.
+
+        Raises ProviderNotLinked, or LastSignInMethod when no password or other
+        identity would remain; nothing is written then.
+        """
         ...
 
     def reserve_generation(self, user_id: str, daily_limit: int, now: datetime) -> str:

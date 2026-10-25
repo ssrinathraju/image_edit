@@ -74,7 +74,7 @@ class IdentitiesMixin:
         self,
         user_id: str,
         identity: ProviderIdentity,
-        email: str,
+        email: Optional[str],
         now: datetime,
     ) -> None:
         same_provider = self._conn.execute(
@@ -109,7 +109,7 @@ class IdentitiesMixin:
         return user_id
 
     def _insert_identity(
-        self, user_id: str, identity: ProviderIdentity, email: str, now: datetime
+        self, user_id: str, identity: ProviderIdentity, email: Optional[str], now: datetime
     ) -> None:
         self._conn.execute(
             "INSERT INTO identities (provider, subject, user_id, email, created_at)"
