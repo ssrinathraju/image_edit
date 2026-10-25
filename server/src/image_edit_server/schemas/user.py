@@ -182,18 +182,24 @@ class EmailChangeConfirm(BaseModel):
     code: str = Field(max_length=MAX_CODE_CHARS)
 
 
+class EmptyResponse(BaseModel):
+    """The body of a successful call that has nothing to return."""
+
+
 class EmailChangedResponse(BaseModel):
     email: str
 
 
 class LinkGoogleRequest(BaseModel):
     id_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+    reauth: Reauth
 
 
 class LinkAppleRequest(BaseModel):
     identity_token: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
     nonce: str = Field(max_length=MAX_NONCE_CHARS)
     authorization_code: str = Field(max_length=MAX_PROVIDER_TOKEN_CHARS)
+    reauth: Reauth
 
 
 class UnlinkRequest(BaseModel):

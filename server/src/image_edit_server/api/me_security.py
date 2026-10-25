@@ -8,6 +8,7 @@ from image_edit_server.api.deps import AccountSecurityDep, AuthDep, TokenDep
 from image_edit_server.schemas.user import (
     EmailChangeConfirm,
     EmailChangedResponse,
+    EmptyResponse,
     EmailChangeRequest,
     LinkAppleRequest,
     LinkGoogleRequest,
@@ -38,9 +39,9 @@ def request_email_change(
     user: AuthDep,
     security: AccountSecurityDep,
     background: BackgroundTasks,
-) -> dict:
+) -> EmptyResponse:
     security.request_email_change(user, body.new_email, body.reauth, background)
-    return {}
+    return EmptyResponse()
 
 
 @router.post("/me/email/confirm", response_model=EmailChangedResponse)
@@ -56,21 +57,26 @@ def confirm_email_change(
 
 
 @router.post("/me/providers/google")
-def link_google(body: LinkGoogleRequest, user: AuthDep, security: AccountSecurityDep) -> dict:
-    security.link_provider(user, "google", body.id_token)
-    return {}
+def link_google(
+    body: LinkGoogleRequest, user: AuthDep, security: AccountSecurityDep
+) -> EmptyResponse:
+    security.link_provider(user, "google", body.id_token, body.reauth)
+    return EmptyResponse()
 
 
 @router.post("/me/providers/apple")
-def link_apple(body: LinkAppleRequest, user: AuthDep, security: AccountSecurityDep) -> dict:
+def link_apple(
+    body: LinkAppleRequest, user: AuthDep, security: AccountSecurityDep
+) -> EmptyResponse:
     security.link_provider(
         user,
         "apple",
         body.identity_token,
+        body.reauth,
         nonce=body.nonce,
         authorization_code=body.authorization_code,
     )
-    return {}
+    return EmptyResponse()
 
 
 @router.delete("/me/providers/{provider}", status_code=status.HTTP_204_NO_CONTENT)

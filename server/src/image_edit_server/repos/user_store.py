@@ -11,6 +11,7 @@ from ulid import ULID
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.plans import ALL_PLANS, FREE
 from image_edit_server.core.referral_codes import generate_code
+from image_edit_server.core.token_hash import hash_token
 from image_edit_server.core.user_store import EmailTakenError
 from image_edit_server.repos.user_store_codes import (
     _EMAIL_SCHEMA,
@@ -23,7 +24,7 @@ from image_edit_server.repos.user_store_identities import (
 )
 from image_edit_server.repos.user_store_referrals import ReferralsMixin
 from image_edit_server.repos.user_store_safety import _SAFETY_SCHEMA, SafetyMixin
-from image_edit_server.repos.user_store_security import SecurityMixin, hash_token
+from image_edit_server.repos.user_store_security import SecurityMixin
 from image_edit_server.repos.user_store_usage import _USAGE_SCHEMA, UsageMixin
 from image_edit_server.schemas.user import User
 

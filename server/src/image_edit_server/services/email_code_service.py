@@ -98,12 +98,12 @@ def compose_password_changed() -> tuple[str, str]:
     )
 
 
-def compose_email_changed(new_email: str) -> tuple[str, str]:
+def compose_email_changed(new_email: str, support_email: str) -> tuple[str, str]:
+    contact = support_email or "support"
     return (
         "Your image_edit email address was changed",
         f"The email address of your image_edit account was changed to {new_email}. "
-        "If this wasn't you, reset your password using that address right away "
-        "and contact support.",
+        f"If this wasn't you, contact us right away at {contact}.",
     )
 
 

@@ -167,7 +167,7 @@ def test_smtp_sender_is_chosen_with_smtp_host_and_does_not_warn(tmp_path, templa
         TEMPLATES_DIR=str(templates_dir),
         STORAGE_ROOT=str(tmp_path / "s"),
         SMTP_HOST="smtp.example.com",
-        SMTP_FROM="noreply@example.com",
+        SMTP_FROM="noreply@example.com", SUPPORT_EMAIL="help@example.com",
     )
 
     with caplog.at_level("WARNING"):

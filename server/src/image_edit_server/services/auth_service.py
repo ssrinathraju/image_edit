@@ -343,6 +343,12 @@ class AuthService:
         """
         if reauth.provider is not None and reauth.token is not None:
             code = "invalid_provider_token" if deletion_error_codes else REAUTH_FAILED
+            if self._users.get_password_hash(user.id):
+                # The form follows the account: a password account never vouches
+                # with a provider, so a stolen session cannot use a linked identity.
+                if code == REAUTH_FAILED:
+                    logger.info("reauth_failed: user %s", user.id)
+                raise api_error(403, code, "this account confirms with its password")
             self._reauthenticate_with_provider(
                 user, reauth.provider, reauth.token, reauth.nonce, code
             )

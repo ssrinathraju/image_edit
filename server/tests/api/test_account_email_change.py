@@ -120,7 +120,8 @@ def test_the_old_address_is_told_with_the_new_address_and_no_code(client, sender
     assert sender.count_for(ANA) == before + 1
     to, _, body = sender.sent[-1]
     assert to == ANA
-    assert NEW in body and "reset your password" in body
+    assert NEW in body and "reset" not in body.lower()
+    assert "contact us right away" in body
     assert not any(part.strip(".,").isdigit() and len(part) >= 6 for part in body.split())
 
 
@@ -179,9 +180,10 @@ def test_the_pending_address_is_never_returned_by_me(client):
     assert NEW not in client.get("/me").text
 
 
-def test_another_accounts_code_does_not_confirm_my_change(
+def test_a_code_sent_to_another_address_does_not_confirm_my_change(
     client, anon_client, second_user_headers, sender
 ):
+    """Codes are keyed by address, so this checks only that an unrelated address's code fails."""
     _request(client)
     other = anon_client.post(
         "/me/email",

@@ -4,12 +4,18 @@ ANA = "ana@example.com"
 PASSWORD_REAUTH = {"reauth": {"password": DEFAULT_PASSWORD}}
 
 
-def _link_google(client, token, headers=None):
-    return client.post("/me/providers/google", json={"id_token": token}, headers=headers)
+def _link_google(client, token, headers=None, reauth=None):
+    body = {"id_token": token, "reauth": reauth or PASSWORD_REAUTH["reauth"]}
+    return client.post("/me/providers/google", json=body, headers=headers)
 
 
-def _link_apple(client, token, headers=None, code="auth-code"):
-    body = {"identity_token": token, "nonce": "n", "authorization_code": code}
+def _link_apple(client, token, headers=None, code="auth-code", reauth=None):
+    body = {
+        "identity_token": token,
+        "nonce": "n",
+        "authorization_code": code,
+        "reauth": reauth or PASSWORD_REAUTH["reauth"],
+    }
     return client.post("/me/providers/apple", json=body, headers=headers)
 
 
@@ -129,6 +135,87 @@ def test_linking_apple_checks_the_nonce_and_stores_the_refresh_token(
     assert apple_client.exchanged == ["auth-code"]
 
 
+def test_linking_without_the_password_is_403_and_links_nothing(client, google_verifier):
+    google_verifier.add("tok", "g-1", email="other@gmail.com")
+
+    wrong = _link_google(client, "tok", reauth={"password": "wrong password"})
+
+    assert wrong.status_code == 403 and _error(wrong) == "reauth_failed"
+    assert _providers(client) == []
+    body = {"id_token": "tok"}
+    missing = client.post("/me/providers/google", json=body)
+    assert missing.status_code == 422 and _providers(client) == []
+
+
+def test_a_provider_only_account_links_apple_with_its_google(
+    anon_client, google_verifier, apple_verifier, clock
+):
+    headers = _google_only(anon_client, google_verifier)
+    apple_verifier.add("tok", "a-1", email="relay@privaterelay.appleid.com")
+    google_verifier.add("fresh", "g-1", issued_at=clock.now)
+
+    resp = _link_apple(
+        anon_client, "tok", headers, reauth={"provider": "google", "token": "fresh"}
+    )
+
+    assert resp.status_code == 200
+    assert _providers(anon_client, headers) == ["apple", "google"]
+
+
+def test_the_new_identity_cannot_vouch_for_itself(anon_client, google_verifier, apple_verifier, clock):
+    headers = _google_only(anon_client, google_verifier)
+    apple_verifier.add("tok", "a-1", issued_at=clock.now)
+
+    resp = _link_apple(
+        anon_client,
+        "tok",
+        headers,
+        reauth={"provider": "apple", "token": "tok", "nonce": "n"},
+    )
+
+    assert resp.status_code == 403 and _error(resp) == "reauth_failed"
+    assert _providers(anon_client, headers) == ["google"]
+
+
+def test_a_stolen_session_cannot_link_the_attackers_google_to_take_over(
+    client, google_verifier, clock
+):
+    google_verifier.add("attacker", "g-evil", email="evil@gmail.com", issued_at=clock.now)
+    stolen = {"provider": "google", "token": "attacker"}
+
+    link = _link_google(client, "attacker", reauth=stolen)
+    password = client.post(
+        "/me/password", json={"new_password": "attacker chosen pass", "reauth": stolen}
+    )
+    email = client.post(
+        "/me/email", json={"new_email": "evil@example.com", "reauth": stolen}
+    )
+
+    assert link.status_code == 403 and _error(link) == "reauth_failed"
+    assert password.status_code == 403 and email.status_code == 403
+    assert _providers(client) == []
+
+
+def test_a_password_account_cannot_reauthenticate_with_its_linked_google(
+    client, google_verifier, clock
+):
+    google_verifier.add("tok", "g-1", email="other@gmail.com", issued_at=clock.now)
+    assert _link_google(client, "tok").status_code == 200
+    fresh = {"provider": "google", "token": "tok"}
+
+    password = client.post(
+        "/me/password", json={"new_password": "attacker chosen pass", "reauth": fresh}
+    )
+    email = client.post("/me/email", json={"new_email": "evil@example.com", "reauth": fresh})
+    unlink = _unlink(client, "google", {"reauth": fresh})
+    link_apple = _link_apple(client, "x", reauth=fresh)
+
+    for resp in (password, email, unlink, link_apple):
+        assert resp.status_code == 403 and _error(resp) == "reauth_failed"
+    assert _providers(client) == ["google"]
+    assert client.post("/auth/login", json={"email": ANA, "password": DEFAULT_PASSWORD}).status_code == 200
+
+
 def test_linking_needs_a_session(anon_client, google_verifier):
     google_verifier.add("tok", "g-1")
 
@@ -187,7 +274,9 @@ def test_a_provider_only_account_can_unlink_one_when_another_remains(
 ):
     headers = _google_only(anon_client, google_verifier)
     apple_verifier.add("tok", "a-1", email="relay@privaterelay.appleid.com")
-    assert _link_apple(anon_client, "tok", headers).status_code == 200
+    google_verifier.add("fresh", "g-1", issued_at=clock.now)
+    reauth = {"provider": "google", "token": "fresh"}
+    assert _link_apple(anon_client, "tok", headers, reauth=reauth).status_code == 200
     google_verifier.add("fresh", "g-1", issued_at=clock.now)
 
     resp = _unlink(

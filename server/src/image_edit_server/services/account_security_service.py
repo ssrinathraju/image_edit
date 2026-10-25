@@ -124,7 +124,9 @@ class AccountSecurityService:
             raise api_error(
                 400, "code_expired", "the code has expired or was never requested; ask for a new one"
             )
-        message = email_code_service.compose_email_changed(change.new_email)
+        message = email_code_service.compose_email_changed(
+            change.new_email, self._settings.SUPPORT_EMAIL
+        )
         self._notify(change.old_email, message, background)
         logger.info("email_changed: user %s", user.id)
         return change.new_email
@@ -134,11 +136,13 @@ class AccountSecurityService:
         user: User,
         provider: str,
         token: str,
+        reauth: Reauth,
         *,
         nonce: Optional[str] = None,
         authorization_code: Optional[str] = None,
     ) -> None:
-        """Link the identity proved by a provider token; the token itself is the proof."""
+        """Link a new identity, after re-authenticating against the identities already linked."""
+        self._auth.reauthenticate(user, reauth)
         identity = self._auth.verify_provider_token(provider, token, nonce, 401)
         try:
             self._users.link_identity(user.id, identity, self._clock())

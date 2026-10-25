@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 from datetime import datetime
 from typing import Optional
@@ -12,6 +11,7 @@ from image_edit_server.core.email_codes import (
     IssueResult,
 )
 from image_edit_server.core.identity_verifier import ProviderIdentity
+from image_edit_server.core.token_hash import hash_token
 from image_edit_server.core.user_store import (
     EmailChange,
     EmailTakenError,
@@ -22,10 +22,6 @@ from image_edit_server.core.user_store import (
 )
 
 APPLE_PROVIDER = "apple"
-
-
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class SecurityMixin:

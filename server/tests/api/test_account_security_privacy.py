@@ -24,15 +24,15 @@ def _exercise_every_endpoint(client, sender, google_verifier, apple_verifier, cl
     google_verifier.add("google-secret-token", "g-1", email="gina@gmail.com")
     apple_verifier.add("apple-secret-token", "a-1", email="relay@privaterelay.appleid.com")
     assert client.post(
-        "/me/providers/google", json={"id_token": "google-secret-token"}
+        "/me/providers/google", json={"id_token": "google-secret-token", "reauth": good}
     ).status_code == 200
     assert client.post(
-        "/me/providers/google", json={"id_token": "google-secret-token"}
+        "/me/providers/google", json={"id_token": "google-secret-token", "reauth": good}
     ).status_code == 409
-    client.post("/me/providers/google", json={"id_token": "rejected-secret-token"})
+    client.post("/me/providers/google", json={"id_token": "rejected-secret-token", "reauth": good})
     assert client.post(
         "/me/providers/apple",
-        json={"identity_token": "apple-secret-token", "nonce": "n", "authorization_code": "code"},
+        json={"identity_token": "apple-secret-token", "nonce": "n", "authorization_code": "code", "reauth": good},
     ).status_code == 200
     client.request("DELETE", "/me/providers/google", json={"reauth": bad})
     assert client.request(
