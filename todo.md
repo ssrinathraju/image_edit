@@ -5,6 +5,7 @@ Items deferred from PR #1 review. None block the merge.
 ## Manual testing log
 
 - **2026-10-20 — iOS simulator pass (by the user), all current flows OK:** against a local log-mode server on a temporary storage root. Covered: register with the age gate and emailed code, sign in and out, password reset (the code appears once the 60-second per-address limit has passed), template and custom generation, the consent screen (decline, accept, withdraw), My creations (grid, detail, download, share, delete), referrals, the profile, and a second account. **Not covered:** a pre-upgrade `app.db`, the Android emulator and APK build, the backup-exclusion checks, real SMTP, and anything needing the Google or Apple consoles. Archived task boxes stay unticked, because each one bundles steps outside this run. What is still open is listed in the items below.
+- **2026-10-27 — Android SDK installed; debug APK check:** Android Studio and SDK 36 installed, and `flutter doctor` is clean. `flutter build apk --debug` succeeds, and the merged debug manifest references both backup rule files (`fullBackupContent`, `dataExtractionRules`). That closes add-on-device-history 3.2. No emulator run yet.
 
 ## Deferred
 
@@ -79,7 +80,7 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From add-on-device-history
 
-- [ ] **Remaining manual checks for add-on-device-history** — 8.2's iOS simulator flows passed on 2026-10-20. Still open: 3.2 (the Android build and merged-manifest check; needs the Android SDK), 8.2's Android emulator half, and 8.3 (the backup-exclusion check on iOS and Android).
+- [ ] **Remaining manual checks for add-on-device-history** — 8.2's iOS simulator flows passed on 2026-10-20, and 3.2 (the Android build and merged-manifest check) passed on 2026-10-27. Still open: 8.2's Android emulator half, and 8.3 (the backup-exclusion check on iOS and Android).
 
 ## From add-age-gate-and-face-consent
 
