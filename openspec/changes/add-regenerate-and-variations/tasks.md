@@ -53,4 +53,4 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
   - Open a creation saved before this change: no Make another.
 
   This box stays unticked until someone runs every step on both platforms. Name any skipped step in the PR.
-- [ ] 4.3 Push `feat/add-regenerate-and-variations`. Verify with `git log origin/feat/add-regenerate-and-variations -1` that it matches the local HEAD.
+- [x] 4.3 Push `feat/add-regenerate-and-variations`. Verify with `git log origin/feat/add-regenerate-and-variations -1` that it matches the local HEAD.
