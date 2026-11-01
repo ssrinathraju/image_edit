@@ -11,7 +11,7 @@ import '../common/submit_flow.dart';
 const int _promptMinLines = 4;
 const int _promptMaxLines = 8;
 
-class CustomGenerationScreen extends ConsumerStatefulWidget {
+class CustomGenerationScreen extends StatelessWidget {
   const CustomGenerationScreen({
     this.initialPrompt = '',
     this.initialPhoto,
@@ -24,14 +24,34 @@ class CustomGenerationScreen extends ConsumerStatefulWidget {
   final XFile? initialPhoto;
 
   @override
-  ConsumerState<CustomGenerationScreen> createState() =>
-      _CustomGenerationScreenState();
+  Widget build(BuildContext context) {
+    return PhotoScope(
+      child: _CustomGenerationForm(
+        initialPrompt: initialPrompt,
+        initialPhoto: initialPhoto,
+      ),
+    );
+  }
 }
 
-class _CustomGenerationScreenState
-    extends ConsumerState<CustomGenerationScreen> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialPrompt);
+class _CustomGenerationForm extends ConsumerStatefulWidget {
+  const _CustomGenerationForm({
+    required this.initialPrompt,
+    required this.initialPhoto,
+  });
+
+  final String initialPrompt;
+  final XFile? initialPhoto;
+
+  @override
+  ConsumerState<_CustomGenerationForm> createState() =>
+      _CustomGenerationFormState();
+}
+
+class _CustomGenerationFormState extends ConsumerState<_CustomGenerationForm> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialPrompt,
+  );
 
   @override
   void initState() {
@@ -57,7 +77,10 @@ class _CustomGenerationScreenState
     final prompt = _controller.text;
     final isTooLong = prompt.length > AppConfig.maxPromptChars;
     final canSubmit =
-        photo != null && prompt.trim().isNotEmpty && !isTooLong && !isSubmitting;
+        photo != null &&
+        prompt.trim().isNotEmpty &&
+        !isTooLong &&
+        !isSubmitting;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create your own')),
@@ -86,10 +109,10 @@ class _CustomGenerationScreenState
           FilledButton(
             onPressed: canSubmit
                 ? () => submitAndOpenStatus(
-                      context,
-                      ref,
-                      GenerationRequest(photo: photo, prompt: prompt.trim()),
-                    )
+                    context,
+                    ref,
+                    GenerationRequest(photo: photo, prompt: prompt.trim()),
+                  )
                 : null,
             child: isSubmitting
                 ? const SizedBox(

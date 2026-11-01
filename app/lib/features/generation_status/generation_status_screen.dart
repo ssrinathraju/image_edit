@@ -56,7 +56,12 @@ class GenerationStatusScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Generation Status')),
       body: asyncJob.when(
         loading: () => const _ProgressView(message: 'Starting…'),
-        error: (e, _) => _FailureView(jobId: jobId, message: describeError(e)),
+        // The job may still be running, so a second generation is not offered.
+        error: (e, _) => _FailureView(
+          jobId: jobId,
+          message: describeError(e),
+          canRetry: false,
+        ),
         data: (job) => switch (job.status) {
           JobStatus.queued => const _ProgressView(message: 'Queued…'),
           JobStatus.running => const _ProgressView(message: 'Generating…'),
@@ -161,8 +166,9 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
     final store = ref.read(creationStoreProvider);
     final finishedAt = ref.read(clockProvider)();
     final submitted = ref.read(lastRequestProvider);
-    final requestSource =
-        submitted?.jobId == jobId ? submitted?.request.source : null;
+    final requestSource = submitted?.jobId == jobId
+        ? submitted?.request.source
+        : null;
     try {
       final session = await sessionFuture;
       if (session == null) {
@@ -251,12 +257,16 @@ class _FailureView extends StatelessWidget {
     required this.jobId,
     required this.message,
     this.succeeded = false,
+    this.canRetry = true,
     this.onReload,
   });
 
   final String jobId;
   final String message;
   final bool succeeded;
+
+  /// False when the job's outcome is unknown, such as a failed status check.
+  final bool canRetry;
   final VoidCallback? onReload;
 
   @override
@@ -279,6 +289,7 @@ class _FailureView extends StatelessWidget {
               jobId: jobId,
               homeLabel: 'New Generation',
               succeeded: succeeded,
+              canRetry: canRetry,
             ),
           ],
         ),
@@ -292,16 +303,20 @@ class _NavigationButtons extends ConsumerWidget {
     required this.jobId,
     required this.homeLabel,
     required this.succeeded,
+    this.canRetry = true,
   });
 
   final String jobId;
   final String homeLabel;
   final bool succeeded;
+  final bool canRetry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final submitted = ref.watch(lastRequestProvider);
-    final lastRequest = submitted?.jobId == jobId ? submitted?.request : null;
+    final lastRequest = canRetry && submitted?.jobId == jobId
+        ? submitted?.request
+        : null;
     final isSubmitting = ref.watch(submitControllerProvider);
     return Wrap(
       alignment: WrapAlignment.center,

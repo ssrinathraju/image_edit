@@ -19,11 +19,11 @@ const String _unavailableMessage = 'This image is no longer available';
 
 typedef _CreationKey = ({String userId, String jobId});
 
-final _creationBytesProvider =
-    FutureProvider.autoDispose.family<Uint8List, _CreationKey>(
-  (ref, key) =>
-      ref.read(creationStoreProvider).readImage(key.userId, key.jobId),
-);
+final _creationBytesProvider = FutureProvider.autoDispose
+    .family<Uint8List, _CreationKey>(
+      (ref, key) =>
+          ref.read(creationStoreProvider).readImage(key.userId, key.jobId),
+    );
 
 class CreationDetailScreen extends ConsumerStatefulWidget {
   const CreationDetailScreen({required this.jobId, super.key});
@@ -81,7 +81,10 @@ class _CreationDetailScreenState extends ConsumerState<CreationDetailScreen> {
     final templateId = source.templateId;
     final location = templateId != null
         ? '/template/${Uri.encodeComponent(templateId)}'
-        : Uri(path: '/create', queryParameters: {'prompt': source.prompt}).toString();
+        : Uri(
+            path: '/create',
+            queryParameters: {'prompt': source.prompt},
+          ).toString();
     unawaited(context.push<void>(location));
   }
 
@@ -152,6 +155,7 @@ class _DetailBody extends StatelessWidget {
           bytes,
           fit: BoxFit.contain,
           width: double.infinity,
+          // Make another is already in the body below, so it is not repeated.
           errorBuilder: (_, _, _) =>
               _UnavailableView(onDelete: onDelete, onMakeAnother: null),
         ),

@@ -370,7 +370,7 @@ void main() {
 
       final field = tester.widget<TextField>(find.byType(TextField));
       expect(field.controller!.text, 'astronaut on a beach');
-      final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(PhotoPickerField)));
       expect(container.read(selectedPhotoProvider), same(request.photo));
       expect(client.submitted, isEmpty);
     });
@@ -430,6 +430,33 @@ void main() {
 
     expect(find.textContaining('Could not reach the server'), findsOneWidget);
     expect(find.textContaining('DioException'), findsNothing);
+  });
+
+  testWidgets('a failed status check does not offer Try again or Edit prompt', (tester) async {
+    final client = FakeApiClient()
+      ..onStatus = (_) async => throw DioException(
+            requestOptions: RequestOptions(path: '/generations/job-1'),
+            message: 'connection error',
+          );
+    await _pump(tester, client: client, lastRequest: _promptRequest());
+
+    expect(find.textContaining('Could not reach the server'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('Edit prompt'), findsNothing);
+    expect(find.text('New Generation'), findsOneWidget);
+  });
+
+  testWidgets('a request from another job is not used as the saved source', (tester) async {
+    final store = InMemoryCreationStore();
+    final request = GenerationRequest(
+      photo: XFile.fromData(tinyPng, name: 'me.png'),
+      prompt: 'someone else',
+    );
+    await _pump(tester, store: store, jobId: 'job-2', lastRequest: request);
+
+    final saved = (await store.list('user-1')).single;
+    expect(saved.jobId, 'job-2');
+    expect(saved.source, isNull);
   });
 
   testWidgets('no action is offered on a job the last request did not create', (tester) async {

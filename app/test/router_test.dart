@@ -5,12 +5,14 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/schemas/creation.dart';
+import 'package:image_edit/schemas/job.dart';
 import 'package:image_edit/schemas/session.dart';
 
 import 'support/app_harness.dart';
@@ -553,7 +555,7 @@ void main() {
     }
 
     bool hasPhoto(WidgetTester tester) => ProviderScope.containerOf(
-          tester.element(find.byType(MaterialApp)),
+          tester.element(find.byType(PhotoPickerField)),
         ).read(selectedPhotoProvider) != null;
 
     testWidgets('a template creation opens its template with no photo and goes back',
@@ -643,6 +645,67 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(client.submitted.single.prompt, 'astronaut on a beach');
+    });
+
+    testWidgets('a photo picked on a form is not carried into the one opened on top',
+        (tester) async {
+      client.onListTemplates = (_) async => [
+            fakeTemplate('golden-hour-beach', title: 'Golden Hour Beach'),
+          ];
+      await openCreation(
+        tester,
+        source: const CreationSource.template('golden-hour-beach'),
+      );
+      await tester.tap(find.text('Make another'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PhotoPickerField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+      expect(hasPhoto(tester), isTrue);
+
+      final router = GoRouter.of(tester.element(find.byType(PhotoPickerField)));
+      unawaited(router.push<void>('/create'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create your own'), findsOneWidget);
+      expect(hasPhoto(tester), isFalse);
+    });
+
+    testWidgets('each variation is a new creation with the same label', (tester) async {
+      var next = 7;
+      client.onSubmit = (_) async => 'job-${next++}';
+      client.onStatus = (id) async => GenerationJob(
+            jobId: id,
+            status: JobStatus.succeeded,
+            resultUrl: 'http://fake/images/$id.png',
+          );
+      client.onFetchBytes = (_) async => tinyPng;
+      final store = InMemoryCreationStore();
+      await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(savedSession),
+        store: store,
+      );
+      await tester.tap(find.text('Create your own'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'astronaut on a beach');
+      await tester.tap(find.byType(PhotoPickerField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Generate'));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(find.text('More like this'));
+        await tester.pumpAndSettle();
+      }
+
+      final creations = await store.list('user-1');
+      expect(creations.map((c) => c.jobId).toSet(), {'job-7', 'job-8', 'job-9'});
+      expect(creations.map((c) => c.label).toSet(), {'astronaut on a beach'});
     });
 
     testWidgets('an older creation has no Make another', (tester) async {

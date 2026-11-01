@@ -27,7 +27,7 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
   - no action after `lastRequestProvider` is cleared (as after a restart) or holds another job;
   - a quota refusal shows the limit dialog and submits nothing;
   - a double tap submits once.
-- [x] 2.2 Add `initialPhoto` to `CustomGenerationScreen` (seeding `selectedPhotoProvider` in `initState`), and pass `state.extra` as an `XFile` in the `/create` route. Add "Edit prompt" for custom-prompt requests on the status screen (Decision 3). Verify:
+- [x] 2.2 Add `initialPhoto` to `CustomGenerationScreen` (seeding `selectedPhotoProvider` in a post-frame callback guarded by `mounted`, since provider writes are refused during build), and pass `state.extra` as an `XFile` in the `/create` route. Add "Edit prompt" for custom-prompt requests on the status screen (Decision 3). Verify:
   - `custom_generation_screen_test.dart`: the photo and prompt prefill, and nothing is submitted on open;
   - `generation_status_screen_test.dart`: Edit prompt is shown for a custom prompt and not for a template; tapping it opens the form prefilled; Back returns to the status screen; submitting an edited prompt opens a new status with the new prompt.
 

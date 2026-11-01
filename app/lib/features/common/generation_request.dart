@@ -8,11 +8,10 @@ class GenerationRequest {
     this.templateId,
     this.prompt,
     this.templateTitle,
-  })
-      : assert(
-          (templateId == null) != (prompt == null),
-          'provide exactly one of templateId or prompt',
-        );
+  }) : assert(
+         (templateId == null) != (prompt == null),
+         'provide exactly one of templateId or prompt',
+       );
 
   final XFile photo;
   final String? templateId;
@@ -23,6 +22,7 @@ class GenerationRequest {
 
   String get historyLabel => prompt ?? templateTitle ?? templateId!;
 
+  /// What a new creation records so "Make another" can rebuild this request.
   CreationSource get source => prompt != null
       ? CreationSource.prompt(prompt!)
       : CreationSource.template(templateId!);

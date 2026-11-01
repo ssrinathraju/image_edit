@@ -40,7 +40,7 @@ The action and its code path stay the same, only the label depends on the job's 
 If the picker's file has gone (the OS cleaned its temp folder), the submit fails with the existing error SnackBar. Nothing crashes, and the user can pick again from the form.
 
 ### Decision 3: Edit prompt passes the photo through the route
-"Edit prompt" calls `context.push('/create?prompt=<prompt>', extra: photo)`. `CustomGenerationScreen` gains `initialPhoto` and seeds `selectedPhotoProvider` from it in `initState`, as it already does for the prompt.
+"Edit prompt" calls `context.push('/create?prompt=<prompt>', extra: photo)`. `CustomGenerationScreen` gains `initialPhoto` and seeds `selectedPhotoProvider` from it in a post-frame callback (guarded by `mounted`), because Riverpod refuses provider writes during build. The form watches the provider in `build`, so the auto-dispose provider is alive when the callback runs; the only effect is one frame with no photo and Generate disabled.
 
 **Rejected:** writing `selectedPhotoProvider` before pushing. The provider is auto-dispose and has no listener until the form mounts, so the value can be dropped.
 
