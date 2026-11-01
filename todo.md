@@ -85,7 +85,6 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-age-gate-and-face-consent
 
 - [ ] **Legal review of the consent wording** — have the face-photo consent text (`features/consent/consent_text.dart`) and the privacy policy reviewed for GDPR and BIPA before launch; bump `CONSENT_VERSION` when the text changes.
-- [ ] **Spec follow-up** — add the 'Update the app to continue' behaviour for an unknown consent version to the account-ui spec through a /prod-pm change (CLAUDE.md forbids editing openspec/specs directly; archive only syncs this change's deltas).
 - [ ] **Router notes** — `ageConfirmed ?? true` (router.dart) and the `/me`-fails-to-load case send an unconfirmed user home until the server answers `age_not_confirmed`; a future `ref.invalidate(accountProvider)` would redirect through the splash screen mid-flow. Add `/referral-prompt` and `/confirm-registration` to the router test's list of routes an unconfirmed account cannot open.
 - [ ] **Remaining manual checks for add-age-gate-and-face-consent** — 7.2's iOS simulator flows (the under-18 refusal, consent decline and accept, withdraw) passed on 2026-10-20. Still open: 7.2's pre-upgrade `app.db` step (Confirm your age, and the blocked screen), 7.3 (the consoles), and the reviewer's extra manual checks: a pending registration across the upgrade, an unknown consent version, a version change while the consent screen is open, and the date-of-birth transport limit.
 
