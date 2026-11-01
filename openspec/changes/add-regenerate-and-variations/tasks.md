@@ -33,7 +33,7 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
 
 ## 3. Make another
 
-- [ ] 3.1 Add "Make another" to `CreationDetailScreen` when `source != null`, pushing `/template/<id>` or `/create?prompt=<encoded>` with no photo (Decision 5). Show it in the missing-file state too. Verify in `creation_detail_screen_test.dart` and `router_test.dart`:
+- [x] 3.1 Add "Make another" to `CreationDetailScreen` when `source != null`, pushing `/template/<id>` or `/create?prompt=<encoded>` with no photo (Decision 5). Show it in the missing-file state too. Verify in `creation_detail_screen_test.dart` and `router_test.dart`:
   - template and custom creations open the right screen, prefilled, with no photo selected;
   - Back returns to the detail and nothing is submitted;
   - an older creation without a source has no Make another, and Download, Share and Delete still work;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'creation_store.dart';
 final _log = Logger('CreationDetail');
 
 const String _unlabelled = 'Creation';
+const String _makeAnotherLabel = 'Make another';
 const String _unavailableMessage = 'This image is no longer available';
 
 typedef _CreationKey = ({String userId, String jobId});
@@ -55,16 +57,32 @@ class _CreationDetailScreenState extends ConsumerState<CreationDetailScreen> {
         .valueOrNull
         ?.where((c) => c.jobId == widget.jobId)
         .firstOrNull;
+    final source = creation?.source;
+    final onMakeAnother = source == null ? null : () => _makeAnother(source);
     return bytes.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => _UnavailableView(onDelete: () => _confirmDelete(userId)),
+      error: (_, _) => _UnavailableView(
+        onDelete: () => _confirmDelete(userId),
+        onMakeAnother: onMakeAnother,
+      ),
       data: (data) => _DetailBody(
         jobId: widget.jobId,
         bytes: data,
         creation: creation,
         onDelete: () => _confirmDelete(userId),
+        onMakeAnother: onMakeAnother,
       ),
     );
+  }
+
+  /// Opens the form the creation came from; no photo is passed because the
+  /// app does not keep one.
+  void _makeAnother(CreationSource source) {
+    final templateId = source.templateId;
+    final location = templateId != null
+        ? '/template/${Uri.encodeComponent(templateId)}'
+        : Uri(path: '/create', queryParameters: {'prompt': source.prompt}).toString();
+    unawaited(context.push<void>(location));
   }
 
   Future<void> _confirmDelete(String userId) async {
@@ -113,12 +131,14 @@ class _DetailBody extends StatelessWidget {
     required this.bytes,
     required this.creation,
     required this.onDelete,
+    required this.onMakeAnother,
   });
 
   final String jobId;
   final Uint8List bytes;
   final Creation? creation;
   final VoidCallback onDelete;
+  final VoidCallback? onMakeAnother;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +152,8 @@ class _DetailBody extends StatelessWidget {
           bytes,
           fit: BoxFit.contain,
           width: double.infinity,
-          errorBuilder: (_, _, _) => _UnavailableView(onDelete: onDelete),
+          errorBuilder: (_, _, _) =>
+              _UnavailableView(onDelete: onDelete, onMakeAnother: null),
         ),
         const SizedBox(height: 16),
         Text(
@@ -146,6 +167,10 @@ class _DetailBody extends StatelessWidget {
           ),
         const SizedBox(height: 16),
         ImageActionRow(bytes: bytes, name: jobId, jobId: jobId),
+        if (onMakeAnother != null) ...[
+          const SizedBox(height: 12),
+          _MakeAnotherButton(onPressed: onMakeAnother!),
+        ],
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: onDelete,
@@ -158,9 +183,10 @@ class _DetailBody extends StatelessWidget {
 }
 
 class _UnavailableView extends StatelessWidget {
-  const _UnavailableView({required this.onDelete});
+  const _UnavailableView({required this.onDelete, required this.onMakeAnother});
 
   final VoidCallback onDelete;
+  final VoidCallback? onMakeAnother;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +198,10 @@ class _UnavailableView extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(_unavailableMessage),
           const SizedBox(height: 24),
+          if (onMakeAnother != null) ...[
+            _MakeAnotherButton(onPressed: onMakeAnother!),
+            const SizedBox(height: 12),
+          ],
           OutlinedButton.icon(
             onPressed: onDelete,
             icon: const Icon(Icons.delete_outline),
@@ -179,6 +209,21 @@ class _UnavailableView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MakeAnotherButton extends StatelessWidget {
+  const _MakeAnotherButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.auto_awesome_outlined),
+      label: const Text(_makeAnotherLabel),
     );
   }
 }
