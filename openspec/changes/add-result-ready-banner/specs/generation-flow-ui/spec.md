@@ -2,7 +2,7 @@
 
 ### Requirement: Tell the user when a result is ready on another screen
 
-When the app saves a creation through the catch-up (not from that generation's own status screen) while the app is in the foreground and the same account is signed in, the app SHALL show a banner at the bottom of the current screen reading "Your image is ready" with a View action. The banner SHALL stay for 6 seconds unless dismissed or tapped. View SHALL open that creation's detail in My creations, on top of the current screen, so Back returns to where the user was.
+When the app saves a creation through the catch-up (not from that generation's own status screen) while the app is in the foreground and the same account is signed in, the app SHALL show a banner at the bottom of the current screen reading "Your image is ready" with a View action. The banner SHALL stay for 4 seconds unless dismissed or tapped. View SHALL open that creation's detail in My creations, on top of the current screen, so Back returns to where the user was.
 
 The banner SHALL NOT be shown:
 - when the screen in front is the status screen of that same generation;
@@ -25,7 +25,7 @@ When several results become ready close together, each SHALL get its own banner,
 #### Scenario: Banner goes away on its own
 
 - **WHEN** the banner is shown and the user does nothing
-- **THEN** it is no longer shown after 6 seconds and the creation is still in My creations
+- **THEN** it is no longer shown after 4 seconds and the creation is still in My creations
 
 #### Scenario: No banner on the generation's own status screen
 

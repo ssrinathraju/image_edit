@@ -46,7 +46,7 @@ When the account has nothing remembered, `run` reads the local pending list, fin
 The interval is 5 seconds rather than 2 because the user is not watching the job. It caps the extra server load at one status call per remembered job every 5 seconds, and only while the app is open.
 
 ### Decision 3: One concrete presenter, no interface
-`ResultReadyPresenter` subscribes to the event stream, using the root `ScaffoldMessenger` key that is set on `MaterialApp.router`. For each event it shows a `SnackBar`: "Your image is ready", with a View action, lasting 6 seconds, floating. The messenger's own queue shows several banners one after another.
+`ResultReadyPresenter` subscribes to the event stream, using the root `ScaffoldMessenger` key that is set on `MaterialApp.router`. For each event it shows a `SnackBar`: "Your image is ready", with a View action, lasting 4 seconds, floating. The messenger's own queue shows several banners one after another.
 
 It shows nothing in these cases:
 - the event's `userId` is not the signed-in account;
@@ -73,7 +73,7 @@ The consent screen already watches the account. It shows "Update the app to cont
 
 | Screen | States |
 |---|---|
-| Result-ready banner (any signed-in screen) | Hidden: no event, the event is for that job's own status screen, or the account differs. Shown: text plus View for 6 s. Queued: the next banner shows when the current one ends or is dismissed. Tapped: opens the creation detail. |
+| Result-ready banner (any signed-in screen) | Hidden: no event, the event is for that job's own status screen, or the account differs. Shown: text plus View for 4 s. Queued: the next banner shows when the current one ends or is dismissed. Tapped: opens the creation detail. |
 | Creation detail, opened from View | The existing states: loaded; missing ("This image is no longer available" with Delete). |
 | Consent screen with an unknown version | "Update the app to continue", with no Accept; Back counts as declining. |
 

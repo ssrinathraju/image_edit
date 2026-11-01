@@ -31,14 +31,14 @@ Work on branch `feat/add-result-ready-banner`. Do not push to `main`. All work i
 - [ ] 3.1 Add a root `scaffoldMessengerKey` to `MaterialApp.router` in `main.dart`, and add `features/result_ready/result_ready_presenter.dart` (Decision 3 and 5):
   - it listens to `HistorySync.results`;
   - it skips an event whose `userId` is not the signed-in account, or whose job matches the current location `/status/<jobId>`;
-  - otherwise it shows a floating SnackBar, "Your image is ready", with View, for 6 seconds;
+  - otherwise it shows a floating SnackBar, "Your image is ready", with View, for 4 seconds;
   - View calls `router.push('/creations/<jobId>')`;
   - an error while presenting is logged with the job id and error type only.
 
   Verify with `test/features/result_ready/result_ready_presenter_test.dart` (a widget test with the real router and a fake store):
   - an event on home shows the banner;
   - View opens the creation detail with the image, and Back returns home;
-  - the banner is gone after 6 s;
+  - the banner is gone after 4 s;
   - no banner on `/status/<sameJob>`, and a banner on `/status/<otherJob>`;
   - two events show two banners in order;
   - an event for another account shows nothing.
