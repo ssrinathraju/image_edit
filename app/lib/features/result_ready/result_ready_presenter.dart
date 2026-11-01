@@ -46,17 +46,21 @@ class ResultReadyPresenter {
       final location =
           router.routerDelegate.currentConfiguration.lastOrNull?.matchedLocation;
       if (location == '/status/${event.jobId}') return;
-      messengerKey.currentState!.showSnackBar(_banner(event.jobId));
+      messengerKey.currentState!.showSnackBar(_banner(event.jobId, _screenReaderInUse()));
     } on Object catch (error) {
       _log.warning('banner_failed job=${event.jobId} ${error.runtimeType}');
     }
   }
 
-  SnackBar _banner(String jobId) => SnackBar(
+  bool _screenReaderInUse() =>
+      MediaQuery.accessibleNavigationOf(messengerKey.currentContext!);
+
+  SnackBar _banner(String jobId, bool persist) => SnackBar(
         content: const Text(_bannerText),
         duration: _bannerDuration,
-        // An action makes a SnackBar stay until dismissed unless told not to.
-        persist: false,
+        // An action makes a SnackBar stay until dismissed; only a screen
+        // reader user needs that.
+        persist: persist,
         behavior: SnackBarBehavior.floating,
         action: SnackBarAction(
           label: _viewLabel,

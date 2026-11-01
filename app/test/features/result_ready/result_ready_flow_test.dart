@@ -96,4 +96,42 @@ void main() {
     expect(store.creations['user-1']!.single.jobId, 'job-1');
     expect(find.textContaining('Saved to My creations'), findsOneWidget);
   });
+
+  testWidgets('no status checks while the app is in the background', (tester) async {
+    await _submitFromCreate(tester);
+    container.read(routerProvider).go('/profile');
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    final before = client.statusCalls.length;
+
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump(const Duration(seconds: 30));
+    expect(client.statusCalls.length, before);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    expect(client.statusCalls.length, greaterThan(before));
+  });
+
+  testWidgets('no status checks when nothing is remembered', (tester) async {
+    client = FakeApiClient();
+    container = await pumpApp(
+      tester,
+      client: client,
+      storage: FakeSessionStorage(savedSession),
+      store: InMemoryCreationStore(),
+      useImageEditApp: true,
+    );
+
+    await tester.pump(const Duration(seconds: 30));
+
+    expect(client.statusCalls, isEmpty);
+  });
 }

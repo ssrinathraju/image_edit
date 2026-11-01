@@ -163,4 +163,20 @@ void main() {
     expect(store.savedJobs, ['job-1']);
     expect(find.text(_bannerText), findsNothing);
   });
+
+  testWidgets('the banner stays for screen-reader users', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(accessibleNavigation: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await _pump(tester);
+    await _remember('job-1');
+    await _waitForWatcher(tester);
+
+    await tester.pump(const Duration(seconds: 30));
+
+    expect(find.text(_bannerText), findsOneWidget);
+    await tester.tap(find.text('View'));
+    await tester.pumpAndSettle();
+    expect(_location(), '/creations/job-1');
+  });
 }

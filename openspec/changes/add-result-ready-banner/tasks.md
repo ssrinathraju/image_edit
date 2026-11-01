@@ -28,7 +28,7 @@ Work on branch `feat/add-result-ready-banner`. Do not push to `main`. All work i
 
 ## 3. Presenter and banner
 
-- [ ] 3.1 Add a root `scaffoldMessengerKey` to `MaterialApp.router` in `main.dart`, and add `features/result_ready/result_ready_presenter.dart` (Decision 3 and 5):
+- [x] 3.1 Add a root `scaffoldMessengerKey` to `MaterialApp.router` in `main.dart`, and add `features/result_ready/result_ready_presenter.dart` (Decision 3 and 5):
   - it listens to `HistorySync.results`;
   - it skips an event whose `userId` is not the signed-in account, or whose job matches the current location `/status/<jobId>`;
   - otherwise it shows a floating SnackBar, "Your image is ready", with View, for 4 seconds, with `persist` set to `MediaQuery.accessibleNavigationOf(context)` so screen-reader users keep it until acted on;

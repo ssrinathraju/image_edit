@@ -123,7 +123,9 @@ class HistorySync {
         bytes: bytes,
         finishedAt: clock(),
       );
-      _results.add(ResultReady(jobId: entry.jobId, userId: userId));
+      if (!_results.isClosed) {
+        _results.add(ResultReady(jobId: entry.jobId, userId: userId));
+      }
       return true;
     } on DioException catch (error) {
       _log.info('image_unavailable job=${entry.jobId} ${error.type.name}');

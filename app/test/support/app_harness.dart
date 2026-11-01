@@ -10,8 +10,8 @@ import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/features/plans/invite_screen.dart';
-import 'package:image_edit/main.dart';
 import 'package:image_edit/features/profile/profile_providers.dart';
+import 'package:image_edit/main.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/services/generation_providers.dart';
 
