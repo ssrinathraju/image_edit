@@ -36,7 +36,7 @@ Work on branch `feat/add-on-device-history`. Do not push to `main`. All work is 
 - [x] 3.1 Add the `BackupExclusion` interface with a method-channel implementation (`image_edit/backup`, `excludeFromBackup(path)`). The store calls it when it creates `creations/` and once at startup, and logs and ignores failures. Add the handler in `ios/Runner/AppDelegate.swift`, which sets `isExcludedFromBackup` on the URL. Verify:
   - the store test checks the fake is called with the `creations/` path and that a throwing fake doesn't break saving;
   - `flutter build ios --no-codesign --debug` succeeds.
-- [ ] 3.2 Add `android/app/src/main/res/xml/backup_rules.xml` and `data_extraction_rules.xml`, each excluding `domain="file" path="creations/"`, the latter for both cloud backup and device transfer. Reference them from `AndroidManifest.xml` with `android:fullBackupContent` and `android:dataExtractionRules`. Verify that `flutter build apk --debug` succeeds and that the merged manifest contains both attributes.
+- [x] 3.2 Add `android/app/src/main/res/xml/backup_rules.xml` and `data_extraction_rules.xml`, each excluding `domain="file" path="creations/"`, the latter for both cloud backup and device transfer. Reference them from `AndroidManifest.xml` with `android:fullBackupContent` and `android:dataExtractionRules`. Verify that `flutter build apk --debug` succeeds and that the merged manifest contains both attributes. *(Verified 2026-10-27 after the Android SDK was installed: the debug APK built, and `build/app/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml` contains `android:fullBackupContent="@xml/backup_rules"` and `android:dataExtractionRules="@xml/data_extraction_rules"`.)*
 
 ## 4. Remember on submit, save on success
 
