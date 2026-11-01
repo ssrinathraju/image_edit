@@ -69,4 +69,4 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
   - check the log lines for each change carry no prompt text.
 
   This box stays unticked until someone runs it. Name any skipped step in the PR.
-- [ ] 5.3 Push `feat/add-template-admin`. Verify with `git log origin/feat/add-template-admin -1` that it matches the local HEAD.
+- [x] 5.3 Push `feat/add-template-admin`. Verify with `git log origin/feat/add-template-admin -1` that it matches the local HEAD.
