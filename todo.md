@@ -103,6 +103,8 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-result-ready-banner
 
 - [ ] Tapping View on the banner while that creation's detail screen is already in front opens a second copy of it. Harmless; fix by checking the current location before `router.push`.
+- [ ] **Manual check 5.2 never run** for add-result-ready-banner, on iOS simulator and Android emulator, against a local server in log mode on a temporary storage root: (1) submit, go home before it finishes: banner appears, View opens the creation, Back returns home; (2) submit, open the profile: banner appears there; (3) stay on the status screen until it finishes: no banner; (4) submit two quickly and go home: two banners one after the other; (5) submit, background the app until it would have finished, reopen: banner within about 5 s; (6) sign out while a job runs: no banner after sign-out; (7) TalkBack (Android) and VoiceOver (iOS) announce the banner text and View, and the banner stays until dismissed.
+- [ ] Test nit: the screen-reader test in `app/test/features/result_ready/result_ready_presenter_test.dart` taps View but does not assert the banner is gone afterwards; add that assertion.
 
 ## From add-account-security
 
