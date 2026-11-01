@@ -12,6 +12,7 @@ from image_edit_server.core.email_codes import (
 )
 from image_edit_server.core.identity_verifier import ProviderIdentity
 from image_edit_server.schemas.report import Report
+from image_edit_server.schemas.template import StoredTemplate
 from image_edit_server.schemas.user import UsageSnapshot, User
 
 
@@ -369,4 +370,26 @@ class UserStore(Protocol):
 
     def report_image_names(self, reporter_id: Optional[str] = None) -> list[str]:
         """Report image file names, for one reporter or for every report."""
+        ...
+
+    def insert_template(self, template: StoredTemplate) -> None:
+        """Store a new template; raises TemplateExistsError on a duplicate id."""
+        ...
+
+    def update_template(self, template_id: str, changes: dict, updated_at: str) -> bool:
+        """Apply column changes; False when the id is not stored."""
+        ...
+
+    def set_template_retired(self, template_id: str, retired: bool, updated_at: str) -> bool: ...
+
+    def get_template(self, template_id: str) -> Optional[StoredTemplate]: ...
+
+    def list_templates(self) -> list[StoredTemplate]:
+        """Every stored template, retired ones included, unordered."""
+        ...
+
+    def are_templates_seeded(self) -> bool: ...
+
+    def import_seed_templates(self, templates: list[StoredTemplate]) -> None:
+        """Insert the seed templates and set the seeded marker in one transaction."""
         ...

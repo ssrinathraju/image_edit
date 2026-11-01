@@ -100,3 +100,47 @@ def test_invalid_entry_names_the_id(tmp_path):
 def test_missing_catalog_file_is_reported(tmp_path):
     with pytest.raises(CatalogError, match="not found"):
         load_catalog(tmp_path)
+
+
+# ── catalog built from stored rows ──────────────────────────────────────────
+
+from image_edit_server.repos.template_catalog import (  # noqa: E402
+    CatalogHolder,
+    catalog_from_stored,
+    check_stored_previews,
+)
+from image_edit_server.schemas.template import StoredTemplate  # noqa: E402
+
+
+def _stored(id_: str, popularity: int, retired: bool = False) -> StoredTemplate:
+    return StoredTemplate(
+        id=id_, title=id_.title(), tags=["x"], popularity=popularity,
+        preview=f"{id_}-aaa.webp", prompt="p", retired=retired, updated_at="t",
+    )
+
+
+def test_stored_catalog_leaves_out_retired_templates_and_keeps_the_order():
+    rows = [_stored("low", 10), _stored("gone", 99, retired=True), _stored("high", 80)]
+
+    catalog = catalog_from_stored(rows)
+
+    assert [t.id for t in catalog.all()] == ["high", "low"]
+    assert catalog.get("gone") is None
+    assert catalog.search("gone") == []
+
+
+def test_holder_swaps_the_whole_catalog():
+    holder = CatalogHolder(catalog_from_stored([_stored("one", 1)]))
+    old = holder.current
+
+    holder.replace(catalog_from_stored([_stored("two", 2)]))
+
+    assert [t.id for t in old.all()] == ["one"]
+    assert [t.id for t in holder.current.all()] == ["two"]
+
+
+def test_a_stored_row_with_a_missing_preview_names_the_id(tmp_path):
+    (tmp_path / "ok-aaa.webp").write_bytes(b"x")
+
+    with pytest.raises(CatalogError, match="'lost'"):
+        check_stored_previews([_stored("ok", 1), _stored("lost", 2)], tmp_path)

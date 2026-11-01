@@ -24,7 +24,7 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
 ## 2. Stored templates and catalog
 
 - [x] 2.1 Add `repos/user_store_templates.py`, a mixin with insert, update, set_retired, get, list_all and the seeded marker, using the store lock. Verify in `tests/repos/test_user_store_templates.py`: a round trip of every field, tags kept in order, retired filtering, and the marker.
-- [ ] 2.2 Add `seed_templates_if_needed` and build `TemplateCatalog` from stored rows. Put a `CatalogHolder` in `main.py`, with the preview mount from `<STORAGE_ROOT>/template-previews` and the startup orphan sweep (Decisions 1, 2 and 5). Verify in `tests/repos/test_template_catalog.py` and `tests/test_main.py`:
+- [x] 2.2 Add `seed_templates_if_needed` and build `TemplateCatalog` from stored rows. Put a `CatalogHolder` in `main.py`, with the preview mount from `<STORAGE_ROOT>/template-previews` and the startup orphan sweep (Decisions 1, 2 and 5). Verify in `tests/repos/test_template_catalog.py` and `tests/test_main.py`:
   - a first start imports all 12 seed templates with hashed preview files served at their `preview_url`;
   - a second start with an edited seed ignores it;
   - a start after every template is retired does not re-import;

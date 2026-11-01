@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import ValidationError
 
-from image_edit_server.schemas.template import Template
+from image_edit_server.schemas.template import StoredTemplate, Template
 
 CATALOG_FILENAME = "catalog.json"
 PREVIEWS_DIRNAME = "previews"
@@ -81,3 +81,27 @@ def _parse_entry(entry: object, index: int) -> Template:
         entry_id = entry.get("id") if isinstance(entry, dict) else None
         label = f"'{entry_id}'" if entry_id else f"at index {index}"
         raise CatalogError(f"invalid template {label}: {exc}") from exc
+
+
+class CatalogHolder:
+    """The current public catalog; replaced whole after each admin write."""
+
+    def __init__(self, catalog: TemplateCatalog) -> None:
+        self.current = catalog
+
+    def replace(self, catalog: TemplateCatalog) -> None:
+        self.current = catalog
+
+
+def catalog_from_stored(rows: list[StoredTemplate]) -> TemplateCatalog:
+    """The public catalog: every stored template that is not retired."""
+    return TemplateCatalog([row for row in rows if not row.retired])
+
+
+def check_stored_previews(rows: list[StoredTemplate], previews_dir: Path) -> None:
+    """Raise CatalogError naming the first stored template whose preview file is missing."""
+    for row in rows:
+        if not (previews_dir / row.preview).is_file():
+            raise CatalogError(
+                f"template '{row.id}' references missing preview '{row.preview}'"
+            )
