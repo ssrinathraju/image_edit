@@ -109,3 +109,16 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-account-security
 
 - [ ] **Manual checks 4.2 and 4.3 never run** for add-account-security: 4.2 (two iOS simulators signed in to one account) and 4.3 (Google and Apple consoles). Include the reviewer's extra checks: Link asks for the password before the provider sheet; a real session expiry during a link signs out while a rejected provider token does not; the email-changed notice wording ("contact support right away") in log mode.
+
+## From add-regenerate-and-variations
+
+- [ ] **Manual check 4.2 never run** for add-regenerate-and-variations, on iOS simulator and Android emulator, against a local server in log mode on a temporary storage root:
+  - Generate from a template, tap "More like this": a different image, and two creations with the same label.
+  - Make a generation fail (or use the stub) and check "Try again" is shown.
+  - On a custom result, tap Edit prompt: photo and prompt are filled in; change the prompt and submit: a new result.
+  - Tap Home on a result, then return from the result-ready banner or My creations: no More like this; Make another is offered instead.
+  - From My creations, Make another on a template creation and on a custom creation: the right form, no photo; Back returns; pick a photo and submit: it works.
+  - Stacked-forms check: the selected photo is scoped per form, so opening Edit prompt or Make another over another form does not share or clobber the photo.
+  - Stopped-server poll-error check: stop the server while polling a job; Try again must not be offered on a poll error.
+  - Use up the daily limit, then tap More like this: the limit dialog appears and nothing is submitted.
+  - Open a creation saved before this change: no Make another.
