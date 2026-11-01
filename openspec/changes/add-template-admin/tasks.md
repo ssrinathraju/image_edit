@@ -35,7 +35,7 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
 
 ## 3. Admin service and endpoints
 
-- [ ] 3.1 Add `services/template_admin_service.py`, covering validation and screening (Decision 6), preview normalisation (Decision 4), the write order (Decision 5), the lock and catalog swap (Decision 2), and audit logs (Decision 7). Verify in `tests/services/test_template_admin_service.py`:
+- [x] 3.1 Add `services/template_admin_service.py`, covering validation and screening (Decision 6), preview normalisation (Decision 4), the write order (Decision 5), the lock and catalog swap (Decision 2), and audit logs (Decision 7). Verify in `tests/services/test_template_admin_service.py`:
   - each field limit in the spec, with the field named;
   - a blocked term in the title, a tag or the prompt, with the field named and nothing written;
   - preview: 1200×800 JPEG becomes 512×512 WebP; 3 MB is refused; text named `.png` is refused; GIF is refused; a decompression bomb is refused;

@@ -37,6 +37,15 @@ def build_templates_dir(root: Path, entries: list[dict] = TEST_TEMPLATES) -> Pat
     return root
 
 
+def image_bytes(fmt: str = "PNG", size: tuple[int, int] = (64, 64), color=(200, 30, 30)) -> bytes:
+    """A small generated image in the given Pillow format."""
+    from io import BytesIO
+
+    out = BytesIO()
+    Image.new("RGB", size, color).save(out, format=fmt)
+    return out.getvalue()
+
+
 DEFAULT_PASSWORD = "correct horse battery"
 ADULT_DOB = "1990-01-01"
 
