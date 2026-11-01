@@ -22,10 +22,13 @@ def normalise_preview(data: bytes) -> bytes:
         _check_format_and_size(data)
         with Image.open(BytesIO(data)) as image:
             image.load()
-            rgb = image.convert("RGB")
+            upright = ImageOps.exif_transpose(image)
+            rgb = upright.convert("RGB")
     except InvalidPreview:
         raise
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError) as error:
+    except (
+        UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError
+    ) as error:
         raise InvalidPreview("the preview is not a decodable PNG, JPEG or WebP image") from error
     square = ImageOps.fit(rgb, (PREVIEW_SIZE, PREVIEW_SIZE), Image.Resampling.LANCZOS)
     out = BytesIO()

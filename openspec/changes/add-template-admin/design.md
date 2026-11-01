@@ -108,7 +108,7 @@ On success the service logs `template_admin action=<create|edit|retire|restore> 
 ### Decision 8: Endpoints and error shapes
 - **Router:** `api/admin_templates.py`, with the prefix `/admin/templates`, using `require_admin`.
 - **Request format:** multipart for create and edit, because of the image. Tags are one comma-separated string. `popularity` is parsed as an integer, and a non-integer value is `invalid_template_field`.
-- **Errors** use the existing `ErrorBody {error, detail}`, plus an optional `field`.
+- **Errors** use the existing `ErrorBody {error, detail}`, plus an optional `field` (a `FieldErrorBody` subclass).
 - **Retire and restore** are idempotent.
 - **The public `GET /templates`** and the preview mount are unchanged in shape. The mount moves to `<STORAGE_ROOT>/template-previews`, and `PREVIEW_URL_PREFIX` stays `/template-previews`.
 

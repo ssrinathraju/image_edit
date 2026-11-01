@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 from PIL import Image
 
+from image_edit_server.services import template_admin_service as admin_service
 from image_edit_server.services.template_admin_service import (
     RawTemplateFields,
     TemplateAdminService,
@@ -68,6 +69,7 @@ def _files(previews_dir) -> set:
         ({"popularity": "-1"}, "popularity"),
         ({"popularity": "ten"}, "popularity"),
         ({"popularity": "1.5"}, "popularity"),
+        ({"popularity": "9" * 5000}, "popularity"),
         ({"prompt": " "}, "prompt"),
         ({"prompt": "p" * 501}, "prompt"),
         ({"title": None}, "title"),
@@ -369,3 +371,42 @@ async def test_log_lines_carry_action_id_and_admin_only(service, caplog):
     for secret in ("SECRET", "Quokka", "zebra", SECRET_TAG, "blockedword", "neon city"):
         assert secret not in joined
     assert "fields=title,prompt" in lines[1]
+
+
+async def test_a_very_long_popularity_is_refused_without_converting_it(service, monkeypatch):
+    # Python 3.11+ makes int() raise ValueError on a string of over 4300 digits.
+    def limited_int(value):
+        if isinstance(value, str) and len(value) > 4300:
+            raise ValueError("Exceeds the limit for integer string conversion")
+        return int(value)
+
+    monkeypatch.setattr(admin_service, "int", limited_int, raising=False)
+
+    body = await _refused(service.create(ADMIN, _fields(popularity="9" * 5000), image_bytes()))
+
+    assert (body["status"], body["field"]) == (400, "popularity")
+
+
+async def test_a_failed_catalog_swap_still_returns_the_saved_template(
+    service, user_store, holder, monkeypatch, caplog
+):
+    def broken_replace(catalog):
+        raise RuntimeError("swap failed")
+
+    monkeypatch.setattr(holder, "replace", broken_replace)
+
+    row = await service.create(ADMIN, _fields(), image_bytes())
+
+    assert user_store.get_template("neon-city") is not None
+    assert row.id == "neon-city"
+    assert "catalog refresh failed" in caplog.text
+
+
+async def test_success_and_refusal_lines_quote_the_id_the_same_way(service, caplog):
+    caplog.set_level(logging.INFO)
+    await service.create(ADMIN, _fields(), image_bytes())
+    await _refused(service.retire(ADMIN, "missing"))
+
+    lines = [r.getMessage() for r in caplog.records if r.name.endswith("template_admin_service")]
+    assert "template='neon-city'" in lines[0]
+    assert "template='missing'" in lines[1]

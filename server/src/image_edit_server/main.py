@@ -61,6 +61,18 @@ from image_edit_server.services.worker import run_worker
 logger = logging.getLogger(__name__)
 
 PREVIEWS_STORAGE_DIRNAME = "template-previews"
+PACKAGE_LOGGER_NAME = "image_edit_server"
+
+
+def _configure_logging() -> None:
+    """Show the app's INFO lines (the audit trail) under a plain `uvicorn --factory` start."""
+    package_logger = logging.getLogger(PACKAGE_LOGGER_NAME)
+    if package_logger.level == logging.NOTSET:
+        package_logger.setLevel(logging.INFO)
+    if not package_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+        package_logger.addHandler(handler)
 
 
 def _make_pipeline(cfg: Settings) -> GenerationPipeline:
@@ -132,6 +144,7 @@ def create_app(
     apple_client: AppleRevocationClient | None = None,
 ) -> FastAPI:
     """Build the app; `verifiers` and `apple_client` replace the real provider clients in tests."""
+    _configure_logging()
     cfg = settings or Settings()
     email_sender = sender or _make_email_sender(cfg)
     store = InMemoryJobStore()

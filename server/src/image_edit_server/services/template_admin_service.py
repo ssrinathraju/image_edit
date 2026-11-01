@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from image_edit_server.core.template_preview import InvalidPreview, normalise_preview
 from image_edit_server.core.user_store import UserStore
+from image_edit_server.repos.preview_files import write_preview_file
 from image_edit_server.repos.template_catalog import CatalogHolder, catalog_from_stored
 from image_edit_server.repos.user_store_templates import TemplateExistsError
 from image_edit_server.schemas.template import (
@@ -27,12 +28,13 @@ from image_edit_server.schemas.template import (
     StoredTemplate,
 )
 from image_edit_server.services.safety.safety_service import SafetyService
-from image_edit_server.services.template_seed import hashed_preview_name, write_preview_file
+from image_edit_server.services.template_seed import hashed_preview_name
 
 logger = logging.getLogger(__name__)
 
 PREVIEW_SUFFIX = ".webp"
-POPULARITY_PATTERN = re.compile(r"-?[0-9]+")
+# At most three digits: int() on a longer string raises ValueError on Python 3.11+.
+POPULARITY_PATTERN = re.compile(r"[0-9]{1,3}")
 MAX_LOGGED_ID_CHARS = 64
 
 
@@ -70,7 +72,8 @@ def _clean_id(raw: Optional[str]) -> str:
     if len(raw) > MAX_TEMPLATE_ID_CHARS or not re.fullmatch(TEMPLATE_ID_PATTERN, raw):
         raise _invalid_field(
             "id",
-            f"id must be 1 to {MAX_TEMPLATE_ID_CHARS} lower-case letters, digits and single hyphens",
+            f"id must be 1 to {MAX_TEMPLATE_ID_CHARS} lower-case letters, digits and "
+            "single hyphens",
         )
     return raw
 
@@ -94,7 +97,9 @@ def _clean_prompt(raw: str) -> str:
 def _clean_popularity(raw: str) -> int:
     text = raw.strip()
     if not POPULARITY_PATTERN.fullmatch(text) or not 0 <= int(text) <= MAX_POPULARITY:
-        raise _invalid_field("popularity", f"popularity must be a whole number from 0 to {MAX_POPULARITY}")
+        raise _invalid_field(
+            "popularity", f"popularity must be a whole number from 0 to {MAX_POPULARITY}"
+        )
     return int(text)
 
 
@@ -105,7 +110,9 @@ def _clean_tags(raw: str) -> list[str]:
         if not tag:
             continue
         if len(tag) > MAX_TEMPLATE_TAG_CHARS:
-            raise _invalid_field("tags", f"each tag must be 1 to {MAX_TEMPLATE_TAG_CHARS} characters")
+            raise _invalid_field(
+                "tags", f"each tag must be 1 to {MAX_TEMPLATE_TAG_CHARS} characters"
+            )
         if tag not in tags:
             tags.append(tag)
     if len(tags) > MAX_TEMPLATE_TAGS:
@@ -163,18 +170,22 @@ class TemplateAdminService:
     async def create(
         self, admin_id: str, raw: RawTemplateFields, preview: Optional[bytes]
     ) -> StoredTemplate:
-        return await self._audited("create", raw.id or "", admin_id, self._create(admin_id, raw, preview))
+        operation = self._create(admin_id, raw, preview)
+        return await self._audited("create", raw.id or "", admin_id, operation)
 
     async def edit(
         self, admin_id: str, template_id: str, raw: RawTemplateFields, preview: Optional[bytes]
     ) -> StoredTemplate:
-        return await self._audited("edit", template_id, admin_id, self._edit(admin_id, template_id, raw, preview))
+        operation = self._edit(admin_id, template_id, raw, preview)
+        return await self._audited("edit", template_id, admin_id, operation)
 
     async def retire(self, admin_id: str, template_id: str) -> StoredTemplate:
-        return await self._audited("retire", template_id, admin_id, self._set_retired(admin_id, template_id, True))
+        operation = self._set_retired(admin_id, template_id, True)
+        return await self._audited("retire", template_id, admin_id, operation)
 
     async def restore(self, admin_id: str, template_id: str) -> StoredTemplate:
-        return await self._audited("restore", template_id, admin_id, self._set_retired(admin_id, template_id, False))
+        operation = self._set_retired(admin_id, template_id, False)
+        return await self._audited("restore", template_id, admin_id, operation)
 
     async def _audited(self, action: str, template_id: str, admin_id: str, operation):
         try:
@@ -188,7 +199,10 @@ class TemplateAdminService:
 
     def _log_success(self, action: str, template_id: str, admin_id: str, fields: str = "") -> None:
         suffix = f" fields={fields}" if fields else ""
-        logger.info("template_admin action=%s template=%s admin=%s%s", action, template_id, admin_id, suffix)
+        logger.info(
+            "template_admin action=%s template=%s admin=%s%s",
+            action, _loggable_id(template_id), admin_id, suffix,
+        )
 
     async def _create(
         self, admin_id: str, raw: RawTemplateFields, preview: Optional[bytes]
@@ -222,7 +236,9 @@ class TemplateAdminService:
             raise _not_found(template_id)
         fields = _clean_supplied(raw)
         if not fields and preview is None:
-            raise _invalid_field("fields", "supply at least one of title, tags, popularity, prompt, preview")
+            raise _invalid_field(
+                "fields", "supply at least one of title, tags, popularity, prompt, preview"
+            )
         self._screen(fields)
         webp = await self._normalise(preview) if preview is not None else None
         async with self._write_lock():
@@ -275,7 +291,9 @@ class TemplateAdminService:
         except InvalidPreview as error:
             raise _refusal(400, "invalid_preview", str(error), "preview") from error
 
-    async def _write_file_then(self, name: str, content: bytes, commit: Callable[[], object]) -> None:
+    async def _write_file_then(
+        self, name: str, content: bytes, commit: Callable[[], object]
+    ) -> None:
         await asyncio.to_thread(write_preview_file, self._previews_dir, name, content)
         try:
             self._commit(commit)
@@ -295,7 +313,12 @@ class TemplateAdminService:
             ) from error
 
     def _swap_catalog(self) -> None:
-        self._holder.replace(catalog_from_stored(self._store.list_templates()))
+        # The row is already saved. A failed swap must not turn that into a 500; the next
+        # write, or a restart, rebuilds the catalog.
+        try:
+            self._holder.replace(catalog_from_stored(self._store.list_templates()))
+        except Exception:
+            logger.exception("template catalog refresh failed; the change was saved")
 
     def _delete_file_if_unreferenced(self, name: str) -> None:
         if any(row.preview == name for row in self._store.list_templates()):

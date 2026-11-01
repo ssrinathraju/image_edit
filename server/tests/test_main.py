@@ -426,3 +426,20 @@ def test_unreferenced_preview_files_are_removed_at_startup(tmp_path, seed_copy):
 
     assert not stray.exists()
     assert len(list((tmp_path / "s" / "template-previews").iterdir())) == SEED_TEMPLATE_COUNT
+
+
+def test_create_app_makes_the_package_info_lines_visible(tmp_path, templates_dir):
+    import logging
+
+    package_logger = logging.getLogger("image_edit_server")
+    saved = (package_logger.level, list(package_logger.handlers))
+    package_logger.setLevel(logging.NOTSET)
+    package_logger.handlers.clear()
+    try:
+        create_app(Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s")))
+
+        assert package_logger.isEnabledFor(logging.INFO)
+        assert package_logger.handlers
+    finally:
+        package_logger.setLevel(saved[0])
+        package_logger.handlers[:] = saved[1]

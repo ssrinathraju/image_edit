@@ -684,9 +684,11 @@ the blocked-term list.
 | 409 | `template_exists` | create with an id that exists, retired or not |
 | 500 | `template_store_failed` | the database write failed; nothing was changed |
 
+To clear all tags on a template, send `-F "tags=,"`: an entirely empty form field is treated as missing.
+
 Every change writes one INFO log line (`template_admin action=<create|edit|retire|restore>
 template=<id> admin=<account id>`; an edit adds the names of the changed fields). Refusals log
-`template_admin_refused ... reason=<error>`. Prompts, titles, tags and emails are never logged.
+`template_admin_refused ... reason=<error>`. Prompts, titles, tags and emails are never logged. The app configures its own INFO logging when it starts, so these lines appear under the plain `uvicorn --factory` command.
 
 ## Tests
 
