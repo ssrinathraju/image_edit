@@ -12,6 +12,22 @@ final imagePickerProvider = Provider<ImagePicker>((_) => ImagePicker());
 
 final selectedPhotoProvider = StateProvider.autoDispose<XFile?>((_) => null);
 
+/// Gives a form its own selected photo, so forms stacked on each other
+/// (for example "Make another" over a template) never share a selection.
+class PhotoScope extends StatelessWidget {
+  const PhotoScope({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(
+      overrides: [selectedPhotoProvider.overrideWith((_) => null)],
+      child: child,
+    );
+  }
+}
+
 class PhotoPickerField extends ConsumerWidget {
   const PhotoPickerField({super.key});
 
@@ -65,7 +81,9 @@ class PhotoPickerField extends ConsumerWidget {
     ImageSource source,
   ) async {
     try {
-      final file = await ref.read(imagePickerProvider).pickImage(
+      final file = await ref
+          .read(imagePickerProvider)
+          .pickImage(
             source: source,
             maxWidth: _maxPhotoWidth,
             imageQuality: _photoQuality,
@@ -76,7 +94,8 @@ class PhotoPickerField extends ConsumerWidget {
       final message = source == ImageSource.camera
           ? 'The camera is not available. Choose a photo from the library instead.'
           : 'Could not open the photo library.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }

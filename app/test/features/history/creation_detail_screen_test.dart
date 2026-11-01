@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/history/creation_detail_screen.dart';
 import 'package:image_edit/features/history/creation_store.dart';
+import 'package:image_edit/schemas/creation.dart';
 import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_edit/services/image_actions.dart';
 
@@ -23,6 +24,7 @@ final _finishedAt = DateTime(2026, 10, 19, 10, 30);
 Future<void> _save(
   InMemoryCreationStore store, {
   String label = 'astronaut on a beach',
+  CreationSource? source,
 }) =>
     store.save(
       userId: 'user-1',
@@ -30,6 +32,7 @@ Future<void> _save(
       label: label,
       bytes: tinyPng,
       finishedAt: _finishedAt,
+      source: source,
     );
 
 Future<FakeImageActions> _pump(
@@ -44,6 +47,22 @@ Future<FakeImageActions> _pump(
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => const Text('grid')),
+      GoRoute(
+        path: '/template/:id',
+        builder: (_, state) => Scaffold(
+          appBar: AppBar(),
+          body: Text('template:${state.pathParameters['id']}'),
+        ),
+      ),
+      GoRoute(
+        path: '/create',
+        builder: (_, state) => Scaffold(
+          appBar: AppBar(),
+          body: Text(
+            'create:${state.uri.queryParameters['prompt']}:${state.extra}',
+          ),
+        ),
+      ),
       GoRoute(
         path: '/creations/:jobId',
         builder: (_, state) =>
@@ -270,6 +289,89 @@ void main() {
 
     expect(find.text('Could not delete the creation.'), findsOneWidget);
     expect(find.text('astronaut on a beach'), findsOneWidget);
+  });
+
+  group('Make another', () {
+    testWidgets('a template creation opens its template, with no photo', (tester) async {
+      final store = InMemoryCreationStore();
+      await _save(store, source: const CreationSource.template('golden-hour-beach'));
+      await _pump(tester, store);
+
+      await tester.tap(find.text('Make another'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('template:golden-hour-beach'), findsOneWidget);
+    });
+
+    testWidgets('a custom creation opens the form with its prompt, with no photo',
+        (tester) async {
+      final store = InMemoryCreationStore();
+      await _save(store, source: const CreationSource.prompt('a & b #1 \u{1F680}'));
+      await _pump(tester, store);
+
+      await tester.tap(find.text('Make another'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('create:a & b #1 \u{1F680}:null'), findsOneWidget);
+    });
+
+    testWidgets('Back returns to the detail and nothing is submitted', (tester) async {
+      final store = InMemoryCreationStore();
+      final client = FakeApiClient();
+      await _save(store, source: const CreationSource.prompt('astronaut on a beach'));
+      await _pump(tester, store, client: client);
+
+      await tester.tap(find.text('Make another'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CreationDetailScreen), findsOneWidget);
+      expect(client.submitted, isEmpty);
+    });
+
+    testWidgets('an older creation has none, and the other actions still work',
+        (tester) async {
+      final store = InMemoryCreationStore();
+      await _save(store);
+      final actions = await _pump(tester, store);
+
+      expect(find.text('Make another'), findsNothing);
+      await tester.tap(find.text('Download'));
+      await tester.pumpAndSettle();
+      expect(actions.saved, hasLength(1));
+      expect(find.text('Share'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Delete'), findsOneWidget);
+    });
+
+    testWidgets('is still offered when the image file is missing', (tester) async {
+      final store = InMemoryCreationStore();
+      await _save(store, source: const CreationSource.template('golden-hour-beach'));
+      store.images.clear();
+      await _pump(tester, store);
+
+      expect(find.text('This image is no longer available'), findsOneWidget);
+      await tester.tap(find.text('Make another'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('template:golden-hour-beach'), findsOneWidget);
+    });
+
+    testWidgets('is still offered when the image does not decode', (tester) async {
+      final store = InMemoryCreationStore();
+      await store.save(
+        userId: 'user-1',
+        jobId: 'job-1',
+        label: 'x',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        finishedAt: _finishedAt,
+        source: const CreationSource.prompt('p'),
+      );
+      await _pump(tester, store);
+
+      expect(find.text('This image is no longer available'), findsOneWidget);
+      expect(find.text('Make another'), findsOneWidget);
+    });
   });
 }
 

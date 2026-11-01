@@ -54,13 +54,21 @@ class CreationStore extends ChangeNotifier {
     required String label,
     required Uint8List bytes,
     required DateTime finishedAt,
+    CreationSource? source,
   }) => _run(() async {
     if (_deletedAccounts.contains(userId)) return;
     final dir = await _createAccountDir(userId);
     final index = await _readIndex(userId);
     if (!index.any((c) => c.jobId == jobId)) {
       await _writeAtomic(_imageFile(userId, jobId), bytes);
-      index.add(Creation(jobId: jobId, label: label, finishedAt: finishedAt));
+      index.add(
+        Creation(
+          jobId: jobId,
+          label: label,
+          finishedAt: finishedAt,
+          source: source,
+        ),
+      );
       index.sort((a, b) => b.finishedAt.compareTo(a.finishedAt));
       if (index.length > maxCreationsPerAccount) {
         index.removeRange(maxCreationsPerAccount, index.length);
@@ -91,13 +99,19 @@ class CreationStore extends ChangeNotifier {
     required String jobId,
     required String label,
     required DateTime submittedAt,
+    CreationSource? source,
   }) => _run(() async {
     if (_deletedAccounts.contains(userId)) return;
     final dir = await _createAccountDir(userId);
     final pending = await _readPending(userId);
     if (pending.any((p) => p.jobId == jobId)) return;
     pending.add(
-      PendingGeneration(jobId: jobId, label: label, submittedAt: submittedAt),
+      PendingGeneration(
+        jobId: jobId,
+        label: label,
+        submittedAt: submittedAt,
+        source: source,
+      ),
     );
     await _writeJson(File('${dir.path}/$_pendingFile'), [
       for (final p in pending) p.toJson(),

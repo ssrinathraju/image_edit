@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../configs/app_config.dart';
 import '../common/generation_request.dart';
@@ -10,20 +11,58 @@ import '../common/submit_flow.dart';
 const int _promptMinLines = 4;
 const int _promptMaxLines = 8;
 
-class CustomGenerationScreen extends ConsumerStatefulWidget {
-  const CustomGenerationScreen({this.initialPrompt = '', super.key});
+class CustomGenerationScreen extends StatelessWidget {
+  const CustomGenerationScreen({
+    this.initialPrompt = '',
+    this.initialPhoto,
+    super.key,
+  });
 
   final String initialPrompt;
 
+  /// Pre-selects the photo when the form is opened from a finished result.
+  final XFile? initialPhoto;
+
   @override
-  ConsumerState<CustomGenerationScreen> createState() =>
-      _CustomGenerationScreenState();
+  Widget build(BuildContext context) {
+    return PhotoScope(
+      child: _CustomGenerationForm(
+        initialPrompt: initialPrompt,
+        initialPhoto: initialPhoto,
+      ),
+    );
+  }
 }
 
-class _CustomGenerationScreenState
-    extends ConsumerState<CustomGenerationScreen> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialPrompt);
+class _CustomGenerationForm extends ConsumerStatefulWidget {
+  const _CustomGenerationForm({
+    required this.initialPrompt,
+    required this.initialPhoto,
+  });
+
+  final String initialPrompt;
+  final XFile? initialPhoto;
+
+  @override
+  ConsumerState<_CustomGenerationForm> createState() =>
+      _CustomGenerationFormState();
+}
+
+class _CustomGenerationFormState extends ConsumerState<_CustomGenerationForm> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialPrompt,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final photo = widget.initialPhoto;
+    if (photo == null) return;
+    // Riverpod refuses provider writes while the tree is being built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(selectedPhotoProvider.notifier).state = photo;
+    });
+  }
 
   @override
   void dispose() {
@@ -38,7 +77,10 @@ class _CustomGenerationScreenState
     final prompt = _controller.text;
     final isTooLong = prompt.length > AppConfig.maxPromptChars;
     final canSubmit =
-        photo != null && prompt.trim().isNotEmpty && !isTooLong && !isSubmitting;
+        photo != null &&
+        prompt.trim().isNotEmpty &&
+        !isTooLong &&
+        !isSubmitting;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create your own')),
@@ -67,10 +109,10 @@ class _CustomGenerationScreenState
           FilledButton(
             onPressed: canSubmit
                 ? () => submitAndOpenStatus(
-                      context,
-                      ref,
-                      GenerationRequest(photo: photo, prompt: prompt.trim()),
-                    )
+                    context,
+                    ref,
+                    GenerationRequest(photo: photo, prompt: prompt.trim()),
+                  )
                 : null,
             child: isSubmitting
                 ? const SizedBox(

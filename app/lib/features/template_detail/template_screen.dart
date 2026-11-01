@@ -11,14 +11,16 @@ import '../common/submit_flow.dart';
 
 const double _previewHeight = 200;
 
-final templateByIdProvider =
-    FutureProvider.autoDispose.family<TemplateSummary?, String>((ref, id) async {
-  final templates = await ref.read(generationServiceProvider).listTemplates();
-  for (final template in templates) {
-    if (template.id == id) return template;
-  }
-  return null;
-});
+final templateByIdProvider = FutureProvider.autoDispose
+    .family<TemplateSummary?, String>((ref, id) async {
+      final templates = await ref
+          .read(generationServiceProvider)
+          .listTemplates();
+      for (final template in templates) {
+        if (template.id == id) return template;
+      }
+      return null;
+    });
 
 class TemplateScreen extends ConsumerWidget {
   const TemplateScreen({required this.templateId, this.template, super.key});
@@ -38,7 +40,7 @@ class TemplateScreen extends ConsumerWidget {
         error: (_, _) => _Message(text: 'Could not load this template.'),
         data: (found) => found == null
             ? _Message(text: 'This template is no longer available.')
-            : _TemplateBody(template: found),
+            : PhotoScope(child: _TemplateBody(template: found)),
       ),
     );
   }
@@ -85,14 +87,14 @@ class _TemplateBody extends ConsumerWidget {
           onPressed: photo == null || isSubmitting
               ? null
               : () => submitAndOpenStatus(
-                    context,
-                    ref,
-                    GenerationRequest(
-                      photo: photo,
-                      templateId: template.id,
-                      templateTitle: template.title,
-                    ),
+                  context,
+                  ref,
+                  GenerationRequest(
+                    photo: photo,
+                    templateId: template.id,
+                    templateTitle: template.title,
                   ),
+                ),
           child: isSubmitting
               ? const SizedBox(
                   width: 20,
