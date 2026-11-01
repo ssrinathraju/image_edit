@@ -48,6 +48,10 @@ The interval is 5 seconds rather than 2 because the user is not watching the job
 ### Decision 3: One concrete presenter, no interface
 `ResultReadyPresenter` subscribes to the event stream, using the root `ScaffoldMessenger` key that is set on `MaterialApp.router`. For each event it shows a `SnackBar`: "Your image is ready", with a View action, lasting 4 seconds, floating. The messenger's own queue shows several banners one after another.
 
+The SnackBar sets `persist: MediaQuery.accessibleNavigationOf(context)`. Flutter's default keeps every SnackBar that has an action open until it is acted on, so without this the 4 seconds would never apply. With it, the 4 seconds apply to everyone except screen-reader users, who keep the banner until they reach View or dismiss it.
+
+**Rejected:** `persist: false` for everyone. A TalkBack or VoiceOver user often cannot reach View within 4 seconds.
+
 It shows nothing in these cases:
 - the event's `userId` is not the signed-in account;
 - the router's current location is `/status/<that jobId>`.

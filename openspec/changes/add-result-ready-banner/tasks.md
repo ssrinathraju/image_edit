@@ -28,10 +28,10 @@ Work on branch `feat/add-result-ready-banner`. Do not push to `main`. All work i
 
 ## 3. Presenter and banner
 
-- [x] 3.1 Add a root `scaffoldMessengerKey` to `MaterialApp.router` in `main.dart`, and add `features/result_ready/result_ready_presenter.dart` (Decision 3 and 5):
+- [ ] 3.1 Add a root `scaffoldMessengerKey` to `MaterialApp.router` in `main.dart`, and add `features/result_ready/result_ready_presenter.dart` (Decision 3 and 5):
   - it listens to `HistorySync.results`;
   - it skips an event whose `userId` is not the signed-in account, or whose job matches the current location `/status/<jobId>`;
-  - otherwise it shows a floating SnackBar, "Your image is ready", with View, for 4 seconds;
+  - otherwise it shows a floating SnackBar, "Your image is ready", with View, for 4 seconds, with `persist` set to `MediaQuery.accessibleNavigationOf(context)` so screen-reader users keep it until acted on;
   - View calls `router.push('/creations/<jobId>')`;
   - an error while presenting is logged with the job id and error type only.
 
@@ -39,6 +39,7 @@ Work on branch `feat/add-result-ready-banner`. Do not push to `main`. All work i
   - an event on home shows the banner;
   - View opens the creation detail with the image, and Back returns home;
   - the banner is gone after 4 s;
+  - with `MediaQueryData(accessibleNavigation: true)`, the banner is still shown after 4 s, and it goes away once View is tapped;
   - no banner on `/status/<sameJob>`, and a banner on `/status/<otherJob>`;
   - two events show two banners in order;
   - an event for another account shows nothing.
