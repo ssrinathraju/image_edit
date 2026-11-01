@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/history/creation_store.dart';
+import 'package:image_edit/schemas/creation.dart';
 
 import '../../support/fake_backup_exclusion.dart';
 
@@ -287,5 +288,55 @@ void main() {
 
     await expectLater(store.list('user-1'), throwsA(isA<FileSystemException>()));
     expect(await store.list('user-1'), isEmpty);
+  });
+
+  test('the source survives remember, save and list', () async {
+    final store = _newStore();
+    await store.remember(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'Golden Hour Beach',
+      submittedAt: DateTime.utc(2026, 10, 19),
+      source: const CreationSource.template('golden-hour-beach'),
+    );
+    final pending = (await store.pending('user-1')).single;
+    await store.save(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: pending.label,
+      bytes: _bytes,
+      finishedAt: DateTime.utc(2026, 10, 19, 1),
+      source: pending.source,
+    );
+
+    final saved = (await _newStore().list('user-1')).single;
+
+    expect(pending.source?.templateId, 'golden-hour-beach');
+    expect(saved.source?.templateId, 'golden-hour-beach');
+  });
+
+  test('an index.json written before sources existed still lists', () async {
+    _account('user-1').createSync(recursive: true);
+    File('${_account('user-1').path}/index.json').writeAsStringSync(
+      jsonEncode([
+        {
+          'jobId': 'old',
+          'label': 'old one',
+          'finishedAt': '2026-10-01T00:00:00.000Z',
+        },
+      ]),
+    );
+    File('${_account('user-1').path}/pending.json').writeAsStringSync(
+      jsonEncode([
+        {'jobId': 'p', 'label': 'p', 'submittedAt': '2026-10-01T00:00:00.000Z'},
+      ]),
+    );
+
+    final store = _newStore();
+
+    final creation = (await store.list('user-1')).single;
+    expect(creation.label, 'old one');
+    expect(creation.source, isNull);
+    expect((await store.pending('user-1')).single.source, isNull);
   });
 }

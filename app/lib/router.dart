@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'core/provider_sign_in.dart';
 import 'features/auth/confirm_registration_screen.dart';
@@ -182,6 +183,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/create',
         builder: (_, state) => CustomGenerationScreen(
           initialPrompt: state.uri.queryParameters['prompt'] ?? '',
+          initialPhoto: state.extra is XFile ? state.extra! as XFile : null,
         ),
       ),
       GoRoute(

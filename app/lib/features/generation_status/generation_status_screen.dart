@@ -10,6 +10,7 @@ import '../../schemas/job.dart';
 import '../auth/session_notifier.dart';
 import '../common/clock.dart';
 import '../common/error_message.dart';
+import '../common/generation_request.dart';
 import '../common/image_action_row.dart';
 import '../history/creation_store.dart';
 import '../plans/account_notifier.dart';
@@ -21,6 +22,9 @@ import 'result_image_provider.dart';
 
 final _log = Logger('generation_status');
 
+const String _moreLikeThisLabel = 'More like this';
+const String _tryAgainLabel = 'Try again';
+const String _editPromptLabel = 'Edit prompt';
 const String _saveFailedMessage = "Couldn't save to My creations";
 
 /// Converts the server's UTC expiry to the time shown; replaceable in tests.
@@ -96,7 +100,11 @@ class _SuccessView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final url = job.resultUrl;
     if (url == null) {
-      return _FailureView(jobId: job.jobId, message: 'The image is missing.');
+      return _FailureView(
+        jobId: job.jobId,
+        message: 'The image is missing.',
+        succeeded: true,
+      );
     }
     final bytes = ref.watch(resultImageBytesProvider(url));
 
@@ -105,6 +113,7 @@ class _SuccessView extends ConsumerWidget {
       error: (_, _) => _FailureView(
         jobId: job.jobId,
         message: 'Could not load the image.',
+        succeeded: true,
         onReload: () => ref.invalidate(resultImageBytesProvider(url)),
       ),
       data: (data) =>
@@ -151,6 +160,9 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
     final sessionFuture = ref.read(sessionProvider.future);
     final store = ref.read(creationStoreProvider);
     final finishedAt = ref.read(clockProvider)();
+    final submitted = ref.read(lastRequestProvider);
+    final requestSource =
+        submitted?.jobId == jobId ? submitted?.request.source : null;
     try {
       final session = await sessionFuture;
       if (session == null) {
@@ -158,14 +170,14 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
         return;
       }
       final pending = await store.pending(session.userId);
-      final label =
-          pending.where((p) => p.jobId == jobId).firstOrNull?.label ?? '';
+      final entry = pending.where((p) => p.jobId == jobId).firstOrNull;
       await store.save(
         userId: session.userId,
         jobId: jobId,
-        label: label,
+        label: entry?.label ?? '',
         bytes: bytes,
         finishedAt: finishedAt,
+        source: entry?.source ?? requestSource,
       );
       _setSaveState(_SaveState.saved);
     } on Object catch (error) {
@@ -196,7 +208,7 @@ class _ResultBodyState extends ConsumerState<_ResultBody> {
         const SizedBox(height: 16),
         ImageActionRow(bytes: bytes, name: jobId, jobId: jobId),
         const SizedBox(height: 12),
-        _NavigationButtons(jobId: jobId, homeLabel: 'Home'),
+        _NavigationButtons(jobId: jobId, homeLabel: 'Home', succeeded: true),
       ],
     );
   }
@@ -238,11 +250,13 @@ class _FailureView extends StatelessWidget {
   const _FailureView({
     required this.jobId,
     required this.message,
+    this.succeeded = false,
     this.onReload,
   });
 
   final String jobId;
   final String message;
+  final bool succeeded;
   final VoidCallback? onReload;
 
   @override
@@ -261,7 +275,11 @@ class _FailureView extends StatelessWidget {
               FilledButton(onPressed: onReload, child: const Text('Reload')),
               const SizedBox(height: 12),
             ],
-            _NavigationButtons(jobId: jobId, homeLabel: 'New Generation'),
+            _NavigationButtons(
+              jobId: jobId,
+              homeLabel: 'New Generation',
+              succeeded: succeeded,
+            ),
           ],
         ),
       ),
@@ -270,10 +288,15 @@ class _FailureView extends StatelessWidget {
 }
 
 class _NavigationButtons extends ConsumerWidget {
-  const _NavigationButtons({required this.jobId, required this.homeLabel});
+  const _NavigationButtons({
+    required this.jobId,
+    required this.homeLabel,
+    required this.succeeded,
+  });
 
   final String jobId;
   final String homeLabel;
+  final bool succeeded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -291,7 +314,15 @@ class _NavigationButtons extends ConsumerWidget {
                 ? null
                 : () => submitAndOpenStatus(context, ref, lastRequest),
             icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            label: Text(succeeded ? _moreLikeThisLabel : _tryAgainLabel),
+          ),
+        if (lastRequest?.prompt != null)
+          OutlinedButton.icon(
+            onPressed: isSubmitting
+                ? null
+                : () => _editPrompt(context, lastRequest!),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text(_editPromptLabel),
           ),
         FilledButton.tonal(
           onPressed: () {
@@ -303,4 +334,12 @@ class _NavigationButtons extends ConsumerWidget {
       ],
     );
   }
+}
+
+void _editPrompt(BuildContext context, GenerationRequest request) {
+  final location = Uri(
+    path: '/create',
+    queryParameters: {'prompt': request.prompt},
+  ).toString();
+  unawaited(context.push<void>(location, extra: request.photo));
 }

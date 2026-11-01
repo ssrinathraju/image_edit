@@ -54,12 +54,20 @@ class InMemoryCreationStore extends CreationStore {
     required String label,
     required Uint8List bytes,
     required DateTime finishedAt,
+    CreationSource? source,
   }) async {
     if (saveError != null) throw saveError!;
     savedJobs.add(jobId);
     final list = creations.putIfAbsent(userId, () => []);
     if (!list.any((c) => c.jobId == jobId)) {
-      list.add(Creation(jobId: jobId, label: label, finishedAt: finishedAt));
+      list.add(
+        Creation(
+          jobId: jobId,
+          label: label,
+          finishedAt: finishedAt,
+          source: source,
+        ),
+      );
       images['$userId/$jobId'] = bytes;
       File('${imageDirectory.path}/$jobId.png').writeAsBytesSync(bytes);
     }
@@ -82,11 +90,19 @@ class InMemoryCreationStore extends CreationStore {
     required String jobId,
     required String label,
     required DateTime submittedAt,
+    CreationSource? source,
   }) async {
     if (rememberError != null) throw rememberError!;
     final list = pendings.putIfAbsent(userId, () => []);
     if (list.any((p) => p.jobId == jobId)) return;
-    list.add(PendingGeneration(jobId: jobId, label: label, submittedAt: submittedAt));
+    list.add(
+      PendingGeneration(
+        jobId: jobId,
+        label: label,
+        submittedAt: submittedAt,
+        source: source,
+      ),
+    );
   }
 
   @override

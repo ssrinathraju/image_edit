@@ -4,11 +4,11 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
 
 ## 1. Record the source
 
-- [ ] 1.1 Add `CreationSource` (template with `templateId`, or prompt with `prompt`) and an optional `source` on `Creation` and `PendingGeneration` in `schemas/creation.dart`, with the JSON from Decision 4. Verify in `test/schemas/creation_test.dart`:
+- [x] 1.1 Add `CreationSource` (template with `templateId`, or prompt with `prompt`) and an optional `source` on `Creation` and `PendingGeneration` in `schemas/creation.dart`, with the JSON from Decision 4. Verify in `test/schemas/creation_test.dart`:
   - a round-trip of both kinds;
   - old JSON without `source` reads as null;
   - malformed `source` (an unknown kind, a missing id or prompt, a wrong type) reads as null and does not throw.
-- [ ] 1.2 Thread the source through the store, the submit flow and both save paths:
+- [x] 1.2 Thread the source through the store, the submit flow and both save paths:
   - `CreationStore.remember` and `save` take an optional source;
   - `submit_flow` remembers the request's source;
   - the status screen and `HistorySync` copy it from the pending entry, with the status screen's `lastRequestProvider` fallback (Decision 4).
@@ -21,13 +21,13 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
 
 ## 2. Status screen actions
 
-- [ ] 2.1 In `_NavigationButtons`, label the held-request action "More like this" after success and "Try again" after failure, keeping today's behaviour and the in-flight disable. Verify in `generation_status_screen_test.dart`:
+- [x] 2.1 In `_NavigationButtons`, label the held-request action "More like this" after success and "Try again" after failure, keeping today's behaviour and the in-flight disable. Verify in `generation_status_screen_test.dart`:
   - the label for a success and for a failure;
   - tapping submits the same photo and template or prompt and opens the new job's status;
   - no action after `lastRequestProvider` is cleared (as after a restart) or holds another job;
   - a quota refusal shows the limit dialog and submits nothing;
   - a double tap submits once.
-- [ ] 2.2 Add `initialPhoto` to `CustomGenerationScreen` (seeding `selectedPhotoProvider` in `initState`), and pass `state.extra` as an `XFile` in the `/create` route. Add "Edit prompt" for custom-prompt requests on the status screen (Decision 3). Verify:
+- [x] 2.2 Add `initialPhoto` to `CustomGenerationScreen` (seeding `selectedPhotoProvider` in `initState`), and pass `state.extra` as an `XFile` in the `/create` route. Add "Edit prompt" for custom-prompt requests on the status screen (Decision 3). Verify:
   - `custom_generation_screen_test.dart`: the photo and prompt prefill, and nothing is submitted on open;
   - `generation_status_screen_test.dart`: Edit prompt is shown for a custom prompt and not for a template; tapping it opens the form prefilled; Back returns to the status screen; submitting an edited prompt opens a new status with the new prompt.
 

@@ -203,6 +203,8 @@ void main() {
     expect(pending.single.jobId, 'job-9');
     expect(pending.single.label, 'a cat in space');
     expect(pending.single.submittedAt, _now);
+    expect(pending.single.source?.prompt, 'a cat in space');
+    expect(pending.single.source?.templateId, isNull);
     expect(find.text('status:job-9'), findsOneWidget);
   });
 
@@ -218,6 +220,8 @@ void main() {
 
     final pending = await store.pending('user-1');
     expect(pending.single.label, 'Golden Hour Beach');
+    expect(pending.single.source?.templateId, 'golden-hour');
+    expect(pending.single.source?.prompt, isNull);
   });
 
   testWidgets('a failed submit remembers nothing', (tester) async {

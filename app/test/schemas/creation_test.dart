@@ -57,4 +57,86 @@ void main() {
 
     expect(back.label, '');
   });
+
+  group('source', () {
+    Creation withSource(CreationSource? source) => Creation(
+      jobId: 'j',
+      label: 'x',
+      finishedAt: DateTime.utc(2026),
+      source: source,
+    );
+
+    test('a template source survives a round-trip', () {
+      final back = Creation.fromJson(
+        withSource(const CreationSource.template('golden-hour-beach')).toJson(),
+      );
+
+      expect(back.source?.templateId, 'golden-hour-beach');
+      expect(back.source?.prompt, isNull);
+    });
+
+    test(
+      'a prompt source survives a round-trip on creations and pending entries',
+      () {
+        final back = Creation.fromJson(
+          withSource(const CreationSource.prompt('astronaut on a beach'))
+              .toJson(),
+        );
+        final pending = PendingGeneration.fromJson(
+          PendingGeneration(
+            jobId: 'j',
+            label: 'x',
+            submittedAt: DateTime.utc(2026),
+            source: const CreationSource.prompt('astronaut on a beach'),
+          ).toJson(),
+        );
+
+        expect(back.source?.prompt, 'astronaut on a beach');
+        expect(back.source?.templateId, isNull);
+        expect(pending.source?.prompt, 'astronaut on a beach');
+      },
+    );
+
+    test('JSON without a source reads as null', () {
+      final json = withSource(null).toJson();
+
+      expect(json.containsKey('source'), isFalse);
+      expect(Creation.fromJson(json).source, isNull);
+      expect(
+        PendingGeneration.fromJson({
+          'jobId': 'j',
+          'label': 'x',
+          'submittedAt': '2026-01-01T00:00:00.000Z',
+        }).source,
+        isNull,
+      );
+    });
+
+    final malformed = <String, Object?>{
+      'unknown kind': {'kind': 'video', 'prompt': 'p'},
+      'template without id': {'kind': 'template'},
+      'prompt without text': {'kind': 'prompt'},
+      'template id of the wrong type': {'kind': 'template', 'templateId': 7},
+      'prompt of the wrong type': {
+        'kind': 'prompt',
+        'prompt': ['p'],
+      },
+      'a string': 'template',
+      'null': null,
+    };
+    malformed.forEach((name, source) {
+      test('malformed source ($name) reads as null and does not throw', () {
+        final json = withSource(null).toJson()..['source'] = source;
+        final pendingJson = {
+          'jobId': 'j',
+          'label': 'x',
+          'submittedAt': '2026-01-01T00:00:00.000Z',
+          'source': source,
+        };
+
+        expect(Creation.fromJson(json).source, isNull);
+        expect(PendingGeneration.fromJson(pendingJson).source, isNull);
+      });
+    });
+  });
 }

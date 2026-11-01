@@ -125,6 +125,7 @@ Future<void> _rememberJob(
           jobId: jobId,
           label: request.historyLabel,
           submittedAt: ref.read(clockProvider)(),
+          source: request.source,
         );
   } on Object catch (error) {
     _log.warning('remember_failed job=$jobId ${error.runtimeType}');

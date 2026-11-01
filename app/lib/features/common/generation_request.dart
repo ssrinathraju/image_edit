@@ -1,5 +1,7 @@
 import 'package:image_picker/image_picker.dart';
 
+import '../../schemas/creation.dart';
+
 class GenerationRequest {
   GenerationRequest({
     required this.photo,
@@ -20,4 +22,8 @@ class GenerationRequest {
   final String? templateTitle;
 
   String get historyLabel => prompt ?? templateTitle ?? templateId!;
+
+  CreationSource get source => prompt != null
+      ? CreationSource.prompt(prompt!)
+      : CreationSource.template(templateId!);
 }

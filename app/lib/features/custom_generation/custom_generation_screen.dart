@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../configs/app_config.dart';
 import '../common/generation_request.dart';
@@ -11,9 +12,16 @@ const int _promptMinLines = 4;
 const int _promptMaxLines = 8;
 
 class CustomGenerationScreen extends ConsumerStatefulWidget {
-  const CustomGenerationScreen({this.initialPrompt = '', super.key});
+  const CustomGenerationScreen({
+    this.initialPrompt = '',
+    this.initialPhoto,
+    super.key,
+  });
 
   final String initialPrompt;
+
+  /// Pre-selects the photo when the form is opened from a finished result.
+  final XFile? initialPhoto;
 
   @override
   ConsumerState<CustomGenerationScreen> createState() =>
@@ -24,6 +32,17 @@ class _CustomGenerationScreenState
     extends ConsumerState<CustomGenerationScreen> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.initialPrompt);
+
+  @override
+  void initState() {
+    super.initState();
+    final photo = widget.initialPhoto;
+    if (photo == null) return;
+    // Riverpod refuses provider writes while the tree is being built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(selectedPhotoProvider.notifier).state = photo;
+    });
+  }
 
   @override
   void dispose() {

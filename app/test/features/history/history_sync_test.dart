@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/history/history_sync.dart';
+import 'package:image_edit/schemas/creation.dart';
 import 'package:image_edit/schemas/job.dart';
 import 'package:image_edit/schemas/result_ready.dart';
 import 'package:image_edit/services/generation_service.dart';
@@ -326,5 +327,23 @@ void main() {
 
       expect(events.map((e) => e.jobId), ['job-1', 'job-2']);
     });
+  });
+
+  test('a caught-up creation keeps its source', () async {
+    client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+    await store.remember(
+      userId: 'user-1',
+      jobId: 'job-1',
+      label: 'Golden Hour Beach',
+      submittedAt: _now.subtract(const Duration(hours: 1)),
+      source: const CreationSource.template('golden-hour-beach'),
+    );
+
+    await sync.run('user-1');
+
+    expect(
+      (await store.list('user-1')).single.source?.templateId,
+      'golden-hour-beach',
+    );
   });
 }

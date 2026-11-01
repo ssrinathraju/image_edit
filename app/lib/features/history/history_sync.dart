@@ -122,6 +122,7 @@ class HistorySync {
         label: entry.label,
         bytes: bytes,
         finishedAt: clock(),
+        source: entry.source,
       );
       if (!_results.isClosed) {
         _results.add(ResultReady(jobId: entry.jobId, userId: userId));
