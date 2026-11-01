@@ -124,6 +124,23 @@ void main() {
     expect(client.submitted, isEmpty);
   });
 
+  testWidgets('going back from the update screen submits nothing and keeps the form', (tester) async {
+    acceptedVersion = '1';
+    currentVersion = '2';
+    await _pumpCreate(tester);
+    await _fillAndGenerate(tester);
+    expect(find.text('Update the app to continue'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Face photo consent'), findsNothing);
+    expect(client.submitted, isEmpty);
+    expect(client.acceptedConsents, isEmpty);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'a cat in space');
+    expect(isGenerateEnabled(tester), isTrue);
+  });
+
   testWidgets('a server consent_required opens the screen and retries once after Accept', (tester) async {
     acceptedVersion = '1';
     var refused = true;

@@ -11,6 +11,7 @@ import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/features/plans/invite_screen.dart';
 import 'package:image_edit/features/profile/profile_providers.dart';
+import 'package:image_edit/main.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/services/generation_providers.dart';
 
@@ -77,6 +78,7 @@ Future<ProviderContainer> pumpApp(
   InMemoryCreationStore? store,
   OnboardingStore? onboardingStore,
   DateTime? birthDate,
+  bool useImageEditApp = false,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -111,10 +113,12 @@ Future<ProviderContainer> pumpApp(
         if (appleAvailable ?? apple != null)
           isAppleSignInAvailableProvider.overrideWithValue(true),
       ],
-      child: Consumer(
-        builder: (context, ref, _) =>
-            MaterialApp.router(routerConfig: ref.watch(routerProvider)),
-      ),
+      child: useImageEditApp
+          ? const ImageEditApp()
+          : Consumer(
+              builder: (context, ref, _) =>
+                  MaterialApp.router(routerConfig: ref.watch(routerProvider)),
+            ),
     ),
   );
   if (settle) await tester.pumpAndSettle();
