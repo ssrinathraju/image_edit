@@ -369,7 +369,7 @@ def test_upgrading_a_v6_database_adds_the_pending_table_and_keeps_accounts(v6_db
     assert "pending_email_changes" in _tables(v6_db)
     assert store.get_by_email("ana@example.com") is not None
     conn = sqlite3.connect(v6_db)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     conn.close()
 
 

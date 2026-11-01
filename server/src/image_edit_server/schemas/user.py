@@ -31,6 +31,7 @@ class User:
     age_confirmed_at: Optional[str] = None
     consent_version: Optional[str] = None
     consent_at: Optional[str] = None
+    role: str = "user"
 
     @property
     def age_confirmed(self) -> bool:

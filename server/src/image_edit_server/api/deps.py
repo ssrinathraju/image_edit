@@ -5,6 +5,7 @@ from typing import Annotated, Optional
 from fastapi import Depends, Header, HTTPException
 
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core.roles import ADMIN
 from image_edit_server.core.user_store import UserStore
 from image_edit_server.schemas.api import ErrorBody
 from image_edit_server.schemas.user import User
@@ -82,3 +83,16 @@ def get_current_user(token: TokenDep, users: UserStoreDep) -> User:
 
 
 AuthDep = Annotated[User, Depends(get_current_user)]
+
+
+def require_admin(user: AuthDep) -> User:
+    """Admit only accounts holding the admin role; the role is read on every request."""
+    if user.role != ADMIN:
+        raise HTTPException(
+            403,
+            ErrorBody(error="admin_required", detail="this endpoint is for admins").model_dump(),
+        )
+    return user
+
+
+AdminDep = Annotated[User, Depends(require_admin)]

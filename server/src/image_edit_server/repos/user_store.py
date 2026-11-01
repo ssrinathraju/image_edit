@@ -11,6 +11,7 @@ from ulid import ULID
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.plans import ALL_PLANS, FREE
 from image_edit_server.core.referral_codes import generate_code
+from image_edit_server.core.roles import ALL_ROLES, USER
 from image_edit_server.core.token_hash import hash_token
 from image_edit_server.core.user_store import EmailTakenError
 from image_edit_server.repos.user_store_codes import (
@@ -25,11 +26,12 @@ from image_edit_server.repos.user_store_identities import (
 from image_edit_server.repos.user_store_referrals import ReferralsMixin
 from image_edit_server.repos.user_store_safety import _SAFETY_SCHEMA, SafetyMixin
 from image_edit_server.repos.user_store_security import SecurityMixin
+from image_edit_server.repos.user_store_templates import _TEMPLATES_SCHEMA, TemplatesMixin
 from image_edit_server.repos.user_store_usage import _USAGE_SCHEMA, UsageMixin
 from image_edit_server.schemas.user import User
 
 SESSION_TOKEN_BYTES = 32
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 CODE_ATTEMPTS = 5
 
 _SCHEMA = """
@@ -62,14 +64,15 @@ _ADDED_USER_COLUMNS = {
     "age_confirmed_at": "TEXT",
     "consent_version": "TEXT",
     "consent_at": "TEXT",
+    "role": f"TEXT NOT NULL DEFAULT '{USER}'",
 }
 
 _USER_COLUMNS = (
     "u.id, u.email, u.created_at, u.plan, u.bonus_credits, u.referral_code,"
     " u.referral_rewards, u.password_hash <> '', u.age_confirmed_at,"
-    " u.consent_version, u.consent_at"
+    " u.consent_version, u.consent_at, u.role"
 )
-_USER_COLUMN_COUNT = 11
+_USER_COLUMN_COUNT = 12
 
 
 def _utc_now() -> datetime:
@@ -89,6 +92,7 @@ def _to_user(row: tuple) -> User:
         age_confirmed_at=row[8],
         consent_version=row[9],
         consent_at=row[10],
+        role=row[11],
     )
 
 
@@ -105,6 +109,7 @@ class SqliteUserStore(
     ConsentMixin,
     SafetyMixin,
     SecurityMixin,
+    TemplatesMixin,
 ):
     def __init__(
         self, path: str = ":memory:", clock: Callable[[], datetime] = _utc_now
@@ -146,7 +151,9 @@ class SqliteUserStore(
                     "UPDATE users SET email_verified = 1 WHERE email_verified = 0"
                 )
                 self._drop_user_keyed_code_tables()
-                schema = _USAGE_SCHEMA + _IDENTITY_SCHEMA + _EMAIL_SCHEMA + _SAFETY_SCHEMA
+                schema = ";".join(
+                    (_USAGE_SCHEMA, _IDENTITY_SCHEMA, _EMAIL_SCHEMA, _SAFETY_SCHEMA, _TEMPLATES_SCHEMA)
+                )
                 for statement in schema.strip().split(";"):
                     if statement.strip():
                         self._conn.execute(statement)
@@ -281,6 +288,16 @@ class SqliteUserStore(
         with self._lock, self._conn:
             cursor = self._conn.execute(
                 "UPDATE users SET plan = ? WHERE email = ?", (plan, email)
+            )
+        return cursor.rowcount == 1
+
+    def set_role(self, email: str, role: str) -> bool:
+        """Operator tooling: returns False when the email has no account."""
+        if role not in ALL_ROLES:
+            raise ValueError(f"unknown role {role!r}; expected one of {list(ALL_ROLES)}")
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "UPDATE users SET role = ? WHERE email = ?", (role, email)
             )
         return cursor.rowcount == 1
 

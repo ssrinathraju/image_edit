@@ -4,18 +4,18 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
 
 ## 1. Schema and role
 
-- [ ] 1.1 Schema v8 in `repos/user_store.py`: add `users.role TEXT NOT NULL DEFAULT 'user'`, the `templates` table and a `meta` table (Decision 1, Decision 3), using the column-presence migration, and add `role` to `User`. Verify in `tests/repos/test_user_store.py`:
+- [x] 1.1 Schema v8 in `repos/user_store.py`: add `users.role TEXT NOT NULL DEFAULT 'user'`, the `templates` table and a `meta` table (Decision 1, Decision 3), using the column-presence migration, and add `role` to `User`. Verify in `tests/repos/test_user_store.py`:
   - a fresh database is at v8 and new users are `user`;
   - a v7 file with data upgrades with every account `user` and nothing else changed;
   - re-running the migration is a no-op;
   - a half-migrated file (role column present, no templates table) heals.
-- [ ] 1.2 Add `scripts/set_role.py` (Decision 3), following `set_plan.py`. Verify in `tests/scripts/test_set_role.py`:
+- [x] 1.2 Add `scripts/set_role.py` (Decision 3), following `set_plan.py`. Verify in `tests/scripts/test_set_role.py`:
   - granting and removing the role;
   - an unknown email exits non-zero and changes nothing;
   - a missing database exits non-zero without creating one;
   - an invalid role is refused;
   - output never contains the email.
-- [ ] 1.3 Add `require_admin` in `api/deps.py`, giving 403 `admin_required` (Decision 3). Verify in `tests/api/test_deps.py` or a router test:
+- [x] 1.3 Add `require_admin` in `api/deps.py`, giving 403 `admin_required` (Decision 3). Verify in `tests/api/test_deps.py` or a router test:
   - no token gives 401;
   - a user token gives 403 `admin_required`;
   - an admin token passes;
@@ -23,7 +23,7 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
 
 ## 2. Stored templates and catalog
 
-- [ ] 2.1 Add `repos/user_store_templates.py`, a mixin with insert, update, set_retired, get, list_all and the seeded marker, using the store lock. Verify in `tests/repos/test_user_store_templates.py`: a round trip of every field, tags kept in order, retired filtering, and the marker.
+- [x] 2.1 Add `repos/user_store_templates.py`, a mixin with insert, update, set_retired, get, list_all and the seeded marker, using the store lock. Verify in `tests/repos/test_user_store_templates.py`: a round trip of every field, tags kept in order, retired filtering, and the marker.
 - [ ] 2.2 Add `seed_templates_if_needed` and build `TemplateCatalog` from stored rows. Put a `CatalogHolder` in `main.py`, with the preview mount from `<STORAGE_ROOT>/template-previews` and the startup orphan sweep (Decisions 1, 2 and 5). Verify in `tests/repos/test_template_catalog.py` and `tests/test_main.py`:
   - a first start imports all 12 seed templates with hashed preview files served at their `preview_url`;
   - a second start with an edited seed ignores it;
