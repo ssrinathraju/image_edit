@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/history/history_sync.dart';
 import 'package:image_edit/schemas/job.dart';
+import 'package:image_edit/schemas/result_ready.dart';
 import 'package:image_edit/services/generation_service.dart';
 
 import '../../support/fake_api_client.dart';
@@ -241,5 +242,89 @@ void main() {
 
     expect(client.statusCalls, ['mine']);
     expect(store.pendings['user-2'], hasLength(1));
+  });
+
+  group('results stream', () {
+    late List<ResultReady> events;
+
+    setUp(() {
+      events = [];
+      sync.results.listen(events.add);
+    });
+
+    test('a succeeded job emits one event with its job and account', () async {
+      client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+      await _remember('job-1');
+
+      await sync.run('user-1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, [const ResultReady(jobId: 'job-1', userId: 'user-1')]);
+    });
+
+    test('jobs that are not saved emit nothing', () async {
+      final statuses = <String, Object>{
+        'failed': JobStatus.failed,
+        'running': JobStatus.running,
+        'queued': JobStatus.queued,
+      };
+      client.onStatus = (id) async {
+        if (id == 'gone') throw _dio(404);
+        return _job(id, statuses[id]! as JobStatus);
+      };
+      for (final id in statuses.keys) {
+        await _remember(id);
+      }
+      await _remember('gone');
+      await _remember('old', age: const Duration(hours: 25));
+
+      await sync.run('user-1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+    });
+
+    test('a network error emits nothing', () async {
+      client.onStatus = (_) async => throw _dio(null);
+      await _remember('job-1');
+
+      await sync.run('user-1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+    });
+
+    test('an image-fetch error emits nothing', () async {
+      client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+      client.onFetchBytes = (_) async => throw _dio(null);
+      await _remember('job-1');
+
+      await sync.run('user-1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+    });
+
+    test('a store that fails while saving emits nothing', () async {
+      client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+      store.saveError = StateError('disk full');
+      await _remember('job-1');
+
+      await sync.run('user-1');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+    });
+
+    test('two concurrent runs emit one event per saved job', () async {
+      client.onStatus = (id) async => _job(id, JobStatus.succeeded);
+      await _remember('job-1');
+      await _remember('job-2');
+
+      await Future.wait([sync.run('user-1'), sync.run('user-1')]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events.map((e) => e.jobId), ['job-1', 'job-2']);
+    });
   });
 }

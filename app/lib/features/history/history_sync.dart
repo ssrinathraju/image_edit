@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 
 import '../../schemas/creation.dart';
 import '../../schemas/job.dart';
+import '../../schemas/result_ready.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
 import '../../services/generation_service.dart';
@@ -34,6 +35,12 @@ class HistorySync {
   final DateTime Function() clock;
 
   final Map<String, Future<void>> _running = {};
+  final StreamController<ResultReady> _results = StreamController.broadcast();
+
+  /// One event right after each creation the catch-up saves.
+  Stream<ResultReady> get results => _results.stream;
+
+  void dispose() => unawaited(_results.close());
 
   /// Checks the account's unsaved generations; a call during a run joins it.
   Future<void> run(String userId) {
@@ -116,6 +123,7 @@ class HistorySync {
         bytes: bytes,
         finishedAt: clock(),
       );
+      _results.add(ResultReady(jobId: entry.jobId, userId: userId));
       return true;
     } on DioException catch (error) {
       _log.info('image_unavailable job=${entry.jobId} ${error.type.name}');
@@ -127,13 +135,15 @@ class HistorySync {
   }
 }
 
-final historySyncProvider = Provider<HistorySync>(
-  (ref) => HistorySync(
+final historySyncProvider = Provider<HistorySync>((ref) {
+  final sync = HistorySync(
     store: ref.watch(creationStoreProvider),
     service: ref.watch(generationServiceProvider),
     clock: ref.watch(clockProvider),
-  ),
-);
+  );
+  ref.onDispose(sync.dispose);
+  return sync;
+});
 
 /// Starts a catch-up for the signed-in account and does not wait for it.
 void startHistoryCatchUp(WidgetRef ref) {
