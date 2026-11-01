@@ -61,4 +61,4 @@ Work on branch `feat/add-result-ready-banner`. Do not push to `main`. All work i
   - A screen reader announces the banner text and View.
 
   This box stays unticked until someone runs every step on both platforms. Name any skipped step in the PR.
-- [ ] 5.3 Push `feat/add-result-ready-banner`. Verify with `git log origin/feat/add-result-ready-banner -1` that it matches the local HEAD.
+- [x] 5.3 Push `feat/add-result-ready-banner`. Verify with `git log origin/feat/add-result-ready-banner -1` that it matches the local HEAD.
