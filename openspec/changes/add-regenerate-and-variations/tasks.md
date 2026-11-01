@@ -42,7 +42,7 @@ Work on branch `feat/add-regenerate-and-variations`. Do not push to `main`. All 
 
 ## 4. Integration and hand-off
 
-- [ ] 4.1 Run `flutter analyze && flutter test` in `app/`. Verify zero analyzer warnings and that all tests pass. Run `openspec validate add-regenerate-and-variations --strict`. The server is unchanged: run `uv run pytest -q` in `server/` once, and record the md5 of `server/storage/app.db` before and after.
+- [x] 4.1 Run `flutter analyze && flutter test` in `app/`. Verify zero analyzer warnings and that all tests pass. Run `openspec validate add-regenerate-and-variations --strict`. The server is unchanged: run `uv run pytest -q` in `server/` once, and record the md5 of `server/storage/app.db` before and after.
 - [ ] 4.2 **Manual. iOS simulator and Android emulator**, against a local server in log mode on a temporary storage root:
   - Generate from a template, then tap "More like this": a different image, and two creations with the same label.
   - Make a custom generation fail if possible (or use the stub), and check that "Try again" is shown.
