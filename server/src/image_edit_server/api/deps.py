@@ -14,6 +14,7 @@ from image_edit_server.services.auth_service import AuthService
 from image_edit_server.services.quota_service import QuotaService
 from image_edit_server.services.referral_service import ReferralService
 from image_edit_server.services.safety.safety_service import SafetyService
+from image_edit_server.services.template_admin_service import TemplateAdminService
 
 BEARER_PREFIX = "bearer "
 
@@ -48,6 +49,12 @@ def get_safety_service() -> SafetyService:
     raise RuntimeError("safety service is not configured; override get_safety_service")
 
 
+def get_template_admin_service() -> TemplateAdminService:
+    raise RuntimeError(
+        "template admin service is not configured; override get_template_admin_service"
+    )
+
+
 def _unauthorized() -> HTTPException:
     return HTTPException(
         401,
@@ -73,6 +80,7 @@ AccountSecurityDep = Annotated[AccountSecurityService, Depends(get_account_secur
 QuotaDep = Annotated[QuotaService, Depends(get_quota_service)]
 SafetyDep = Annotated[SafetyService, Depends(get_safety_service)]
 ReferralDep = Annotated[ReferralService, Depends(get_referral_service)]
+TemplateAdminDep = Annotated[TemplateAdminService, Depends(get_template_admin_service)]
 
 
 def get_current_user(token: TokenDep, users: UserStoreDep) -> User:

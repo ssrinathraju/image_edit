@@ -44,7 +44,7 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
   - retire and restore are idempotent;
   - two concurrent edits serialise;
   - log lines contain the action, id and admin id, with no prompt, title, tags or email (`caplog`).
-- [ ] 3.2 Add `api/admin_templates.py` (Decision 8) and register it in `main.py`. Verify in `tests/api/test_admin_templates.py`, using the app factory, a temporary storage root and an admin and a user account:
+- [x] 3.2 Add `api/admin_templates.py` (Decision 8) and register it in `main.py`. Verify in `tests/api/test_admin_templates.py`, using the app factory, a temporary storage root and an admin and a user account:
   - every endpoint's success and error codes from the API summary table;
   - a created template appears in `GET /templates` on the next request and a generation with its id is accepted;
   - an edited prompt is used by the next generation, while a job accepted before the edit (stub pipeline held open) keeps the old one;
@@ -60,7 +60,7 @@ Work on branch `feat/add-template-admin`. Do not push to `main`. All work is in 
 
 ## 5. Integration and hand-off
 
-- [ ] 5.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/` once to confirm the app is unaffected. Verify that all tests pass, that `openspec validate add-template-admin --strict` passes, and that the md5 of `server/storage/app.db` is unchanged.
+- [x] 5.1 Run `uv run pytest -q` in `server/`, and `flutter analyze && flutter test` in `app/` once to confirm the app is unaffected. Verify that all tests pass, that `openspec validate add-template-admin --strict` passes, and that the md5 of `server/storage/app.db` is unchanged.
 - [ ] 5.2 **Manual. Local server in log mode on a temporary storage root**, with an upgraded copy of a v7 `app.db` (never the real one):
   - start the server and check that the 12 seed templates are listed;
   - grant admin with `set_role.py`;

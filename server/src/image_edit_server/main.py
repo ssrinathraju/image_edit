@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from image_edit_server.api.admin_templates import router as admin_templates_router
 from image_edit_server.api.auth import router as auth_router
 from image_edit_server.api.deps import (
     get_account_security_service,
@@ -19,6 +20,7 @@ from image_edit_server.api.deps import (
     get_referral_service,
     get_safety_service,
     get_settings,
+    get_template_admin_service,
     get_user_store,
 )
 from image_edit_server.api.errors import install_validation_error_handler
@@ -51,6 +53,7 @@ from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.safety.stub_classifier import StubClassifier
 from image_edit_server.services.report_retention import run_report_retention, sweep_reports
 from image_edit_server.services.retention_service import run_retention, sweep
+from image_edit_server.services.template_admin_service import TemplateAdminService
 from image_edit_server.services.template_seed import load_template_catalog
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
@@ -163,6 +166,9 @@ def create_app(
         output_classifier,
     )
     referral_service = ReferralService(cfg, user_store)
+    template_admin_service = TemplateAdminService(
+        user_store, catalog_holder, safety_service, previews_dir
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -234,11 +240,13 @@ def create_app(
     app.dependency_overrides[get_report_service] = lambda: ReportService(cfg, user_store, store)
     app.dependency_overrides[get_safety_service] = lambda: safety_service
     app.dependency_overrides[get_referral_service] = lambda: referral_service
+    app.dependency_overrides[get_template_admin_service] = lambda: template_admin_service
     app.include_router(auth_router)
     app.include_router(me_security_router)
     app.include_router(generations_router)
     app.include_router(templates_router)
     app.include_router(reports_router)
+    app.include_router(admin_templates_router)
 
     outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)

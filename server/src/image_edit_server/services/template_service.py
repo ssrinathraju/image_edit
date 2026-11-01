@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from image_edit_server.repos.template_catalog import TemplateCatalog
-from image_edit_server.schemas.template import TemplateSummary
+from image_edit_server.schemas.template import AdminTemplate, StoredTemplate, TemplateSummary
 
 PREVIEW_URL_PREFIX = "/template-previews"
 
@@ -19,3 +19,17 @@ def list_templates(catalog: TemplateCatalog, query: Optional[str]) -> list[Templ
         )
         for t in catalog.search(query)
     ]
+
+
+def to_admin_template(template: StoredTemplate) -> AdminTemplate:
+    """Describe a stored template for admins, prompt and lifecycle state included."""
+    return AdminTemplate(
+        id=template.id,
+        title=template.title,
+        tags=list(template.tags),
+        preview_url=f"{PREVIEW_URL_PREFIX}/{template.preview}",
+        popularity=template.popularity,
+        prompt=template.prompt,
+        retired=template.retired,
+        updated_at=template.updated_at,
+    )

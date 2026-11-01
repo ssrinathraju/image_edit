@@ -518,7 +518,7 @@ ignores them).
 | `IMAGE_EDIT_STRIKE_WINDOW_HOURS` | `24` | Strike window and pause length, in hours (minimum 1) |
 | `IMAGE_EDIT_REPORTS_PER_DAY` | `20` | Reports per account per 24 hours (minimum 1) |
 | `IMAGE_EDIT_REPORT_RETENTION_DAYS` | `30` | How long reports and their images are kept (minimum 1) |
-| `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Folder holding `catalog.json` and `previews/` |
+| `IMAGE_EDIT_TEMPLATES_DIR` | `./seed/templates` | Seed folder holding `catalog.json` and `previews/`; read only once, on the first start with a database that was never seeded (see Template administration) |
 | `IMAGE_EDIT_AUTH_DB_PATH` | _(empty)_ | SQLite file for users and sessions; empty means `<STORAGE_ROOT>/app.db` |
 | `IMAGE_EDIT_SESSION_TTL_DAYS` | `30` | Session lifetime, fixed from login |
 | `IMAGE_EDIT_PASSWORD_MIN_CHARS` | `8` | Minimum password length |
@@ -606,6 +606,88 @@ IMAGE_EDIT_MODEL_BACKEND=sana IMAGE_EDIT_SANA_DEVICE=cuda IMAGE_EDIT_SANA_TORCH_
   uv run uvicorn --factory image_edit_server.main:create_app --port 8000
 ```
 
+## Template administration
+
+Templates live in the server's database (`app.db`, schema v8), not in `seed/templates/`. On the
+first start with a database that has never been seeded, the 12 templates in `seed/templates/` are
+imported once; after that the seed folder is ignored, even if every template is retired. A bad seed
+(duplicate id, missing preview) stops that first start and names the entry. A later start fails,
+naming the id, if a stored template's preview file is missing.
+
+Previews are stored in `<IMAGE_EDIT_STORAGE_ROOT>/template-previews/` as 512x512 WebP with a
+content-hashed name (`<id>-<12 hex>.webp`), and are served at `/template-previews/<name>`.
+Replacing a preview gives a new URL. Files there that no template references are removed at startup.
+
+Changes apply from the next request, without a restart. The server must run as one process.
+
+### The admin role
+
+An account is `user` or `admin`. Every account starts as `user`, and no endpoint can change that.
+Grant or remove the role on the server host, from `server/`:
+
+```bash
+uv run python scripts/set_role.py --email <ADMIN_EMAIL> --role admin
+uv run python scripts/set_role.py --email <ADMIN_EMAIL> --role user
+```
+
+Exit status: 0 done, 1 no account with that email, 2 unknown role, 3 no database at the resolved
+path (it is never created). The script never prints the email. Removing the role takes effect on
+the account's next request. Set `IMAGE_EDIT_STORAGE_ROOT` (or `IMAGE_EDIT_AUTH_DB_PATH`) to match
+the server's if it is not the default.
+
+### Admin endpoints
+
+All need `Authorization: Bearer $TOKEN` of an admin account (log in as usual). Without a session
+the answer is 401; a signed-in non-admin gets 403 `admin_required`. These are curl-only; the app
+has no admin screens.
+
+```bash
+# List every template, retired ones last, with prompts → 200 [{"id", "title", "tags", "popularity",
+#   "prompt", "preview_url", "retired", "updated_at"}, ...]
+curl http://localhost:8000/admin/templates -H "Authorization: Bearer $TOKEN"
+
+# Create (multipart) → 201 with the template. `tags` is comma-separated; `preview` is a PNG, JPEG or
+# WebP file of at most 2 MB. The id is lower-case letters, digits and single hyphens, and never changes.
+curl -X POST http://localhost:8000/admin/templates \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "id=neon-city" -F "title=Neon City" -F "tags=night, city" -F "popularity=60" \
+  -F "prompt=A person on a rain-slicked neon street at night" \
+  -F "preview=@/path/to/preview.png"
+
+# Edit → 200 with the template. Send only the fields to change: title, tags, popularity, prompt, preview.
+curl -X PATCH http://localhost:8000/admin/templates/neon-city \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "title=Neon Town" -F "popularity=70"
+curl -X PATCH http://localhost:8000/admin/templates/neon-city \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "preview=@/path/to/new-preview.jpg"
+
+# Retire (hidden from GET /templates and search; new generations get 400 invalid_template; jobs
+# already accepted finish) and restore → 200 with the template. Both are safe to repeat.
+curl -X POST http://localhost:8000/admin/templates/neon-city/retire -H "Authorization: Bearer $TOKEN"
+curl -X POST http://localhost:8000/admin/templates/neon-city/restore -H "Authorization: Bearer $TOKEN"
+```
+
+Limits: `id` 1 to 64 characters; `title` 1 to 60 and `prompt` 1 to 500 (trimmed); `tags` at most 10,
+each 1 to 30 characters, stored lower-case without duplicates (empty entries are dropped);
+`popularity` a whole number from 0 to 100. The title, every tag and the prompt are checked against
+the blocked-term list.
+
+| Status | `error` | When |
+|---|---|---|
+| 400 | `invalid_template_field` | a field breaks a limit, a required field is missing on create, or a PATCH sends nothing; `field` names it |
+| 400 | `template_text_blocked` | the title, a tag or the prompt has a blocked term; `field` names it |
+| 400 | `invalid_preview` | missing on create, over 2 MB, or not a decodable PNG, JPEG or WebP |
+| 401 | `unauthorized` | no valid session |
+| 403 | `admin_required` | the account is not an admin |
+| 404 | `template_not_found` | PATCH, retire or restore of an unknown id |
+| 409 | `template_exists` | create with an id that exists, retired or not |
+| 500 | `template_store_failed` | the database write failed; nothing was changed |
+
+Every change writes one INFO log line (`template_admin action=<create|edit|retire|restore>
+template=<id> admin=<account id>`; an edit adds the names of the changed fields). Refusals log
+`template_admin_refused ... reason=<error>`. Prompts, titles, tags and emails are never logged.
+
 ## Tests
 
 ```bash
@@ -614,7 +696,7 @@ uv run pytest
 
 ## Template previews
 
-Home-screen previews live in `seed/templates/previews/` (512x512 WebP). Regenerate them from `server/`:
+The seed previews live in `seed/templates/previews/` (512x512 WebP); they are copied into the storage root on the first start (see Template administration). Regenerate them from `server/`:
 
 ```bash
 # Pillow only: solid-color placeholders for any template missing a preview
