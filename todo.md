@@ -126,7 +126,7 @@ Items deferred from PR #1 review. None block the merge.
 ## From add-template-admin
 
 - [ ] **Manual check 5.2 and README task 4.1 never run** for add-template-admin (4.1 is verified by running the README curl examples during 5.2). On a temporary storage root, never the real one:
-  - Use an upgraded copy of a v7 `app.db`.
+  - Copy the real `server/storage/app.db` (schema v4 on this machine) into the temporary storage root and let the server upgrade the copy to v8; never point the server at the original.
   - Run `set_role.py` to make an admin.
   - Run every README curl example and check the expected codes.
   - Upload a portrait phone JPEG stored upright and check the preview is upright.

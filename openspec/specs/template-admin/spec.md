@@ -1,7 +1,7 @@
 # template-admin Specification
 
 ## Purpose
-Lets admin accounts create, edit, retire and restore photo templates and their preview images through authenticated server endpoints, with the catalog stored in the database and swapped in atomically.
+Lets admin accounts create, edit, retire and restore photo templates and their preview images through authenticated server endpoints, with changes stored by the server and applied from the next request on.
 
 ## Requirements
 
