@@ -325,3 +325,121 @@ def test_real_backend_shares_one_classifier_between_uploads_and_outputs(monkeypa
 
     assert upload is output
     assert built == [("Falconsai/nsfw_image_detection", "cpu")]
+
+
+# ── stored templates: seed import and startup checks ────────────────────────
+
+import json  # noqa: E402
+import shutil  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+REAL_SEED = Path(__file__).resolve().parents[1] / "seed" / "templates"
+SEED_TEMPLATE_COUNT = 12
+
+
+@pytest.fixture
+def seed_copy(tmp_path) -> Path:
+    """A temporary copy of the real seed folder; tests may edit it freely."""
+    return Path(shutil.copytree(REAL_SEED, tmp_path / "seed-copy"))
+
+
+def _app_for(tmp_path, seed_dir) -> TestClient:
+    settings = Settings(TEMPLATES_DIR=str(seed_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    return TestClient(create_app(settings))
+
+
+def _stored_store(tmp_path):
+    from image_edit_server.repos.user_store import SqliteUserStore
+
+    return SqliteUserStore(str(tmp_path / "s" / "app.db"))
+
+
+def test_first_start_imports_all_seed_templates_with_hashed_previews(tmp_path, seed_copy):
+    http = _app_for(tmp_path, seed_copy)
+
+    listing = http.get("/templates").json()
+
+    assert len(listing) == SEED_TEMPLATE_COUNT
+    assert len({t["preview_url"] for t in listing}) == SEED_TEMPLATE_COUNT
+    for item in listing:
+        assert item["preview_url"].startswith("/template-previews/")
+        assert item["preview_url"] != f"/template-previews/{item['id']}.webp"
+        resp = http.get(item["preview_url"])
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/webp"
+
+
+def test_second_start_with_an_edited_seed_ignores_it(tmp_path, seed_copy):
+    first = _app_for(tmp_path, seed_copy)
+    before = first.get("/templates").json()
+    entries = json.loads((seed_copy / "catalog.json").read_text())
+    (seed_copy / "catalog.json").write_text(json.dumps(entries[:2]))
+
+    second = _app_for(tmp_path, seed_copy)
+
+    assert second.get("/templates").json() == before
+
+
+def test_start_after_every_template_is_retired_does_not_reimport(tmp_path, seed_copy):
+    _app_for(tmp_path, seed_copy)
+    store = _stored_store(tmp_path)
+    for row in store.list_templates():
+        store.set_template_retired(row.id, True, "t")
+    store.close()
+
+    second = _app_for(tmp_path, seed_copy)
+
+    assert second.get("/templates").json() == []
+
+
+def test_invalid_seed_with_a_missing_preview_fails_startup_and_names_the_entry(tmp_path, seed_copy):
+    entries = json.loads((seed_copy / "catalog.json").read_text())
+    (seed_copy / "previews" / entries[3]["preview"]).unlink()
+
+    with pytest.raises(CatalogError, match=entries[3]["id"]):
+        _app_for(tmp_path, seed_copy)
+
+    assert not (tmp_path / "s" / "template-previews").exists() or not any(
+        (tmp_path / "s" / "template-previews").iterdir()
+    )
+
+
+def test_stored_row_with_a_deleted_preview_fails_startup_and_names_the_id(tmp_path, seed_copy):
+    _app_for(tmp_path, seed_copy)
+    store = _stored_store(tmp_path)
+    victim = store.list_templates()[0]
+    store.close()
+    (tmp_path / "s" / "template-previews" / victim.preview).unlink()
+
+    with pytest.raises(CatalogError, match=victim.id):
+        _app_for(tmp_path, seed_copy)
+
+
+def test_unreferenced_preview_files_are_removed_at_startup(tmp_path, seed_copy):
+    _app_for(tmp_path, seed_copy)
+    stray = tmp_path / "s" / "template-previews" / "stray-123456.webp"
+    stray.write_bytes(b"x")
+
+    _app_for(tmp_path, seed_copy)
+
+    assert not stray.exists()
+    assert len(list((tmp_path / "s" / "template-previews").iterdir())) == SEED_TEMPLATE_COUNT
+
+
+def test_create_app_makes_the_package_info_lines_visible(tmp_path, templates_dir):
+    import logging
+
+    package_logger = logging.getLogger("image_edit_server")
+    saved = (package_logger.level, list(package_logger.handlers))
+    package_logger.setLevel(logging.NOTSET)
+    package_logger.handlers.clear()
+    try:
+        create_app(Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s")))
+
+        assert package_logger.isEnabledFor(logging.INFO)
+        assert package_logger.handlers
+    finally:
+        package_logger.setLevel(saved[0])
+        package_logger.handlers[:] = saved[1]

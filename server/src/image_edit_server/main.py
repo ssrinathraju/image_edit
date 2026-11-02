@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from image_edit_server.api.admin_templates import router as admin_templates_router
 from image_edit_server.api.auth import router as auth_router
 from image_edit_server.api.deps import (
     get_account_security_service,
@@ -19,6 +20,7 @@ from image_edit_server.api.deps import (
     get_referral_service,
     get_safety_service,
     get_settings,
+    get_template_admin_service,
     get_user_store,
 )
 from image_edit_server.api.errors import install_validation_error_handler
@@ -35,7 +37,6 @@ from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_ter
 from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
-from image_edit_server.repos.template_catalog import load_catalog
 from image_edit_server.services.account_cleanup import purge_user_jobs
 from image_edit_server.services.apple_revocation import AppleRevocationClient
 from image_edit_server.services.account_security_service import AccountSecurityService
@@ -52,10 +53,26 @@ from image_edit_server.services.safety.safety_service import SafetyService
 from image_edit_server.services.safety.stub_classifier import StubClassifier
 from image_edit_server.services.report_retention import run_report_retention, sweep_reports
 from image_edit_server.services.retention_service import run_retention, sweep
+from image_edit_server.services.template_admin_service import TemplateAdminService
+from image_edit_server.services.template_seed import load_template_catalog
 from image_edit_server.services.template_service import PREVIEW_URL_PREFIX
 from image_edit_server.services.worker import run_worker
 
 logger = logging.getLogger(__name__)
+
+PREVIEWS_STORAGE_DIRNAME = "template-previews"
+PACKAGE_LOGGER_NAME = "image_edit_server"
+
+
+def _configure_logging() -> None:
+    """Show the app's INFO lines (the audit trail) under a plain `uvicorn --factory` start."""
+    package_logger = logging.getLogger(PACKAGE_LOGGER_NAME)
+    if package_logger.level == logging.NOTSET:
+        package_logger.setLevel(logging.INFO)
+    if not package_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+        package_logger.addHandler(handler)
 
 
 def _make_pipeline(cfg: Settings) -> GenerationPipeline:
@@ -127,14 +144,19 @@ def create_app(
     apple_client: AppleRevocationClient | None = None,
 ) -> FastAPI:
     """Build the app; `verifiers` and `apple_client` replace the real provider clients in tests."""
+    _configure_logging()
     cfg = settings or Settings()
     email_sender = sender or _make_email_sender(cfg)
     store = InMemoryJobStore()
-    templates_dir = Path(cfg.TEMPLATES_DIR)
-    catalog = load_catalog(templates_dir)
+    previews_dir = Path(cfg.STORAGE_ROOT) / PREVIEWS_STORAGE_DIRNAME
     upload_classifier, output_classifier = _make_classifiers(cfg)
     pipeline = _make_pipeline(cfg)
     user_store = _open_user_store(cfg)
+    try:
+        catalog_holder = load_template_catalog(user_store, Path(cfg.TEMPLATES_DIR), previews_dir)
+    except Exception:
+        user_store.close()
+        raise
     auth_service = AuthService(
         user_store,
         LoginThrottle(cfg.LOGIN_MAX_FAILURES, timedelta(minutes=cfg.LOGIN_LOCKOUT_MINUTES)),
@@ -157,6 +179,9 @@ def create_app(
         output_classifier,
     )
     referral_service = ReferralService(cfg, user_store)
+    template_admin_service = TemplateAdminService(
+        user_store, catalog_holder, safety_service, previews_dir
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -220,7 +245,7 @@ def create_app(
     )
     app.dependency_overrides[get_settings] = lambda: cfg
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_catalog] = lambda: catalog
+    app.dependency_overrides[get_catalog] = lambda: catalog_holder.current
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_account_security_service] = lambda: account_security_service
@@ -228,18 +253,20 @@ def create_app(
     app.dependency_overrides[get_report_service] = lambda: ReportService(cfg, user_store, store)
     app.dependency_overrides[get_safety_service] = lambda: safety_service
     app.dependency_overrides[get_referral_service] = lambda: referral_service
+    app.dependency_overrides[get_template_admin_service] = lambda: template_admin_service
     app.include_router(auth_router)
     app.include_router(me_security_router)
     app.include_router(generations_router)
     app.include_router(templates_router)
     app.include_router(reports_router)
+    app.include_router(admin_templates_router)
 
     outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/images", StaticFiles(directory=str(outputs_dir)), name="images")
     app.mount(
         PREVIEW_URL_PREFIX,
-        StaticFiles(directory=str(templates_dir / "previews")),
+        StaticFiles(directory=str(previews_dir)),
         name="template-previews",
     )
 

@@ -54,7 +54,7 @@ Items deferred from PR #1 review. None block the merge.
 
 ## Deployment checklist
 
-- [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total.
+- [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total. The same holds for `POST` and `PATCH` on `/admin/templates`: the framework streams the multipart body to temporary disk before it checks the session, so an unauthenticated client can send an oversized `preview`. The proxy should refuse bodies above about 2 MB plus the form fields on those paths.
 
 ## Decided, no change
 
