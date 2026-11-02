@@ -122,3 +122,14 @@ Items deferred from PR #1 review. None block the merge.
   - Stopped-server poll-error check: stop the server while polling a job; Try again must not be offered on a poll error.
   - Use up the daily limit, then tap More like this: the limit dialog appears and nothing is submitted.
   - Open a creation saved before this change: no Make another.
+
+## From add-template-admin
+
+- [ ] **Manual check 5.2 and README task 4.1 never run** for add-template-admin (4.1 is verified by running the README curl examples during 5.2). On a temporary storage root, never the real one:
+  - Copy the real `server/storage/app.db` (schema v4 on this machine) into the temporary storage root and let the server upgrade the copy to v8; never point the server at the original.
+  - Run `set_role.py` to make an admin.
+  - Run every README curl example and check the expected codes.
+  - Upload a portrait phone JPEG stored upright and check the preview is upright.
+  - Simulator/emulator checks: new, retired and restored templates show correctly on refresh; Make another on a retired template; a generation from a template retired while the grid was open.
+  - Check the log lines carry no template text.
+- [ ] `tests/api/test_output_safety.py` uses a `time.time()` deadline and flaked under clock jumps; switch it to `time.monotonic()`.
