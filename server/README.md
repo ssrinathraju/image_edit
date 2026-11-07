@@ -4,6 +4,8 @@ FastAPI backend for the image_edit project. Accepts reference face images and a 
 
 ## Setup
 
+The server needs Python 3.11 or later. `uv sync` installs it if the machine does not have it.
+
 ```bash
 uv sync
 ```
@@ -81,8 +83,7 @@ Notes:
   (override with `IMAGE_EDIT_AUTH_DB_PATH`). Jobs are still in memory and are lost on restart.
 - Passwords travel as plain JSON, so outside local development the API **must** be served over
   HTTPS.
-- Generated images at `/images/<job_id>.png` are not authenticated; job ids are unguessable and
-  only the owner can look them up, but treat the URLs as secrets.
+- Generated images are served only through signed links (see "Signed result links" below).
 
 ## Plans, daily limit, and referrals
 
@@ -422,7 +423,7 @@ Template prompts stay on the server. Sending both `prompt` and `template_id`, or
 ```bash
 curl http://localhost:8000/generations/<job_id> -H "Authorization: Bearer $TOKEN"
 # → {"job_id": "...", "status": "queued"|"running"|"succeeded"|"failed",
-#    "result_url": "/images/<job_id>.png", "expires_at": "2026-10-23T10:00:00Z"}
+#    "result_url": "/images/<job_id>.png?exp=1792749600&sig=...", "expires_at": "2026-10-23T10:00:00Z"}
 ```
 
 `expires_at` (UTC, ISO 8601) is set only for `succeeded` jobs and is null otherwise. It is when the
@@ -431,8 +432,24 @@ image was written plus `OUTPUT_RETENTION_HOURS`: the retention sweep never delet
 ## Download the result
 
 ```bash
-curl http://localhost:8000/images/<job_id>.png -o result.png
+# Use the result_url from the status call, in full, within 15 minutes
+curl "http://localhost:8000<result_url>" -o result.png
 ```
+
+### Signed result links
+
+- Every `GET /generations/<job_id>` for a succeeded job returns a newly signed `result_url`. The
+  link carries `exp` (a Unix time 15 minutes ahead) and `sig` (an HMAC-SHA256 over the job id and
+  `exp`). After 15 minutes the link gives 404; ask for status again to get a new one.
+- A request with no signature, an expired or altered one, another job's, or for an image that is
+  gone all get the same 404. The image response carries `Cache-Control: private, no-store`.
+- `IMAGE_EDIT_RESULT_URL_SECRET` is the signing key. When empty, the server makes a random key at
+  each start (links issued before a restart stop working; the app asks for status again). When set,
+  it must be at least 32 characters, or the server refuses to start. **Set it, to the same value,
+  before running several instances over the same `outputs/` folder.** Never commit it.
+- uvicorn's access log prints each request's query string, so it shows `sig`. A signature is
+  harmless once expired, but in production turn the access log off (`uvicorn ... --no-access-log`).
+  The server itself never logs the key or a signature.
 
 ## Content safety and reports
 

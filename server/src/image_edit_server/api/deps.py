@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Callable, Optional
 
 from fastapi import Depends, Header, HTTPException
 
@@ -55,6 +56,14 @@ def get_template_admin_service() -> TemplateAdminService:
     )
 
 
+def get_result_url_secret() -> bytes:
+    raise RuntimeError("result URL secret is not configured; override get_result_url_secret")
+
+
+def get_clock() -> Callable[[], datetime]:
+    return lambda: datetime.now(timezone.utc)
+
+
 def _unauthorized() -> HTTPException:
     return HTTPException(
         401,
@@ -74,6 +83,8 @@ def get_bearer_token(authorization: Annotated[Optional[str], Header()] = None) -
 
 TokenDep = Annotated[str, Depends(get_bearer_token)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+ResultUrlSecretDep = Annotated[bytes, Depends(get_result_url_secret)]
+ClockDep = Annotated[Callable[[], datetime], Depends(get_clock)]
 UserStoreDep = Annotated[UserStore, Depends(get_user_store)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 AccountSecurityDep = Annotated[AccountSecurityService, Depends(get_account_security_service)]

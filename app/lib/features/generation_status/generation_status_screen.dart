@@ -119,7 +119,12 @@ class _SuccessView extends ConsumerWidget {
         jobId: job.jobId,
         message: 'Could not load the image.',
         succeeded: true,
-        onReload: () => ref.invalidate(resultImageBytesProvider(url)),
+        // The link may have expired, so ask for status again to get a new one. The
+        // bytes are dropped too: a new link in the same second equals the old one.
+        onReload: () {
+          ref.invalidate(resultImageBytesProvider(url));
+          ref.invalidate(generationStatusProvider(job.jobId));
+        },
       ),
       data: (data) =>
           _ResultBody(jobId: job.jobId, bytes: data, expiresAt: job.expiresAt),

@@ -55,21 +55,6 @@ def test_full_generation_flow(app_client):
     assert len(img_resp.content) > 0
 
 
-def test_static_files_serve_png(app_client, tmp_path):
-    from pathlib import Path
-    from PIL import Image
-
-    # Place a PNG in the outputs dir
-    out_dir = tmp_path / "outputs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    img = Image.new("RGB", (10, 10), color=(255, 0, 0))
-    img.save(out_dir / "foo.png", format="PNG")
-
-    resp = app_client.get("/images/foo.png")
-    assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("image/png")
-
-
 def test_template_generation_flow(app_client):
     resp = app_client.post(
         "/generations",

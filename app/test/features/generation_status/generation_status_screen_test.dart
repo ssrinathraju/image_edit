@@ -86,6 +86,7 @@ Future<_Harness> _pump(
   String jobId = 'job-1',
   InMemoryCreationStore? store,
   DateTime Function(DateTime)? toLocal,
+  Future<Uint8List> Function(String url)? onFetchBytes,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -93,7 +94,7 @@ Future<_Harness> _pump(
 
   final fakeClient = client ?? FakeApiClient();
   if (client == null) fakeClient.onStatus = (id) async => _succeeded(id);
-  fakeClient.onFetchBytes = (_) async => tinyPng;
+  fakeClient.onFetchBytes = onFetchBytes ?? (_) async => tinyPng;
   final actions = FakeImageActions();
   final router = GoRouter(
     initialLocation: '/status/$jobId',
@@ -139,6 +140,91 @@ const _generalFailureText =
     "Something went wrong and this one wasn't counted. Please try again.";
 
 void main() {
+  testWidgets('Reload asks for status again and loads the image from the new link', (tester) async {
+    final client = FakeApiClient();
+    var statusCalls = 0;
+    client.onStatus = (id) async {
+      statusCalls++;
+      return GenerationJob(
+        jobId: id,
+        status: JobStatus.succeeded,
+        resultUrl: 'http://fake/images/$id.png?exp=$statusCalls&sig=s$statusCalls',
+      );
+    };
+    final fetched = <String>[];
+    await _pump(
+      tester,
+      client: client,
+      onFetchBytes: (url) async {
+        fetched.add(url);
+        if (fetched.length == 1) throw DioException(requestOptions: RequestOptions());
+        return tinyPng;
+      },
+    );
+    expect(find.text('Could not load the image.'), findsOneWidget);
+    expect(statusCalls, 1);
+
+    await tester.tap(find.text('Reload'));
+    await tester.pumpAndSettle();
+
+    expect(statusCalls, 2);
+    // The old link may be fetched once more while status reloads; the last fetch is the new link.
+    expect(fetched.last, 'http://fake/images/job-1.png?exp=2&sig=s2');
+    expect(find.text('Could not load the image.'), findsNothing);
+    expect(find.byType(Image, skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('Reload fetches again when status returns the same link as the failed one', (tester) async {
+    final client = FakeApiClient();
+    client.onStatus = (id) async => GenerationJob(
+          jobId: id,
+          status: JobStatus.succeeded,
+          resultUrl: 'http://fake/images/$id.png?exp=1&sig=s1',
+        );
+    var fetches = 0;
+    await _pump(
+      tester,
+      client: client,
+      onFetchBytes: (_) async {
+        fetches++;
+        if (fetches == 1) throw DioException(requestOptions: RequestOptions());
+        return tinyPng;
+      },
+    );
+    expect(find.text('Could not load the image.'), findsOneWidget);
+
+    await tester.tap(find.text('Reload'));
+    await tester.pumpAndSettle();
+
+    expect(fetches, 2);
+    expect(find.text('Could not load the image.'), findsNothing);
+    expect(find.byType(Image, skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('Reload shows the failure view with the way home when status then fails', (tester) async {
+    final client = FakeApiClient();
+    var statusCalls = 0;
+    client.onStatus = (id) async {
+      statusCalls++;
+      if (statusCalls > 1) throw DioException(requestOptions: RequestOptions());
+      return _succeeded(id);
+    };
+    await _pump(
+      tester,
+      client: client,
+      onFetchBytes: (_) async => throw DioException(requestOptions: RequestOptions()),
+    );
+    expect(find.text('Could not load the image.'), findsOneWidget);
+
+    await tester.tap(find.text('Reload'));
+    await tester.pumpAndSettle();
+
+    expect(statusCalls, 2);
+    expect(find.text('Could not load the image.'), findsNothing);
+    expect(find.text('Reload'), findsNothing);
+    expect(find.text('New Generation'), findsOneWidget);
+  });
+
   testWidgets('a succeeded job shows the image and every action', (tester) async {
     await _pump(tester, lastRequest: _request());
 

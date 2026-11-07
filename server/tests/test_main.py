@@ -443,3 +443,158 @@ def test_create_app_makes_the_package_info_lines_visible(tmp_path, templates_dir
     finally:
         package_logger.setLevel(saved[0])
         package_logger.handlers[:] = saved[1]
+
+
+def _signed_status_link(client, headers, storage_root):
+    """Submit a job on a real app and return its status-call result_url once it succeeds."""
+    import io
+    import time
+
+    from tests.api.test_generations_quota import PNG
+
+    resp = client.post(
+        "/generations",
+        data={"prompt": "a calm lake"},
+        files=[("faces", ("f.png", io.BytesIO(PNG), "image/png"))],
+        headers=headers,
+    )
+    job_id = resp.json()["job_id"]
+    for _ in range(100):
+        body = client.get(f"/generations/{job_id}", headers=headers).json()
+        if body["status"] == "succeeded":
+            return job_id, body["result_url"]
+        time.sleep(0.05)
+    raise AssertionError("job did not finish")
+
+
+def test_an_empty_secret_gives_a_working_app_with_verifiable_links(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    with TestClient(create_app(settings, sender=RecordingSender())) as client:
+        headers = register_headers(client, "ana@example.com", consent=True)
+        _job_id, url = _signed_status_link(client, headers, tmp_path)
+
+        assert client.get(url).status_code == 200
+
+
+def test_a_short_secret_fails_startup_with_a_clear_message(tmp_path, templates_dir):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="RESULT_URL_SECRET must be at least 32 characters"):
+        create_app(
+            Settings(
+                TEMPLATES_DIR=str(templates_dir),
+                STORAGE_ROOT=str(tmp_path / "s"),
+                RESULT_URL_SECRET="short",
+            )
+        )
+
+
+def test_a_configured_secret_makes_links_work_across_instances(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    def build():
+        return create_app(
+            Settings(
+                TEMPLATES_DIR=str(templates_dir),
+                STORAGE_ROOT=str(tmp_path / "s"),
+                RESULT_URL_SECRET="s" * 40,
+            ),
+            sender=RecordingSender(),
+        )
+
+    with TestClient(build()) as first:
+        headers = register_headers(first, "ana@example.com", consent=True)
+        _job_id, url = _signed_status_link(first, headers, tmp_path)
+    with TestClient(build()) as second:
+        assert second.get(url).status_code == 200
+
+
+def test_links_from_a_random_secret_do_not_survive_a_restart(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    def build():
+        return create_app(
+            Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s")),
+            sender=RecordingSender(),
+        )
+
+    with TestClient(build()) as first:
+        headers = register_headers(first, "ana@example.com", consent=True)
+        _job_id, url = _signed_status_link(first, headers, tmp_path)
+    with TestClient(build()) as second:
+        assert second.get(url).status_code == 404
+
+
+def test_the_secret_and_signatures_never_reach_the_logs(tmp_path, templates_dir, caplog):
+    import logging
+
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    secret = "very-secret-value-" + "x" * 20
+    caplog.set_level(logging.DEBUG)
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"), RESULT_URL_SECRET=secret
+    )
+    with TestClient(create_app(settings, sender=RecordingSender())) as client:
+        headers = register_headers(client, "ana@example.com", consent=True)
+        _job_id, url = _signed_status_link(client, headers, tmp_path)
+        client.get(url)
+
+    signature = url.split("sig=")[1]
+    # The test client's own httpx lines echo the URL it requested; only the server's logs count.
+    server_log = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith(("image_edit_server", "uvicorn"))
+    )
+    assert "random secret" not in server_log  # a configured secret logs no notice at all
+    assert secret not in server_log
+    assert signature not in server_log
+
+
+def test_an_empty_secret_logs_the_notice_and_a_set_secret_does_not(tmp_path, templates_dir, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="image_edit_server")
+    create_app(Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "a")))
+    assert any(
+        r.levelno == logging.INFO and "RESULT_URL_SECRET is not set" in r.getMessage()
+        for r in caplog.records
+    )
+
+    caplog.clear()
+    create_app(
+        Settings(
+            TEMPLATES_DIR=str(templates_dir),
+            STORAGE_ROOT=str(tmp_path / "b"),
+            RESULT_URL_SECRET="s" * 40,
+        )
+    )
+    assert not any("RESULT_URL_SECRET" in r.getMessage() for r in caplog.records)
+
+
+def test_the_real_app_refuses_an_unsigned_link_to_an_existing_image(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    with TestClient(create_app(settings, sender=RecordingSender())) as client:
+        headers = register_headers(client, "ana@example.com", consent=True)
+        job_id, url = _signed_status_link(client, headers, tmp_path)
+        unsigned = url.split("?")[0]
+
+        assert client.get(url).status_code == 200
+        resp = client.get(unsigned)
+        assert resp.status_code == 404
+        assert resp.json() == {"detail": "Not Found"}
