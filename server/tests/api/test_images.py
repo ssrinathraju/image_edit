@@ -31,9 +31,11 @@ def link(job_id, clock, result_url_secret):
     return build
 
 
-def _assert_refused(resp):
+def _assert_refused(resp, client):
+    """A refusal has the status and body of an unknown route, so the cause cannot be told."""
     assert resp.status_code == 404
     assert resp.json() == NOT_FOUND_BODY
+    assert resp.json() == client.get("/no/such/route").json()
 
 
 def test_a_valid_link_returns_the_image(anon_client, link):
@@ -46,7 +48,7 @@ def test_a_valid_link_returns_the_image(anon_client, link):
 
 
 def test_a_link_without_parameters_is_refused(anon_client, job_id):
-    _assert_refused(anon_client.get(f"/images/{job_id}.png"))
+    _assert_refused(anon_client.get(f"/images/{job_id}.png"), anon_client)
 
 
 def test_a_link_with_only_one_parameter_is_refused(anon_client, job_id, link):
@@ -54,15 +56,15 @@ def test_a_link_with_only_one_parameter_is_refused(anon_client, job_id, link):
     exp_only = full.split("&sig=")[0]
     sig_only = full.replace(full.split("?")[1].split("&")[0] + "&", "")
 
-    _assert_refused(anon_client.get(exp_only))
-    _assert_refused(anon_client.get(sig_only))
+    _assert_refused(anon_client.get(exp_only), anon_client)
+    _assert_refused(anon_client.get(sig_only), anon_client)
 
 
 def test_an_expired_link_is_refused_though_the_image_remains(anon_client, link, clock):
     url = link()
     clock.advance(minutes=16)
 
-    _assert_refused(anon_client.get(url))
+    _assert_refused(anon_client.get(url), anon_client)
 
 
 def test_a_link_works_until_just_before_it_expires(anon_client, link, clock):
@@ -76,20 +78,20 @@ def test_a_tampered_expiry_is_refused(anon_client, link, clock):
     url = link()
     exp = int(url.split("exp=")[1].split("&")[0])
 
-    _assert_refused(anon_client.get(url.replace(f"exp={exp}", f"exp={exp + 3600}")))
+    _assert_refused(anon_client.get(url.replace(f"exp={exp}", f"exp={exp + 3600}")), anon_client)
 
 
 def test_another_jobs_signature_is_refused(anon_client, link):
-    _assert_refused(anon_client.get(link(for_job=str(ULID()))))
+    _assert_refused(anon_client.get(link(for_job=str(ULID()))), anon_client)
 
 
 def test_a_signature_made_with_another_secret_is_refused(anon_client, link):
-    _assert_refused(anon_client.get(link(secret=b"x" * 40)))
+    _assert_refused(anon_client.get(link(secret=b"x" * 40)), anon_client)
 
 
-@pytest.mark.parametrize("exp", ["abc", "-5", "1.5", "", "1" * 13, "１２３"])
+@pytest.mark.parametrize("exp", ["abc", "-5", "1.5", "", "1" * 13, "１２３", "0", "01700000000"])
 def test_a_non_numeric_or_overlong_expiry_is_refused(anon_client, job_id, exp):
-    _assert_refused(anon_client.get(f"/images/{job_id}.png", params={"exp": exp, "sig": "x"}))
+    _assert_refused(anon_client.get(f"/images/{job_id}.png", params={"exp": exp, "sig": "x"}), anon_client)
 
 
 @pytest.mark.parametrize(
@@ -100,14 +102,14 @@ def test_a_malformed_job_id_is_refused(anon_client, clock, result_url_secret, ba
     exp = int((clock() + timedelta(minutes=5)).timestamp())
     sig = url_signing.sign(bad_id, exp, result_url_secret)
 
-    _assert_refused(anon_client.get(f"/images/{bad_id}.png?exp={exp}&sig={sig}"))
+    _assert_refused(anon_client.get(f"/images/{bad_id}.png?exp={exp}&sig={sig}"), anon_client)
 
 
 def test_a_valid_link_to_a_swept_image_is_refused(anon_client, link, job_id, settings):
     url = link()
     file_storage.delete_output(job_id, settings.STORAGE_ROOT)
 
-    _assert_refused(anon_client.get(url))
+    _assert_refused(anon_client.get(url), anon_client)
 
 
 def test_a_valid_link_for_a_job_that_never_had_a_file_is_refused(
@@ -118,8 +120,13 @@ def test_a_valid_link_for_a_job_that_never_had_a_file_is_refused(
     exp = int((clock() + timedelta(minutes=5)).timestamp())
     sig = url_signing.sign(blocked, exp, result_url_secret)
 
-    _assert_refused(anon_client.get(f"/images/{blocked}.png?exp={exp}&sig={sig}"))
+    _assert_refused(anon_client.get(f"/images/{blocked}.png?exp={exp}&sig={sig}"), anon_client)
 
 
-def test_every_refusal_has_the_body_of_an_unknown_route(anon_client):
-    assert anon_client.get("/no/such/route").json() == NOT_FOUND_BODY
+def test_an_expiry_with_leading_zeros_is_refused_though_the_signature_matches(
+    anon_client, link
+):
+    url = link()
+    exp = url.split("exp=")[1].split("&")[0]
+
+    _assert_refused(anon_client.get(url.replace(f"exp={exp}", f"exp=0{exp}")), anon_client)

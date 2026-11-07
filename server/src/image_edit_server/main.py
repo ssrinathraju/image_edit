@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 
 PREVIEWS_STORAGE_DIRNAME = "template-previews"
 PACKAGE_LOGGER_NAME = "image_edit_server"
+RESULT_URL_SECRET_BYTES = 32
 
 
 def _configure_logging() -> None:
@@ -141,7 +142,7 @@ def _result_url_secret(cfg: Settings) -> bytes:
         "IMAGE_EDIT_RESULT_URL_SECRET is not set: using a random secret; "
         "set it before running several instances"
     )
-    return secrets.token_bytes(32)
+    return secrets.token_bytes(RESULT_URL_SECRET_BYTES)
 
 
 def _open_user_store(cfg: Settings) -> SqliteUserStore:

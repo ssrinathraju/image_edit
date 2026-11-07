@@ -24,6 +24,8 @@ def _not_found() -> HTTPException:
 def _parse_expiry(raw: Optional[str]) -> Optional[int]:
     if raw is None or not raw.isascii() or not raw.isdigit() or len(raw) > MAX_EXPIRY_DIGITS:
         return None
+    if raw.startswith("0"):
+        return None  # one canonical form per expiry
     return int(raw)
 
 

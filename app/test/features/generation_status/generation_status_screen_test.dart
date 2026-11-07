@@ -168,10 +168,35 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(statusCalls, 2);
-    expect(fetched, [
-      'http://fake/images/job-1.png?exp=1&sig=s1',
-      'http://fake/images/job-1.png?exp=2&sig=s2',
-    ]);
+    // The old link may be fetched once more while status reloads; the last fetch is the new link.
+    expect(fetched.last, 'http://fake/images/job-1.png?exp=2&sig=s2');
+    expect(find.text('Could not load the image.'), findsNothing);
+    expect(find.byType(Image, skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('Reload fetches again when status returns the same link as the failed one', (tester) async {
+    final client = FakeApiClient();
+    client.onStatus = (id) async => GenerationJob(
+          jobId: id,
+          status: JobStatus.succeeded,
+          resultUrl: 'http://fake/images/$id.png?exp=1&sig=s1',
+        );
+    var fetches = 0;
+    await _pump(
+      tester,
+      client: client,
+      onFetchBytes: (_) async {
+        fetches++;
+        if (fetches == 1) throw DioException(requestOptions: RequestOptions());
+        return tinyPng;
+      },
+    );
+    expect(find.text('Could not load the image.'), findsOneWidget);
+
+    await tester.tap(find.text('Reload'));
+    await tester.pumpAndSettle();
+
+    expect(fetches, 2);
     expect(find.text('Could not load the image.'), findsNothing);
     expect(find.byType(Image, skipOffstage: false), findsOneWidget);
   });

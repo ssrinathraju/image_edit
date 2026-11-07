@@ -560,3 +560,41 @@ def test_the_secret_and_signatures_never_reach_the_logs(tmp_path, templates_dir,
     assert "random secret" not in server_log  # a configured secret logs no notice at all
     assert secret not in server_log
     assert signature not in server_log
+
+
+def test_an_empty_secret_logs_the_notice_and_a_set_secret_does_not(tmp_path, templates_dir, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="image_edit_server")
+    create_app(Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "a")))
+    assert any(
+        r.levelno == logging.INFO and "RESULT_URL_SECRET is not set" in r.getMessage()
+        for r in caplog.records
+    )
+
+    caplog.clear()
+    create_app(
+        Settings(
+            TEMPLATES_DIR=str(templates_dir),
+            STORAGE_ROOT=str(tmp_path / "b"),
+            RESULT_URL_SECRET="s" * 40,
+        )
+    )
+    assert not any("RESULT_URL_SECRET" in r.getMessage() for r in caplog.records)
+
+
+def test_the_real_app_refuses_an_unsigned_link_to_an_existing_image(tmp_path, templates_dir):
+    from fastapi.testclient import TestClient
+
+    from tests.helpers import RecordingSender, register_headers
+
+    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    with TestClient(create_app(settings, sender=RecordingSender())) as client:
+        headers = register_headers(client, "ana@example.com", consent=True)
+        job_id, url = _signed_status_link(client, headers, tmp_path)
+        unsigned = url.split("?")[0]
+
+        assert client.get(url).status_code == 200
+        resp = client.get(unsigned)
+        assert resp.status_code == 404
+        assert resp.json() == {"detail": "Not Found"}
