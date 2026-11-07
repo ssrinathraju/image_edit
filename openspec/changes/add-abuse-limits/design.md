@@ -25,7 +25,7 @@ The check runs after the email format check and before the referral and sending 
 ### Decision 2: Per-address limits live in memory, in a sliding window
 `SignupLimiter` keeps, for each address, a `deque` of the times of counted requests, and drops entries older than 24 hours.
 - `check(address, now)` returns `None` when the request is allowed. Otherwise it returns the seconds to wait: until the oldest entry inside the hour leaves when the hour has 5 entries, or the same for the day when it has 10.
-- `record(address, now)` is called only after the request was accepted, meaning the 202 for registration or the account created for a provider sign-up.
+- `reserve(address, now)` checks and counts in one locked step, so parallel requests cannot all pass the check. A registration reserves before hashing and releases (`release(address, at)`) on every refusal or error; a provider sign-in reserves only when it will create the account and releases if the insert fails. A provider sign-in that only answers `age_required` (or under age) is checked with `check`, which counts nothing.
 - A `threading.Lock` guards the map, and entries that age out are removed, so memory is bounded by recent sign-ups.
 
 The limiter is created once in `create_app`.
@@ -64,7 +64,8 @@ The count is made where `auth_service` would insert a new user for a provider id
 |---|---|
 | Register | `disposable_email`: "Use a permanent email address.", fields kept. `too_many_signups`: "Too many new accounts from this network. Try again in N minutes." (or seconds), fields kept. |
 | Change email | `disposable_email`: "Use a permanent email address.", field kept. |
-| Sign-in (Google or Apple buttons) and the provider age screen | `too_many_signups`: the same message, and the user stays signed out. |
+| Sign-in (Google or Apple buttons) | `too_many_signups`: the same message, and the user stays signed out. The limit is checked before the age screen is shown, so a new account that is refused is never asked for a date of birth. |
+| Provider age screen | `too_many_signups`: the same message, only if the limit filled while the date was being entered; the user stays signed out. |
 
 ## Risks and trade-offs
 
@@ -80,6 +81,6 @@ The count is made where `auth_service` would insert a new user for a provider id
   - Shared addresses (mobile carriers using CGNAT, offices) can reach 5 per hour. The message explains the wait.
   - The disposable list can include domains some real people use. The file is easy to edit, and a change applies at restart.
 - **Failure and retry:** a refused request changes nothing and can be retried after `Retry-After`. A limiter error is a bug; it is not caught, so it surfaces as a 500 in tests rather than silently letting requests through.
-- **Background tasks:** none. Entries that age out are removed during `check` and `record`.
+- **Background tasks:** none. Entries that age out are removed during `reserve` (the sweep costs O(addresses seen in 24 hours) under the lock).
 - **Thread-safety:** the limiter's map is guarded by its lock. The referral cycle check runs inside the store transaction.
 - **Several instances:** each process would count separately, effectively multiplying the limit. This is recorded as a deployment checklist item, alongside the move to Postgres.

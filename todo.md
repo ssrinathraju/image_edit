@@ -160,3 +160,6 @@ The first launch is India only.
   - After retention, Reload shows an error and the way home.
   - My creations catch-up still saves results.
   - A quick double Reload works.
+
+## From add-abuse-limits
+- [ ] **IPv6 sign-ups are counted per full address.** A host with an IPv6 /64 (a VPS, many mobile carriers) can rotate addresses and avoid the per-address limit. The spec counts per "client network address" and says nothing about grouping, so behaviour was left as is. Decide in a later change whether to group IPv6 by /64 in `SignupLimiter`.
