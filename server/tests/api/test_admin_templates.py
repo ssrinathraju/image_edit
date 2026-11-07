@@ -203,6 +203,14 @@ def test_create_errors(http, admin):
     assert "neon-city" not in {t["id"] for t in http.get("/admin/templates", headers=admin).json()}
 
 
+def test_a_very_long_popularity_is_refused_over_http(http, admin):
+    resp = _create(http, admin, popularity="9" * 5000)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_template_field"
+    assert resp.json()["detail"]["field"] == "popularity"
+
+
 def test_duplicate_id_is_409_and_leaves_the_original(http, admin):
     _create(http, admin)
 
