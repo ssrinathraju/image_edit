@@ -5,9 +5,10 @@ from fastapi import BackgroundTasks, HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.repos.user_store import SqliteUserStore
 from image_edit_server.services.auth_service import AuthService
-from tests.helpers import RecordingSender
+from tests.helpers import TEST_DISPOSABLE_DOMAINS, RecordingSender
 
 PASSWORD = "correct horse battery"
 
@@ -23,7 +24,7 @@ class Clock:
 def _start(auth, email, password, referral_code=None):
     """Start a registration and run its email task, as the response's background would."""
     tasks = BackgroundTasks()
-    auth.register(email, password, "1990-01-01", referral_code, tasks)
+    auth.register(email, password, "1990-01-01", referral_code, tasks, "203.0.113.9")
     for task in tasks.tasks:
         task.func(*task.args, **task.kwargs)
 
@@ -52,7 +53,15 @@ def auth(users, purged) -> AuthService:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
     )
-    return AuthService(users, throttle, settings, purged.append, RecordingSender())
+    return AuthService(
+        users,
+        throttle,
+        settings,
+        purged.append,
+        RecordingSender(),
+        TEST_DISPOSABLE_DOMAINS,
+        SignupLimiter(),
+    )
 
 
 def _error(excinfo) -> tuple[int, str]:
@@ -211,6 +220,8 @@ def test_delete_removes_the_user_before_purging_their_jobs(users):
         settings,
         lambda user_id: seen.append(users.get_by_id(user_id)),
         RecordingSender(),
+        TEST_DISPOSABLE_DOMAINS,
+        SignupLimiter(),
     )
     _, user = _register(auth, "ana@example.com", PASSWORD)
 

@@ -259,3 +259,15 @@ def test_stub_flag_with_a_real_backend_is_refused(flag):
 
 def test_stub_flag_none_is_fine_with_a_real_backend():
     assert Settings(MODEL_BACKEND="sana").SAFETY_STUB_FLAG == "none"
+
+
+def test_abuse_limit_settings_have_safe_defaults():
+    settings = Settings()
+
+    assert settings.TRUSTED_PROXY_HOPS == 0
+    assert settings.DISPOSABLE_DOMAINS_FILE == "./seed/abuse/disposable_domains.txt"
+
+
+def test_trusted_proxy_hops_above_five_is_refused():
+    with pytest.raises(ValueError):
+        Settings(TRUSTED_PROXY_HOPS=6)

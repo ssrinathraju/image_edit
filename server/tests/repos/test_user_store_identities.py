@@ -209,6 +209,28 @@ def test_creating_an_account_without_an_age_decision_raises_age_required_and_wri
     assert _count(users, "identities") == 0
 
 
+def test_before_create_runs_ahead_of_the_age_decision_and_its_refusal_wins(users):
+    class Refused(Exception):
+        pass
+
+    def refuse():
+        raise Refused
+
+    with pytest.raises(Refused):
+        users.sign_in_with_identity(_identity(), NOW, before_create=refuse)
+
+    assert _count(users, "users") == 0
+
+
+def test_before_create_is_not_called_for_an_already_linked_identity(users):
+    users.sign_in_with_identity(_identity(), NOW, adult_confirmed=True)
+    calls = []
+
+    users.sign_in_with_identity(_identity(), NOW, before_create=lambda: calls.append(1))
+
+    assert calls == []
+
+
 def test_creating_an_account_for_a_minor_raises_under_age_and_writes_nothing(users):
     with pytest.raises(UnderAgeSignUp):
         users.sign_in_with_identity(_identity(), NOW, adult_confirmed=False)

@@ -6,10 +6,12 @@ import pytest
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.core.passwords import hash_password
 from image_edit_server.core.referral_codes import ALPHABET
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.services.auth_service import AuthService
+from tests.helpers import TEST_DISPOSABLE_DOMAINS
 
 OLD_SCHEMA = """
 CREATE TABLE users (
@@ -293,7 +295,15 @@ def test_upgrading_a_v3_database_keeps_everything_and_adds_no_identities(v3_db):
 def test_upgrading_a_v3_database_verifies_an_unverified_account_and_it_can_log_in(v3_db):
     store = SqliteUserStore(v3_db)
     throttle = LoginThrottle(5, timedelta(minutes=15))
-    auth = AuthService(store, throttle, Settings(), lambda _: None, object())
+    auth = AuthService(
+        store,
+        throttle,
+        Settings(),
+        lambda _: None,
+        object(),
+        TEST_DISPOSABLE_DOMAINS,
+        SignupLimiter(),
+    )
 
     token, user = auth.login("c@example.com", "correct horse battery")
 

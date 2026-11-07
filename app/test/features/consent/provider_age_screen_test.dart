@@ -125,6 +125,33 @@ void main() {
     expect(storage.saved, isNull);
   });
 
+  testWidgets('too_many_signups on the age screen shows the wait, keeps the date and no session', (
+    tester,
+  ) async {
+    var calls = 0;
+    client.onSignInWithGoogle = (_) async {
+      calls++;
+      throw calls == 1
+          ? apiError(400, 'age_required', 'x')
+          : apiError(429, 'too_many_signups', 'x', retryAfterSeconds: 61);
+    };
+    await pumpApp(tester, client: client, storage: storage, google: FakeProviderSignIn.google());
+
+    await tester.tap(_googleButton);
+    await tester.pumpAndSettle();
+    await chooseDateOfBirth(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Too many new accounts from this network. Try again in 2 minutes.'),
+      findsOneWidget,
+    );
+    expect(find.text('Your date of birth'), findsOneWidget);
+    expect(find.text('1990-01-31'), findsOneWidget);
+    expect(storage.saved, isNull);
+  });
+
   testWidgets('cancelling returns to sign-in with no session', (tester) async {
     client.onSignInWithGoogle = (_) async =>
         throw apiError(400, 'age_required', 'send a date_of_birth');

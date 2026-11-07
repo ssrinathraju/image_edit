@@ -39,3 +39,4 @@ ml = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["real_signup_limits: run with the shipped sign-up caps instead of the relaxed ones"]

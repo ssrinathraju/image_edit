@@ -6,6 +6,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../core/api_errors.dart';
 import '../../core/provider_sign_in.dart';
 import '../common/error_message.dart';
+import '../common/signup_messages.dart';
 import '../consent/age_messages.dart';
 import '../consent/provider_age_screen.dart';
 import 'session_notifier.dart';
@@ -25,6 +26,7 @@ String describeProviderSignInError(Object error, SignInProvider provider) {
   if (isProviderAlreadyLinked(error)) {
     return 'This account is already linked to another ${provider.label} account';
   }
+  if (isTooManySignups(error)) return tooManySignupsMessage(error);
   if (isProviderNotConfigured(error) || isProviderUnavailable(error)) {
     return _unavailableMessage;
   }

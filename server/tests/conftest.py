@@ -26,6 +26,7 @@ from image_edit_server.api.templates import get_catalog, router as templates_rou
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.safety import TermMatcher
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
 from image_edit_server.repos.template_catalog import TemplateCatalog, load_catalog
 from image_edit_server.repos.user_store import SqliteUserStore
@@ -41,6 +42,7 @@ from tests.helpers import (
     FakeClock,
     FakeVerifier,
     RecordingSender,
+    TEST_DISPOSABLE_DOMAINS,
     build_templates_dir,
     register_headers,
 )
@@ -50,6 +52,15 @@ from tests.helpers import (
 def fast_password_hashing(monkeypatch):
     """Keep registration cheap in tests; verify still honours stored iterations."""
     monkeypatch.setattr("image_edit_server.core.passwords.PBKDF2_ITERATIONS", 1_000)
+
+
+@pytest.fixture(autouse=True)
+def relaxed_signup_limits(request, monkeypatch):
+    """Most tests register many accounts from one address; `real_signup_limits` keeps the caps."""
+    if request.node.get_closest_marker("real_signup_limits"):
+        return
+    monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_HOUR", 10_000)
+    monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_DAY", 10_000)
 
 
 @pytest.fixture
@@ -151,6 +162,8 @@ def app(
         settings,
         lambda user_id: [store.delete(j.id) for j in store.list_for_user(user_id)],
         sender,
+        TEST_DISPOSABLE_DOMAINS,
+        SignupLimiter(),
         clock,
         verifiers=verifiers,
         apple_client=apple_client,

@@ -124,6 +124,17 @@ void main() {
       expect(tester.widget<TextField>(fieldText('New email')).controller!.text, _newEmail);
     });
 
+    testWidgets('a disposable address says so and keeps the value', (tester) async {
+      client.onRequestEmailChange = (_, _) async =>
+          throw apiError(400, 'disposable_email', 'Use a permanent email address.');
+      await _openChangeEmail(tester);
+
+      await _requestCode(tester);
+
+      expect(find.text('Use a permanent email address.'), findsOneWidget);
+      expect(tester.widget<TextField>(fieldText('New email')).controller!.text, _newEmail);
+    });
+
     testWidgets('a rate limit shows how long to wait', (tester) async {
       client.onRequestEmailChange = (_, _) async => throw DioException(
             requestOptions: RequestOptions(path: '/me/email'),

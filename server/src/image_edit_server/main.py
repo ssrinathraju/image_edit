@@ -32,10 +32,12 @@ from image_edit_server.api.generations import get_store, router as generations_r
 from image_edit_server.api.reports import get_report_service, router as reports_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core.disposable_domains import load_disposable_domains
 from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.identity_verifier import IdentityVerifier
 from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_terms
 from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
@@ -161,6 +163,7 @@ def create_app(
     _configure_logging()
     cfg = settings or Settings()
     result_url_secret = _result_url_secret(cfg)
+    disposable_domains = load_disposable_domains(cfg.DISPOSABLE_DOMAINS_FILE)
     email_sender = sender or _make_email_sender(cfg)
     store = InMemoryJobStore()
     previews_dir = Path(cfg.STORAGE_ROOT) / PREVIEWS_STORAGE_DIRNAME
@@ -178,6 +181,8 @@ def create_app(
         cfg,
         lambda user_id: purge_user_jobs(user_id, store, cfg.STORAGE_ROOT),
         email_sender,
+        disposable_domains,
+        SignupLimiter(),
         verifiers=verifiers if verifiers is not None else _make_verifiers(cfg),
         apple_client=apple_client or _make_apple_client(cfg),
     )

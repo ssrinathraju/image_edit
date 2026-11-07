@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Response, status
+from fastapi import APIRouter, BackgroundTasks, Request, Response, status
 
 from image_edit_server.api.deps import (
     AuthDep,
@@ -11,6 +11,8 @@ from image_edit_server.api.deps import (
     TokenDep,
     UserStoreDep,
 )
+from image_edit_server.configs.settings import Settings
+from image_edit_server.core.client_address import FORWARDED_FOR_HEADER, client_address
 from image_edit_server.core.plans import effective_plan
 from image_edit_server.schemas.user import (
     AgeConfirmRequest,
@@ -33,6 +35,13 @@ from image_edit_server.schemas.user import (
 
 router = APIRouter(tags=["auth"])
 
+def _caller_address(request: Request, settings: Settings) -> str:
+    host = request.client.host if request.client else None
+    return client_address(
+        host, request.headers.get(FORWARDED_FOR_HEADER), settings.TRUSTED_PROXY_HOPS
+    )
+
+
 def _auth_response(token: str, user: User) -> AuthResponse:
     return AuthResponse(token=token, id=user.id, email=user.email)
 
@@ -51,10 +60,19 @@ def _social_response(token: str, user: User, created: bool) -> SocialAuthRespons
 
 @router.post("/auth/register", status_code=status.HTTP_202_ACCEPTED)
 def register(
-    body: RegisterRequest, auth: AuthServiceDep, background: BackgroundTasks
+    body: RegisterRequest,
+    request: Request,
+    auth: AuthServiceDep,
+    settings: SettingsDep,
+    background: BackgroundTasks,
 ) -> dict:
     auth.register(
-        body.email, body.password, body.date_of_birth, body.referral_code, background
+        body.email,
+        body.password,
+        body.date_of_birth,
+        body.referral_code,
+        background,
+        _caller_address(request, settings),
     )
     return {}
 
@@ -76,21 +94,29 @@ def login(body: Credentials, auth: AuthServiceDep) -> AuthResponse:
 
 
 @router.post("/auth/oauth/google", response_model=SocialAuthResponse)
-def sign_in_with_google(body: GoogleSignInRequest, auth: AuthServiceDep) -> SocialAuthResponse:
+def sign_in_with_google(
+    body: GoogleSignInRequest, request: Request, auth: AuthServiceDep, settings: SettingsDep
+) -> SocialAuthResponse:
     token, user, created = auth.sign_in_with_provider(
-        "google", body.id_token, date_of_birth=body.date_of_birth
+        "google",
+        body.id_token,
+        date_of_birth=body.date_of_birth,
+        client_address=_caller_address(request, settings),
     )
     return _social_response(token, user, created)
 
 
 @router.post("/auth/oauth/apple", response_model=SocialAuthResponse)
-def sign_in_with_apple(body: AppleSignInRequest, auth: AuthServiceDep) -> SocialAuthResponse:
+def sign_in_with_apple(
+    body: AppleSignInRequest, request: Request, auth: AuthServiceDep, settings: SettingsDep
+) -> SocialAuthResponse:
     token, user, created = auth.sign_in_with_provider(
         "apple",
         body.identity_token,
         nonce=body.nonce,
         authorization_code=body.authorization_code,
         date_of_birth=body.date_of_birth,
+        client_address=_caller_address(request, settings),
     )
     return _social_response(token, user, created)
 

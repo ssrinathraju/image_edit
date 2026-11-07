@@ -9,6 +9,7 @@ import '../../core/api_errors.dart';
 import '../consent/age_messages.dart';
 import '../consent/date_of_birth_field.dart';
 import '../common/error_message.dart';
+import '../common/signup_messages.dart';
 import 'credentials_form.dart';
 import 'provider_buttons.dart';
 import 'session_notifier.dart';
@@ -20,6 +21,8 @@ String _describeRegistrationError(Object error) {
   if (isUnderAge(error) || isInvalidDateOfBirth(error)) {
     return describeDateOfBirthError(error);
   }
+  final refusal = describeSignupRefusal(error);
+  if (refusal != null) return refusal;
   if (isEmailTaken(error)) return _emailTakenMessage;
   if (isInvalidReferralCode(error)) return _unknownReferralMessage;
   if (isTooManyRequests(error)) {

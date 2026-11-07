@@ -48,11 +48,22 @@ Future<void> chooseDateOfBirth(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-DioException apiError(int status, String code, String detail) => DioException(
+DioException apiError(
+  int status,
+  String code,
+  String detail, {
+  int? retryAfterSeconds,
+}) =>
+    DioException(
       requestOptions: RequestOptions(path: '/x'),
       response: Response(
         requestOptions: RequestOptions(path: '/x'),
         statusCode: status,
+        headers: retryAfterSeconds == null
+            ? null
+            : Headers.fromMap({
+                'retry-after': ['$retryAfterSeconds'],
+              }),
         data: {
           'detail': {'error': code, 'detail': detail},
         },

@@ -36,7 +36,6 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From PR #4 review (plans and referrals)
 
-- [ ] **Referral farming (remaining risk)** — verification now gates the referral reward, but disposable email addresses still pass and there are no per-IP limits on registration. Add disposable-domain screening or per-IP limits before any public launch.
 - [ ] **Hide the Upgrade entry in release builds** until billing exists (the screen is a "payments not available" placeholder).
 - [ ] **Duplicate `/me` fetch at startup** — session restore and `AccountNotifier` each call it.
 - [ ] **Failed settle gives a free generation** — if settling fails after a success, the reservation is refunded at the next restart. Rare and logged; accepted.
@@ -57,6 +56,7 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Database for a single instance: SQLite plus S3 backups** — for the first deployment, keep `app.db` on the instance's own disk (EBS) and back it up to S3 daily. Use a consistent copy (`sqlite3 app.db ".backup <file>"` or the backup API), never a plain file copy while the server is writing. Test a restore once before launch.
 - [ ] **NVIDIA driver for torch 2.14.1** — its Linux wheels use CUDA 13, so the GPU host needs a recent NVIDIA driver. Check this when the GPU pipeline change lands.
 - [ ] **Move to RDS PostgreSQL before running more than one instance** — one SQLite file can't be shared by several servers. Add a Postgres `UserStore` backend behind the existing interface (`core/user_store.py`) and migrate the data. Before scaling out, also share the per-process state: the in-memory job store, `RESULT_URL_SECRET` (set it explicitly), and the sign-up limiter.
+- [ ] **Share the sign-up limiter before running several instances** — `SignupLimiter` counts per process in memory, so each instance would count separately and multiply the limit. Move it to Redis or the database (and set `IMAGE_EDIT_TRUSTED_PROXY_HOPS=1` behind one ALB).
 
 ## Before enabling countries other than India
 
@@ -82,7 +82,6 @@ The first launch is India only.
 - [ ] **Encrypt the stored Apple refresh token** — `identities.apple_refresh_token` is plain text in `app.db`. Someone holding the database can use it only to get Apple tokens that identify the user to this app, but encrypting it needs a key-management design.
 - [ ] **Sign in with Apple entitlement blocks signed device builds until the Apple Developer membership exists** — `app/ios/Runner.xcodeproj/project.pbxproj` sets `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements` for Debug, Release and Profile, and a free Personal Team cannot sign `com.apple.developer.applesignin`. The simulator and `--no-codesign` builds are unaffected. Documented in `server/README.md` (device note after the console checklist). Confirm on a device during the manual pass (14.3, never recorded, see the item below), and move the entitlement to a Release-only configuration if development devices must keep working before the membership.
 - [ ] **Remaining manual checks for add-social-sign-in** — 14.2's registration flows passed on the iOS simulator on 2026-10-20. Still open: 14.2's pre-upgrade `app.db` step (an unverified account still signs in and can generate), and 14.3 (real Google/Apple sign-in; needs the consoles, App ID and key, and also covers the device-signing check in the entitlement item above).
-- [ ] **Mutual referral redemption** — two fresh provider accounts can redeem each other's codes (each gets +5 once, within 24 hours of creation). Bounded by the referrer cap and by the one-redemption-per-account rule. Closing it needs a rule such as "a code from an account that itself redeemed in the last 24 hours is refused", which is a spec change. Part of the wider referral-farming item above (disposable emails, no per-IP limits).
 
 - [ ] **Confirm screen `_backToRegistration` fallback loses typed values** — `context.go('/register')` opens a fresh screen when Confirm is the root route; unreachable in normal flow.
 
@@ -161,3 +160,6 @@ The first launch is India only.
   - After retention, Reload shows an error and the way home.
   - My creations catch-up still saves results.
   - A quick double Reload works.
+
+## From add-abuse-limits
+- [ ] **IPv6 sign-ups are counted per full address.** A host with an IPv6 /64 (a VPS, many mobile carriers) can rotate addresses and avoid the per-address limit. The spec counts per "client network address" and says nothing about grouping, so behaviour was left as is. Decide in a later change whether to group IPv6 by /64 in `SignupLimiter`.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 from ulid import ULID
 
@@ -40,6 +40,7 @@ class IdentitiesMixin:
         identity: ProviderIdentity,
         now: datetime,
         adult_confirmed: Optional[bool] = None,
+        before_create: Optional[Callable[[], None]] = None,
     ) -> tuple[User, bool]:
         with self._lock, self._conn:
             linked = self._conn.execute(
@@ -55,6 +56,8 @@ class IdentitiesMixin:
             if existing:
                 self._link_identity(existing[0], identity, email, now)
                 return self._load_user(existing[0]), False
+            if before_create is not None:
+                before_create()
             if adult_confirmed is None:
                 raise AgeRequired(identity.provider)
             if not adult_confirmed:

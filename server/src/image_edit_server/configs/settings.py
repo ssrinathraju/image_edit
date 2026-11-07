@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     APPLE_KEY_ID: str = ""
     APPLE_PRIVATE_KEY_PATH: str = ""
 
+    DISPOSABLE_DOMAINS_FILE: str = "./seed/abuse/disposable_domains.txt"
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0, le=5)
+
     RESULT_URL_SECRET: str = ""  # empty means a random secret per process start
 
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]

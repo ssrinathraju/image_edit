@@ -36,6 +36,13 @@ bool isRegistrationChanged(Object error) =>
     errorCodeOf(error) == registrationChangedCode;
 bool isTooManyRequests(Object error) => errorCodeOf(error) == tooManyRequestsCode;
 
+const String disposableEmailCode = 'disposable_email';
+const String tooManySignupsCode = 'too_many_signups';
+
+bool isDisposableEmail(Object error) =>
+    errorCodeOf(error) == disposableEmailCode;
+bool isTooManySignups(Object error) => errorCodeOf(error) == tooManySignupsCode;
+
 const String reauthFailedCode = 'reauth_failed';
 const String tooManyAttemptsCode = 'too_many_attempts';
 const String providerInUseCode = 'provider_in_use';

@@ -145,6 +145,34 @@ idempotent. It also:
 **Back up `app.db` before upgrading.** The migration cannot be run backwards: a rollback to the
 previous server needs the backup, because the old code tables had a different shape.
 
+## Abuse limits
+
+- **Disposable email addresses.** `POST /auth/register` and `POST /me/email` refuse an address whose
+  domain, or a parent domain, is in `seed/abuse/disposable_domains.txt`: 400 `disposable_email`,
+  "Use a permanent email address.". Nothing is stored and no code is sent. Google and Apple
+  sign-ins are not checked, so Apple's private relay addresses keep working.
+  - The list is from the CC0 `disposable-email-domains` project
+    (<https://github.com/disposable-email-domains/disposable-email-domains>); the header comment in
+    the file gives the date. It is one domain per line; `#` comments and blank lines are ignored.
+  - To change it, edit the file (or point `IMAGE_EDIT_DISPOSABLE_DOMAINS_FILE` at another one) and
+    restart the server: the list is read once at startup, and a missing file stops the server.
+  - A refusal logs `disposable_email_refused` with the listed domain only, never the address.
+- **New accounts per network address.** At most 5 per hour and 10 per 24 hours from one address,
+  counting accepted `POST /auth/register` requests and provider sign-ins that create an account.
+  Beyond that: 429 `too_many_signups` with `Retry-After` (seconds), and nothing is stored or sent.
+  Refused requests are not counted; logging in, signing in to an existing account and every other
+  endpoint are not limited.
+- **`IMAGE_EDIT_TRUSTED_PROXY_HOPS`** (default `0`, 0 to 5) says how many proxies in front of the
+  server append to `X-Forwarded-For`. With `0` the connection's address is used and the header is
+  ignored. With `N` the address `N` entries from the right is used; entries further left can be
+  forged by the client and are never read. Set it to **`1` behind one AWS load balancer**. A header
+  with fewer entries falls back to the connection's address.
+- **Counts are per process and in memory.** A restart clears them, and several instances would each
+  count separately, so share the limiter before running more than one (see `todo.md`). Network
+  addresses are never written to disk or to the log.
+- **Referral cycles.** `POST /me/referral` refuses a code whose owner was referred by the redeeming
+  account: 409 `referral_not_allowed`.
+
 ## Email codes and password reset
 
 Registration and password reset both use a 6-digit code emailed to the address. A code is valid for
@@ -557,6 +585,8 @@ ignores them).
 | `IMAGE_EDIT_EMAIL_CODE_MAX_ATTEMPTS` | `5` | Wrong tries before a code is invalidated (minimum 1) |
 | `IMAGE_EDIT_EMAIL_RESEND_SECONDS` | `60` | Minimum gap between code emails to one email address (minimum 1) |
 | `IMAGE_EDIT_EMAIL_MAX_PER_HOUR` | `5` | Code emails per email address per hour (minimum 1) |
+| `IMAGE_EDIT_DISPOSABLE_DOMAINS_FILE` | `./seed/abuse/disposable_domains.txt` | Disposable email domains, one per line; read at startup, a missing file stops the server |
+| `IMAGE_EDIT_TRUSTED_PROXY_HOPS` | `0` | Proxies that append to `X-Forwarded-For` (0 to 5); `1` behind one AWS load balancer |
 | `IMAGE_EDIT_CONSENT_VERSION` | `1` | Current face-photo consent version; must not be empty. Change it when the consent text changes |
 | `IMAGE_EDIT_GOOGLE_CLIENT_IDS` | _(empty)_ | Comma-separated Google client IDs accepted as the token audience; empty disables Google sign-in |
 | `IMAGE_EDIT_APPLE_BUNDLE_ID` | _(empty)_ | App bundle ID, the Apple token audience; empty disables Apple sign-in |

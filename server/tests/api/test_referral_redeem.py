@@ -114,3 +114,43 @@ def test_referrer_cap_still_pays_the_new_account(
 
 def test_redeeming_requires_a_session(anon_client, friend_code):
     assert anon_client.post("/me/referral", json={"code": friend_code}).status_code == 401
+
+
+def _code_of(client, headers) -> str:
+    return client.get("/me", headers=headers).json()["referral"]["code"]
+
+
+def _two_new_provider_accounts(anon_client, google_verifier):
+    a = _google_account(anon_client, google_verifier, "g-a", "a@example.com")
+    b = _google_account(anon_client, google_verifier, "g-b", "b@example.com")
+    return a, b
+
+
+def test_mutual_redemption_is_refused_and_changes_no_credits(anon_client, google_verifier):
+    a, b = _two_new_provider_accounts(anon_client, google_verifier)
+    assert _redeem(anon_client, a, _code_of(anon_client, b)).status_code == 200
+    bonus_before = (_bonus(anon_client, a), _bonus(anon_client, b))
+    rewards_before = anon_client.get("/me", headers=a).json()["referral"]["rewards"]
+
+    resp = _redeem(anon_client, b, _code_of(anon_client, a))
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["error"] == "referral_not_allowed"
+    assert (_bonus(anon_client, a), _bonus(anon_client, b)) == bonus_before
+    assert anon_client.get("/me", headers=a).json()["referral"]["rewards"] == rewards_before
+    assert anon_client.get("/me", headers=b).json()["referral"]["rewards"] == 1
+
+
+def test_a_third_account_can_still_redeem_the_code_of_a_redeemer(
+    anon_client, google_verifier
+):
+    a, b = _two_new_provider_accounts(anon_client, google_verifier)
+    assert _redeem(anon_client, a, _code_of(anon_client, b)).status_code == 200
+    c = _google_account(anon_client, google_verifier, "g-c", "c@example.com")
+    a_bonus = _bonus(anon_client, a)
+
+    resp = _redeem(anon_client, c, _code_of(anon_client, a))
+
+    assert resp.status_code == 200
+    assert _bonus(anon_client, c) == 5
+    assert _bonus(anon_client, a) == a_bonus + 5
