@@ -48,4 +48,4 @@ Work on branch `feat/polish-photo-picking`. Do not push to `main`. All work is i
   - **Both platforms:** deny photo access, then Download a result. Tap Settings in the message; it opens the app's page.
 
   This box stays unticked until someone runs it. It's part of the user's combined manual pass.
-- [ ] 4.3 Push `feat/polish-photo-picking`. Verify with `git ls-remote` that the remote matches the local HEAD.
+- [x] 4.3 Push `feat/polish-photo-picking`. Verify with `git ls-remote` that the remote matches the local HEAD.
