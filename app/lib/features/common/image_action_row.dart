@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/app_settings.dart';
 import '../../services/image_actions.dart';
 import '../report/report_sheet.dart';
+import 'open_settings.dart';
 
 /// Download and Share for an image already in memory (hidden where the
 /// platform offers neither, such as web), and Report for the job that made it.
@@ -64,7 +66,9 @@ class ImageActionRow extends ConsumerWidget {
 
   Future<void> _download(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final settings = ref.read(appSettingsProvider);
     String message;
+    var canOpenSettings = false;
     try {
       final result =
           await ref.read(imageActionsProvider).saveToLibrary(bytes, name: name);
@@ -74,10 +78,21 @@ class ImageActionRow extends ConsumerWidget {
           'Photo library access is required to save images. '
               'Allow it in Settings and try again.',
       };
+      canOpenSettings = result == SaveResult.permissionDenied;
     } catch (_) {
       message = 'Could not save the image.';
     }
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: canOpenSettings
+            ? SnackBarAction(
+                label: 'Settings',
+                onPressed: () => openSettingsOrExplain(messenger, settings),
+              )
+            : null,
+      ),
+    );
   }
 
   Future<void> _share(BuildContext buttonContext, WidgetRef ref) async {

@@ -6,6 +6,7 @@ import '../../core/provider_sign_in.dart';
 import '../../core/session_storage.dart';
 import '../../schemas/session.dart';
 import '../../services/generation_providers.dart';
+import '../common/pending_pick_store.dart';
 import '../common/submit_controller.dart';
 import '../history/creation_store.dart';
 import '../home/home_notifier.dart';
@@ -250,6 +251,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     ref.invalidate(homeNotifierProvider);
     _justCreatedViaProvider = false;
     ref.read(restoredProfileHolderProvider).clear();
+    await ref.read(pendingPickStoreProvider).delete();
     await _discardStoredSession();
     state = const AsyncData(null);
   }

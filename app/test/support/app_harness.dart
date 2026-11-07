@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/consent/date_of_birth_field.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
@@ -17,6 +18,7 @@ import 'package:image_edit/services/generation_providers.dart';
 
 import 'fake_api_client.dart';
 import 'fake_image_picker.dart';
+import 'fake_pending_pick_store.dart';
 import 'in_memory_creation_store.dart';
 import 'in_memory_onboarding_store.dart';
 import 'fake_provider_sign_in.dart';
@@ -80,6 +82,7 @@ Future<ProviderContainer> pumpApp(
   FakeShare? share,
   String? inviteUrl,
   FakeImagePicker? picker,
+  FakePendingPickStore? pendingPicks,
   FakeProviderSignIn? google,
   FakeProviderSignIn? apple,
   bool? googleAvailable,
@@ -108,6 +111,7 @@ Future<ProviderContainer> pumpApp(
           onboardingStore ?? InMemoryOnboardingStore(),
         ),
         sessionStorageProvider.overrideWithValue(storage),
+        pendingPickStoreProvider.overrideWithValue(pendingPicks ?? FakePendingPickStore()),
         profileLinksProvider.overrideWithValue(links),
         linkLauncherProvider.overrideWithValue(launcher ?? FakeLinkLauncher()),
         appVersionProvider.overrideWith((_) async => '1.2.3 (45)'),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/features/home/home_notifier.dart';
 import 'package:image_edit/features/home/home_screen.dart';
@@ -12,6 +13,7 @@ import 'package:image_edit/schemas/template.dart';
 import 'package:image_edit/services/generation_providers.dart';
 
 import '../../support/fake_api_client.dart';
+import '../../support/fake_pending_pick_store.dart';
 import '../../support/fake_session_storage.dart';
 import '../../support/in_memory_creation_store.dart';
 
@@ -38,6 +40,7 @@ Future<GoRouter> _pump(
     ProviderScope(
       overrides: [
         apiClientProvider.overrideWithValue(client),
+        pendingPickStoreProvider.overrideWithValue(FakePendingPickStore()),
         homeDebounceProvider.overrideWithValue(const Duration(milliseconds: 10)),
         ...overrides,
       ],

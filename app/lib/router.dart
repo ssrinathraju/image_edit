@@ -176,6 +176,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return TemplateScreen(
             templateId: state.pathParameters['id']!,
             template: extra is TemplateSummary ? extra : null,
+            initialPhoto: extra is XFile ? extra : null,
           );
         },
       ),

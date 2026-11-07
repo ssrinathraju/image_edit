@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/consent/consent_screen.dart';
 import 'package:image_edit/features/history/creation_store.dart';
@@ -10,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'fake_api_client.dart';
 import 'fake_image_picker.dart';
+import 'fake_pending_pick_store.dart';
 import 'in_memory_creation_store.dart';
 
 Future<void> pumpScreen(
@@ -44,6 +46,7 @@ Future<void> pumpScreen(
     ProviderScope(
       overrides: [
         apiClientProvider.overrideWithValue(client),
+        pendingPickStoreProvider.overrideWithValue(FakePendingPickStore()),
         creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
         imagePickerProvider.overrideWithValue(
           picker ?? FakeImagePicker(result: XFile.fromData(tinyPng, name: 'me.png')),

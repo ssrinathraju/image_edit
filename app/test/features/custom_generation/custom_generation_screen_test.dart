@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_edit/features/common/photo_picker_field.dart';
 import 'package:image_edit/features/custom_generation/custom_generation_screen.dart';
+import 'package:image_edit/services/app_settings.dart';
 
 import '../../support/fake_api_client.dart';
+import '../../support/fake_app_settings.dart';
 import '../../support/fake_image_picker.dart';
 import '../../support/screen_harness.dart';
 
@@ -98,5 +102,34 @@ void main() {
 
     expect(isGenerateEnabled(tester), isFalse);
     expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('a denied camera keeps the prompt and the photo', (tester) async {
+    final settings = FakeAppSettings();
+    await pumpScreen(
+      tester,
+      client: FakeApiClient(),
+      screen: const CustomGenerationScreen(initialPrompt: 'astronaut on mars'),
+      picker: FakeImagePicker(
+        error: PlatformException(code: 'camera_access_denied'),
+        errorSource: ImageSource.camera,
+        result: XFile.fromData(tinyPng, name: 'me.png'),
+      ),
+      overrides: [appSettingsProvider.overrideWithValue(settings)],
+    );
+    await pickPhoto(tester);
+
+    await tester.tap(find.byType(PhotoPickerField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Take photo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Settings'));
+    await tester.pumpAndSettle();
+
+    expect(settings.openCount, 1);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'astronaut on mars');
+    expect(find.text('Change photo'), findsOneWidget);
+    expect(isGenerateEnabled(tester), isTrue);
   });
 }

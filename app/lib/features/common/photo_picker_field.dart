@@ -1,12 +1,22 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../core/provider_sign_in.dart' show targetPlatformProvider;
+import '../../services/app_settings.dart';
+import '../auth/session_notifier.dart';
+import 'clock.dart';
+import 'open_settings.dart';
+import 'pending_pick_store.dart';
 
 const double _maxPhotoWidth = 2048;
 const int _photoQuality = 90;
 const double _tileHeight = 220;
+const String _cameraDeniedCode = 'camera_access_denied';
+const String _photoDeniedCode = 'photo_access_denied';
+
+enum _DeniedChoice { openSettings, chooseFromLibrary }
 
 final imagePickerProvider = Provider<ImagePicker>((_) => ImagePicker());
 
@@ -28,8 +38,26 @@ class PhotoScope extends StatelessWidget {
   }
 }
 
+/// The form a pick is started from; remembered on Android so a photo picked
+/// while the system closes the app can go back to it.
+class PickOrigin {
+  const PickOrigin.template(String this.templateId)
+      : kind = PendingPickKind.template,
+        readPrompt = null;
+
+  const PickOrigin.custom(String Function() this.readPrompt)
+      : kind = PendingPickKind.custom,
+        templateId = null;
+
+  final PendingPickKind kind;
+  final String? templateId;
+  final String Function()? readPrompt;
+}
+
 class PhotoPickerField extends ConsumerWidget {
-  const PhotoPickerField({super.key});
+  const PhotoPickerField({required this.origin, super.key});
+
+  final PickOrigin origin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -80,6 +108,9 @@ class PhotoPickerField extends ConsumerWidget {
     WidgetRef ref,
     ImageSource source,
   ) async {
+    final isAndroid = ref.read(targetPlatformProvider) == TargetPlatform.android;
+    final pendingPicks = ref.read(pendingPickStoreProvider);
+    if (isAndroid) await _rememberPick(ref);
     try {
       final file = await ref
           .read(imagePickerProvider)
@@ -89,13 +120,88 @@ class PhotoPickerField extends ConsumerWidget {
             imageQuality: _photoQuality,
           );
       if (file != null) ref.read(selectedPhotoProvider.notifier).state = file;
+    } on PlatformException catch (error) {
+      if (!context.mounted) return;
+      if (_isDenied(error, source)) return _explainDenied(context, ref, source);
+      _showFailure(context, source);
     } catch (_) {
       if (!context.mounted) return;
-      final message = source == ImageSource.camera
-          ? 'The camera is not available. Choose a photo from the library instead.'
-          : 'Could not open the photo library.';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      _showFailure(context, source);
+    } finally {
+      if (isAndroid) await pendingPicks.delete();
+    }
+  }
+
+  Future<void> _rememberPick(WidgetRef ref) async {
+    final userId = ref.read(sessionProvider).valueOrNull?.userId;
+    if (userId == null) return;
+    await ref.read(pendingPickStoreProvider).write(
+          PendingPick(
+            userId: userId,
+            kind: origin.kind,
+            templateId: origin.templateId,
+            prompt: origin.readPrompt?.call(),
+            startedAt: ref.read(clockProvider)(),
+          ),
+        );
+  }
+
+  bool _isDenied(PlatformException error, ImageSource source) {
+    return error.code ==
+        (source == ImageSource.camera ? _cameraDeniedCode : _photoDeniedCode);
+  }
+
+  void _showFailure(BuildContext context, ImageSource source) {
+    final message = source == ImageSource.camera
+        ? 'The camera is not available. Choose a photo from the library instead.'
+        : 'Could not open the photo library.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _explainDenied(
+    BuildContext context,
+    WidgetRef ref,
+    ImageSource source,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final settings = ref.read(appSettingsProvider);
+    final isCamera = source == ImageSource.camera;
+    final choice = await showDialog<_DeniedChoice>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Text(
+          isCamera
+              ? 'Camera access is off. Turn it on in Settings to take a photo, '
+                    'or choose one from your library.'
+              : 'Photo access is off. Turn it on in Settings to choose a photo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _DeniedChoice.openSettings),
+            child: const Text('Open Settings'),
+          ),
+          if (isCamera)
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, _DeniedChoice.chooseFromLibrary),
+              child: const Text('Choose from library'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    switch (choice) {
+      case _DeniedChoice.openSettings:
+        await openSettingsOrExplain(messenger, settings);
+      case _DeniedChoice.chooseFromLibrary:
+        if (context.mounted) await _pick(context, ref, ImageSource.gallery);
+      case null:
+        return;
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../schemas/template.dart';
 import '../../services/generation_providers.dart';
@@ -23,10 +24,18 @@ final templateByIdProvider = FutureProvider.autoDispose
     });
 
 class TemplateScreen extends ConsumerWidget {
-  const TemplateScreen({required this.templateId, this.template, super.key});
+  const TemplateScreen({
+    required this.templateId,
+    this.template,
+    this.initialPhoto,
+    super.key,
+  });
 
   final String templateId;
   final TemplateSummary? template;
+
+  /// Pre-selects the photo when the form is reopened with a recovered pick.
+  final XFile? initialPhoto;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,19 +49,43 @@ class TemplateScreen extends ConsumerWidget {
         error: (_, _) => _Message(text: 'Could not load this template.'),
         data: (found) => found == null
             ? _Message(text: 'This template is no longer available.')
-            : PhotoScope(child: _TemplateBody(template: found)),
+            : PhotoScope(
+                child: _TemplateBody(
+                  template: found,
+                  initialPhoto: initialPhoto,
+                ),
+              ),
       ),
     );
   }
 }
 
-class _TemplateBody extends ConsumerWidget {
-  const _TemplateBody({required this.template});
+class _TemplateBody extends ConsumerStatefulWidget {
+  const _TemplateBody({required this.template, required this.initialPhoto});
 
   final TemplateSummary template;
+  final XFile? initialPhoto;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TemplateBody> createState() => _TemplateBodyState();
+}
+
+class _TemplateBodyState extends ConsumerState<_TemplateBody> {
+  TemplateSummary get template => widget.template;
+
+  @override
+  void initState() {
+    super.initState();
+    final photo = widget.initialPhoto;
+    if (photo == null) return;
+    // Riverpod refuses provider writes while the tree is being built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(selectedPhotoProvider.notifier).state = photo;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final photo = ref.watch(selectedPhotoProvider);
     final isSubmitting = ref.watch(submitControllerProvider);
     return ListView(
@@ -81,7 +114,7 @@ class _TemplateBody extends ConsumerWidget {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
-        const PhotoPickerField(),
+        PhotoPickerField(origin: PickOrigin.template(template.id)),
         const SizedBox(height: 16),
         FilledButton(
           onPressed: photo == null || isSubmitting
