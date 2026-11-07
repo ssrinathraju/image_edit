@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import time
@@ -16,6 +17,18 @@ from image_edit_server.core.identity_verifier import (
     InvalidProviderToken,
     ProviderIdentity,
 )
+from image_edit_server.core.token_cipher import TokenCipher
+
+
+def make_token_cipher(fill: int = 7) -> TokenCipher:
+    """A cipher over a throwaway test key; different `fill` values give different keys."""
+    return TokenCipher(bytes([fill]) * 32)
+
+
+def encoded_test_key(fill: int = 7, urlsafe: bool = False) -> str:
+    raw = bytes([fill]) * 32
+    return (base64.urlsafe_b64encode(raw) if urlsafe else base64.b64encode(raw)).decode()
+
 
 TEST_DISPOSABLE_DOMAINS = DisposableDomains(frozenset({"mailinator.com"}))
 

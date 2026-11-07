@@ -137,7 +137,7 @@ class SecurityMixin:
                 "DELETE FROM identities WHERE user_id = ? AND provider = ?",
                 (user_id, provider),
             )
-        return row[0] if provider == APPLE_PROVIDER else None
+        return self._open_apple_token(user_id, row[0]) if provider == APPLE_PROVIDER else None
 
     def _has_another_sign_in_method(self, user_id: str, provider: str) -> bool:
         row = self._conn.execute(

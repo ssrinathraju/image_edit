@@ -11,6 +11,7 @@ from image_edit_server.services.apple_revocation import (
     APPLE_TOKEN_URL,
     AppleRevocationClient,
 )
+from tests.helpers import encoded_test_key
 
 SECRET_CODE = "authcode-secret-text"
 SECRET_TOKEN = "refresh-secret-text"
@@ -36,6 +37,7 @@ def settings(tmp_path, ec_key) -> Settings:
         APPLE_TEAM_ID="TEAM123",
         APPLE_KEY_ID="KEY456",
         APPLE_PRIVATE_KEY_PATH=str(key_file),
+        TOKEN_ENCRYPTION_KEY=encoded_test_key(),
     )
 
 

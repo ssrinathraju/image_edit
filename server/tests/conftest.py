@@ -44,6 +44,7 @@ from tests.helpers import (
     RecordingSender,
     TEST_DISPOSABLE_DOMAINS,
     build_templates_dir,
+    make_token_cipher,
     register_headers,
 )
 
@@ -116,7 +117,7 @@ def result_url_secret() -> bytes:
 
 @pytest.fixture
 def user_store() -> SqliteUserStore:
-    return SqliteUserStore(":memory:")
+    return SqliteUserStore(":memory:", token_cipher=make_token_cipher())
 
 
 @pytest.fixture

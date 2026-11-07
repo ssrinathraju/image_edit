@@ -1,7 +1,9 @@
+import base64
+
 import pytest
 from pydantic import ValidationError
 from image_edit_server.configs.settings import Settings
-from tests.helpers import write_apple_key_file
+from tests.helpers import encoded_test_key, write_apple_key_file
 
 
 def test_defaults():
@@ -162,6 +164,7 @@ def test_all_apple_key_settings_with_a_readable_key_are_accepted(tmp_path):
         APPLE_TEAM_ID="TEAM",
         APPLE_KEY_ID="KEY",
         APPLE_PRIVATE_KEY_PATH=str(key),
+        TOKEN_ENCRYPTION_KEY=encoded_test_key(),
     )
     assert s.is_apple_revocation_configured()
 
@@ -271,3 +274,90 @@ def test_abuse_limit_settings_have_safe_defaults():
 def test_trusted_proxy_hops_above_five_is_refused():
     with pytest.raises(ValueError):
         Settings(TRUSTED_PROXY_HOPS=6)
+
+
+# ── TOKEN_ENCRYPTION_KEY ──
+
+
+def _apple_settings(tmp_path, **extra) -> dict:
+    return dict(
+        APPLE_BUNDLE_ID="com.example.app",
+        APPLE_TEAM_ID="TEAM",
+        APPLE_KEY_ID="KEY",
+        APPLE_PRIVATE_KEY_PATH=str(write_apple_key_file(tmp_path / "AuthKey.p8")),
+        **extra,
+    )
+
+
+def test_apple_key_settings_without_an_encryption_key_are_rejected_naming_it(tmp_path):
+    with pytest.raises(ValidationError, match="TOKEN_ENCRYPTION_KEY"):
+        Settings(**_apple_settings(tmp_path))
+
+
+@pytest.mark.parametrize("size", [31, 33])
+def test_a_key_of_the_wrong_length_is_rejected_without_echoing_it(tmp_path, size):
+    key = base64.b64encode(bytes([9]) * size).decode()
+
+    with pytest.raises(ValidationError, match="TOKEN_ENCRYPTION_KEY") as caught:
+        Settings(TOKEN_ENCRYPTION_KEY=key)
+
+    assert key not in str(caught.value)
+
+
+def test_a_key_that_is_not_base64_is_rejected_without_echoing_it():
+    key = "this is *not* base64!"
+
+    with pytest.raises(ValidationError, match="TOKEN_ENCRYPTION_KEY") as caught:
+        Settings(TOKEN_ENCRYPTION_KEY=key)
+
+    assert key not in str(caught.value)
+
+
+@pytest.mark.parametrize("urlsafe", [False, True])
+def test_a_valid_key_is_accepted_in_standard_and_urlsafe_base64(tmp_path, urlsafe):
+    key = encoded_test_key(fill=0xFB, urlsafe=urlsafe)
+
+    s = Settings(**_apple_settings(tmp_path, TOKEN_ENCRYPTION_KEY=key))
+
+    assert s.TOKEN_ENCRYPTION_KEY == key
+
+
+def test_no_apple_and_no_key_is_accepted():
+    assert Settings().TOKEN_ENCRYPTION_KEY == ""
+
+
+def test_apple_bundle_id_alone_needs_no_encryption_key():
+    assert Settings(APPLE_BUNDLE_ID="com.example.app").is_apple_configured()
+
+
+@pytest.mark.parametrize(
+    "decorate",
+    [
+        lambda k: k + "!!",
+        lambda k: "**" + k,
+        lambda k: k[:10] + " \n " + k[10:],
+    ],
+    ids=["trailing-junk", "leading-junk", "inner-whitespace"],
+)
+def test_a_key_with_characters_outside_the_alphabet_is_rejected(decorate):
+    key = decorate(encoded_test_key())
+
+    with pytest.raises(ValidationError, match="TOKEN_ENCRYPTION_KEY") as caught:
+        Settings(TOKEN_ENCRYPTION_KEY=key)
+
+    assert key not in str(caught.value)
+
+
+def test_a_key_with_surrounding_whitespace_is_accepted():
+    key = encoded_test_key() + "\n"
+
+    assert Settings(TOKEN_ENCRYPTION_KEY=key).TOKEN_ENCRYPTION_KEY == key
+
+
+def test_secrets_are_not_in_the_settings_repr():
+    key = encoded_test_key()
+    secret = "result-url-secret-" + "x" * 32
+
+    shown = repr(Settings(TOKEN_ENCRYPTION_KEY=key, RESULT_URL_SECRET=secret))
+
+    assert key not in shown and secret not in shown

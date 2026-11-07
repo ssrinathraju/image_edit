@@ -12,6 +12,7 @@ from image_edit_server.configs.settings import Settings
 from image_edit_server.core.plans import ALL_PLANS, FREE
 from image_edit_server.core.referral_codes import generate_code
 from image_edit_server.core.roles import ALL_ROLES, USER
+from image_edit_server.core.token_cipher import TokenCipher
 from image_edit_server.core.token_hash import hash_token
 from image_edit_server.core.user_store import EmailTakenError
 from image_edit_server.repos.user_store_codes import (
@@ -112,14 +113,19 @@ class SqliteUserStore(
     TemplatesMixin,
 ):
     def __init__(
-        self, path: str = ":memory:", clock: Callable[[], datetime] = _utc_now
+        self,
+        path: str = ":memory:",
+        clock: Callable[[], datetime] = _utc_now,
+        token_cipher: Optional[TokenCipher] = None,
     ) -> None:
         self._clock = clock
+        self._token_cipher = token_cipher
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
         self._migrate()
+        self._discard_unencrypted_apple_tokens()
 
     def close(self) -> None:
         with self._lock:

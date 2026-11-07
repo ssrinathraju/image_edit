@@ -598,3 +598,66 @@ def test_the_real_app_refuses_an_unsigned_link_to_an_existing_image(tmp_path, te
         resp = client.get(unsigned)
         assert resp.status_code == 404
         assert resp.json() == {"detail": "Not Found"}
+
+
+def test_create_app_builds_the_cipher_and_discards_plain_text_tokens(tmp_path, templates_dir):
+    import sqlite3
+    from datetime import datetime, timezone
+
+    from fastapi.testclient import TestClient
+
+    from image_edit_server.core.identity_verifier import ProviderIdentity
+    from image_edit_server.repos.user_store import SqliteUserStore
+    from tests.helpers import (
+        FakeAppleClient,
+        FakeVerifier,
+        RecordingSender,
+        encoded_test_key,
+        write_apple_key_file,
+    )
+
+    root = tmp_path / "s"
+    root.mkdir()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    seed = SqliteUserStore(str(root / "app.db"))
+    user = seed.create_user("ana@example.com", "hash")
+    seed.link_identity(user.id, ProviderIdentity("apple", "a-1", "ana@example.com", True, now), now)
+    seed._conn.execute("UPDATE identities SET apple_refresh_token = 'legacy-plain'")
+    seed._conn.commit()
+    seed.close()
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir),
+        STORAGE_ROOT=str(root),
+        APPLE_BUNDLE_ID="com.example.app",
+        APPLE_TEAM_ID="TEAM",
+        APPLE_KEY_ID="KEY",
+        APPLE_PRIVATE_KEY_PATH=str(write_apple_key_file(tmp_path / "AuthKey.p8")),
+        TOKEN_ENCRYPTION_KEY=encoded_test_key(),
+    )
+
+    verifier = FakeVerifier("apple", lambda: now)
+    verifier.add("tok", "a-1", email="ana@example.com")
+    apple = FakeAppleClient()
+
+    def stored_token():
+        conn = sqlite3.connect(str(root / "app.db"))
+        try:
+            return conn.execute("SELECT apple_refresh_token FROM identities").fetchone()[0]
+        finally:
+            conn.close()
+
+    app = create_app(
+        settings, sender=RecordingSender(), verifiers={"apple": verifier}, apple_client=apple
+    )
+
+    assert stored_token() is None
+    with TestClient(app) as client:
+        resp = client.post(
+            "/auth/oauth/apple",
+            json={"identity_token": "tok", "nonce": "n", "authorization_code": "c"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == user.id
+    assert stored_token().startswith("v1:")
+    assert apple.refresh_token not in stored_token()
