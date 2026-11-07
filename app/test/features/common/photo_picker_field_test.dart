@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
+import 'package:image_edit/services/app_settings.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../support/fake_app_settings.dart';
 import '../../support/fake_image_picker.dart';
 
-Future<ProviderContainer> _pump(WidgetTester tester, FakeImagePicker picker) async {
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  FakeImagePicker picker, {
+  FakeAppSettings? settings,
+}) async {
   final container = ProviderContainer(
-    overrides: [imagePickerProvider.overrideWithValue(picker)],
+    overrides: [
+      imagePickerProvider.overrideWithValue(picker),
+      appSettingsProvider.overrideWithValue(settings ?? FakeAppSettings()),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -56,5 +66,149 @@ void main() {
     await tester.tap(find.byType(PhotoPickerField));
     await tester.pumpAndSettle();
     expect(find.text('Choose from library'), findsOneWidget);
+  });
+
+  group('denied access', () {
+    Future<void> choose(WidgetTester tester, String source) async {
+      await tester.tap(find.byType(PhotoPickerField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(source));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('camera denied shows the dialog with three actions', (
+      tester,
+    ) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'camera_access_denied'),
+      );
+      final container = await _pump(tester, picker);
+
+      await choose(tester, 'Take photo');
+
+      expect(find.textContaining('Camera access is off'), findsOneWidget);
+      expect(find.text('Open Settings'), findsOneWidget);
+      expect(find.text('Choose from library'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(container.read(selectedPhotoProvider), isNull);
+    });
+
+    testWidgets('Choose from library in the dialog runs the gallery pick', (
+      tester,
+    ) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'camera_access_denied'),
+        errorSource: ImageSource.camera,
+        result: XFile.fromData(tinyPng, name: 'me.png'),
+      );
+      final container = await _pump(tester, picker);
+
+      await choose(tester, 'Take photo');
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+
+      expect(picker.sources, [ImageSource.camera, ImageSource.gallery]);
+      expect(container.read(selectedPhotoProvider), isNotNull);
+    });
+
+    testWidgets(
+      'Open Settings calls the settings channel and keeps the photo',
+      (tester) async {
+        final settings = FakeAppSettings();
+        final existing = XFile.fromData(tinyPng, name: 'old.png');
+        final picker = FakeImagePicker(
+          error: PlatformException(code: 'camera_access_denied'),
+        );
+        final container = await _pump(tester, picker, settings: settings);
+        container.read(selectedPhotoProvider.notifier).state = existing;
+        await tester.pump();
+
+        await choose(tester, 'Take photo');
+        await tester.tap(find.text('Open Settings'));
+        await tester.pumpAndSettle();
+
+        expect(settings.openCount, 1);
+        expect(container.read(selectedPhotoProvider), same(existing));
+      },
+    );
+
+    testWidgets('Cancel closes the dialog and opens nothing', (tester) async {
+      final settings = FakeAppSettings();
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'camera_access_denied'),
+      );
+      await _pump(tester, picker, settings: settings);
+
+      await choose(tester, 'Take photo');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Camera access is off'), findsNothing);
+      expect(settings.openCount, 0);
+      expect(picker.sources, [ImageSource.camera]);
+    });
+
+    testWidgets('library denied shows the photo dialog with two actions', (
+      tester,
+    ) async {
+      final settings = FakeAppSettings();
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'photo_access_denied'),
+      );
+      await _pump(tester, picker, settings: settings);
+
+      await choose(tester, 'Choose from library');
+
+      expect(find.textContaining('Photo access is off'), findsOneWidget);
+      expect(find.text('Open Settings'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Choose from library'), findsNothing);
+
+      await tester.tap(find.text('Open Settings'));
+      await tester.pumpAndSettle();
+      expect(settings.openCount, 1);
+    });
+
+    testWidgets('Open Settings failing says so', (tester) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'photo_access_denied'),
+      );
+      await _pump(tester, picker, settings: FakeAppSettings(opens: false));
+
+      await choose(tester, 'Choose from library');
+      await tester.tap(find.text('Open Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not open Settings.'), findsOneWidget);
+    });
+
+    testWidgets('another platform error keeps the camera message', (
+      tester,
+    ) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'no_available_camera'),
+      );
+      await _pump(tester, picker);
+
+      await choose(tester, 'Take photo');
+
+      expect(find.textContaining('camera is not available'), findsOneWidget);
+      expect(find.text('Open Settings'), findsNothing);
+    });
+
+    testWidgets('a platform error on the library keeps the library message', (
+      tester,
+    ) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'camera_access_denied'),
+      );
+      await _pump(tester, picker);
+
+      await choose(tester, 'Choose from library');
+
+      expect(find.text('Could not open the photo library.'), findsOneWidget);
+      expect(find.text('Open Settings'), findsNothing);
+    });
   });
 }

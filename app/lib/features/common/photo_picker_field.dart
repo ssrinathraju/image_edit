@@ -1,12 +1,18 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../services/app_settings.dart';
+import 'open_settings.dart';
 
 const double _maxPhotoWidth = 2048;
 const int _photoQuality = 90;
 const double _tileHeight = 220;
+const String _cameraDeniedCode = 'camera_access_denied';
+const String _photoDeniedCode = 'photo_access_denied';
+
+enum _DeniedChoice { openSettings, chooseFromLibrary }
 
 final imagePickerProvider = Provider<ImagePicker>((_) => ImagePicker());
 
@@ -89,13 +95,71 @@ class PhotoPickerField extends ConsumerWidget {
             imageQuality: _photoQuality,
           );
       if (file != null) ref.read(selectedPhotoProvider.notifier).state = file;
+    } on PlatformException catch (error) {
+      if (!context.mounted) return;
+      if (_isDenied(error, source)) return _explainDenied(context, ref, source);
+      _showFailure(context, source);
     } catch (_) {
       if (!context.mounted) return;
-      final message = source == ImageSource.camera
-          ? 'The camera is not available. Choose a photo from the library instead.'
-          : 'Could not open the photo library.';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      _showFailure(context, source);
+    }
+  }
+
+  bool _isDenied(PlatformException error, ImageSource source) {
+    return error.code ==
+        (source == ImageSource.camera ? _cameraDeniedCode : _photoDeniedCode);
+  }
+
+  void _showFailure(BuildContext context, ImageSource source) {
+    final message = source == ImageSource.camera
+        ? 'The camera is not available. Choose a photo from the library instead.'
+        : 'Could not open the photo library.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _explainDenied(
+    BuildContext context,
+    WidgetRef ref,
+    ImageSource source,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final isCamera = source == ImageSource.camera;
+    final choice = await showDialog<_DeniedChoice>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Text(
+          isCamera
+              ? 'Camera access is off. Turn it on in Settings to take a photo, '
+                    'or choose one from your library.'
+              : 'Photo access is off. Turn it on in Settings to choose a photo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _DeniedChoice.openSettings),
+            child: const Text('Open Settings'),
+          ),
+          if (isCamera)
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, _DeniedChoice.chooseFromLibrary),
+              child: const Text('Choose from library'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    switch (choice) {
+      case _DeniedChoice.openSettings:
+        await openSettingsOrExplain(messenger, ref.read(appSettingsProvider));
+      case _DeniedChoice.chooseFromLibrary:
+        if (context.mounted) await _pick(context, ref, ImageSource.gallery);
+      case null:
+        return;
     }
   }
 }

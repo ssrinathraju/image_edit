@@ -11,14 +11,14 @@ Work on branch `feat/polish-photo-picking`. Do not push to `main`. All work is i
 
 ## 2. Denied dialogs and Download
 
-- [ ] 2.1 Add the camera and library denied dialogs to `PhotoPickerField` (Decision 3). Verify that `test/features/common/photo_picker_field_test.dart` covers:
+- [x] 2.1 Add the camera and library denied dialogs to `PhotoPickerField` (Decision 3). Verify that `test/features/common/photo_picker_field_test.dart` covers:
   - `camera_access_denied` shows the camera dialog with three actions;
   - Choose from library calls the gallery pick;
   - Open Settings calls the fake `AppSettings.open`;
   - `photo_access_denied` shows the library dialog;
   - another `PlatformException` code, or a non-platform error, still shows the existing SnackBars;
   - the form's prompt is kept.
-- [ ] 2.2 Add a Settings action to Download's permission-denied SnackBar (Decision 5). Verify in `test/features/common/image_action_row_test.dart` (or the existing status and creation-detail tests) that the action appears and calls `open`, and that "Could not open Settings." appears when `open` fails.
+- [x] 2.2 Add a Settings action to Download's permission-denied SnackBar (Decision 5). Verify in `test/features/common/image_action_row_test.dart` (or the existing status and creation-detail tests) that the action appears and calls `open`, and that "Could not open Settings." appears when `open` fails.
 
 ## 3. Restore after Android closes the app
 

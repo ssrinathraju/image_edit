@@ -13,10 +13,13 @@ final Uint8List tinyPng = Uint8List.fromList([
 ]);
 
 class FakeImagePicker extends Fake implements ImagePicker {
-  FakeImagePicker({this.result, this.error});
+  FakeImagePicker({this.result, this.error, this.errorSource});
 
   final XFile? result;
   final Object? error;
+
+  /// When set, [error] is thrown only for this source.
+  final ImageSource? errorSource;
   final sources = <ImageSource>[];
 
   @override
@@ -29,7 +32,9 @@ class FakeImagePicker extends Fake implements ImagePicker {
     bool requestFullMetadata = true,
   }) async {
     sources.add(source);
-    if (error != null) throw error!;
+    if (error != null && (errorSource == null || errorSource == source)) {
+      throw error!;
+    }
     return result;
   }
 }
