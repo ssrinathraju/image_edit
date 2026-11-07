@@ -41,7 +41,7 @@ Work on branch `feat/polish-photo-picking`. Do not push to `main`. All work is i
 
 ## 4. Integration and hand-off
 
-- [ ] 4.1 Run `flutter analyze && flutter test` in `app/`. Verify zero issues and all tests passing, with counts. Run `openspec validate polish-photo-picking --strict`. Remove the "Android release pass" item from `todo.md`.
+- [x] 4.1 Run `flutter analyze && flutter test` in `app/`. Verify zero issues and all tests passing, with counts. Run `openspec validate polish-photo-picking --strict`. Remove the "Android release pass" item from `todo.md`.
 - [ ] 4.2 **Manual. Android emulator and iOS simulator**, with a local server:
   - **Android:** turn on Developer options → "Don't keep activities". Open a template, choose Take photo, take a picture: the template reopens with it and "We kept the photo you picked." Repeat with the custom form and a prompt, using the library.
   - **Both platforms:** deny camera access, then tap Take photo. The dialog appears. Open Settings lands on the app's page, and Choose from library works.
