@@ -284,8 +284,8 @@ class UserStore(Protocol):
     ) -> tuple[User, bool]:
         """Find the linked account, link by email, or create one; returns (user, created).
 
-        `before_create` runs just before a new account would be inserted; if it raises,
-        nothing is written.
+        `before_create` runs once it is known that a new account is needed, before the age
+        decision is applied; if it raises, nothing is written.
 
         `adult_confirmed` matters only when an account would be created: None raises
         AgeRequired, False raises UnderAgeSignUp, True creates it with its age confirmed.

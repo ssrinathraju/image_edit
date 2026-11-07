@@ -55,8 +55,10 @@ def fast_password_hashing(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def relaxed_signup_limits(monkeypatch):
-    """Most tests register many accounts from one address; limit tests set the real caps."""
+def relaxed_signup_limits(request, monkeypatch):
+    """Most tests register many accounts from one address; `real_signup_limits` keeps the caps."""
+    if request.node.get_closest_marker("real_signup_limits"):
+        return
     monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_HOUR", 10_000)
     monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_DAY", 10_000)
 

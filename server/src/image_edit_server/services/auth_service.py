@@ -139,27 +139,30 @@ class AuthService:
         normalized = normalize_email(email)
         self._validate_credentials_format(normalized, password)
         self.refuse_disposable_email(normalized)
-        self._refuse_if_signup_limited(client_address)
-        password_hash = hash_password(password)
-        code, code_hash = email_code_service.new_code(normalized, CodePurpose.REGISTRATION)
+        reserved_at = self._reserve_signup(client_address)
         try:
-            result = self._users.start_registration(
-                normalized,
-                password_hash,
-                referral_code,
-                code_hash,
-                self._clock(),
-                email_code_service.limits_from(self._settings),
-            )
-        except EmailTakenError:
-            raise api_error(409, "email_taken", "this email is already registered")
-        except InvalidReferralCode:
-            raise api_error(
-                400, "invalid_referral_code", "this referral code was not recognised"
-            )
-        if not result.issued:
-            raise too_many_codes(result.retry_after_seconds)
-        self._signup_limiter.record(client_address, self._clock())
+            password_hash = hash_password(password)
+            code, code_hash = email_code_service.new_code(normalized, CodePurpose.REGISTRATION)
+            try:
+                result = self._users.start_registration(
+                    normalized,
+                    password_hash,
+                    referral_code,
+                    code_hash,
+                    self._clock(),
+                    email_code_service.limits_from(self._settings),
+                )
+            except EmailTakenError:
+                raise api_error(409, "email_taken", "this email is already registered")
+            except InvalidReferralCode:
+                raise api_error(
+                    400, "invalid_referral_code", "this referral code was not recognised"
+                )
+            if not result.issued:
+                raise too_many_codes(result.retry_after_seconds)
+        except BaseException:
+            self._signup_limiter.release(client_address, reserved_at)
+            raise
         self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, background)
 
     def confirm_registration(self, email: str, code: str, password: str) -> tuple[str, User]:
@@ -269,11 +272,8 @@ class AuthService:
         adult_confirmed = self._adult_confirmed(date_of_birth)
         identity = self.verify_provider_token(provider, token, nonce, 401)
         try:
-            user, created = self._users.sign_in_with_identity(
-                identity,
-                self._clock(),
-                adult_confirmed,
-                lambda: self._refuse_if_signup_limited(client_address),
+            user, created = self._sign_in_releasing_on_failure(
+                identity, adult_confirmed, client_address
             )
         except AgeRequired:
             raise api_error(
@@ -300,8 +300,6 @@ class AuthService:
                 "provider_already_linked",
                 f"this account is already linked to another {provider} account",
             )
-        if created:
-            self._signup_limiter.record(client_address, self._clock())
         if provider == APPLE:
             self.store_apple_refresh_token(user, authorization_code)
         logger.info("Provider sign-in: user %s via %s created=%s", user.id, provider, created)
@@ -448,6 +446,36 @@ class AuthService:
         if listed is not None:
             logger.info("disposable_email_refused: domain %s", listed)
             raise _disposable_email()
+
+    def _sign_in_releasing_on_failure(
+        self, identity: ProviderIdentity, adult_confirmed: Optional[bool], client_address: str
+    ) -> tuple[User, bool]:
+        reservation: list[datetime] = []
+
+        def before_create() -> None:
+            # Only a sign-in that will insert the account counts; others are just refused if full.
+            if adult_confirmed:
+                reservation.append(self._reserve_signup(client_address))
+            else:
+                self._refuse_if_signup_limited(client_address)
+
+        try:
+            return self._users.sign_in_with_identity(
+                identity, self._clock(), adult_confirmed, before_create
+            )
+        except BaseException:
+            for reserved_at in reservation:
+                self._signup_limiter.release(client_address, reserved_at)
+            raise
+
+    def _reserve_signup(self, client_address: str) -> datetime:
+        """Count a sign-up now, or raise 429; returns the timestamp to release it with."""
+        now = self._clock()
+        retry_after = self._signup_limiter.reserve(client_address, now)
+        if retry_after is not None:
+            logger.info("signup_limited: retry in %d seconds", retry_after)
+            raise too_many_signups(retry_after)
+        return now
 
     def _refuse_if_signup_limited(self, client_address: str) -> None:
         retry_after = self._signup_limiter.check(client_address, self._clock())

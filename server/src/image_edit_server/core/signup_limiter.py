@@ -20,22 +20,43 @@ class SignupLimiter:
         self._times: dict[str, deque[datetime]] = {}
 
     def check(self, address: str, now: datetime) -> Optional[int]:
-        """None when a sign-up is allowed, otherwise the seconds until it would be."""
+        """None when a sign-up is allowed, otherwise the seconds until it would be; counts nothing."""
         with self._lock:
-            times = self._recent(address, now)
-            waits = [
-                _seconds_until(times[-limit] + window, now)
-                for window, limit in ((HOUR, MAX_PER_HOUR), (DAY, MAX_PER_DAY))
-                if sum(1 for t in times if t > now - window) >= limit
-            ]
-        return max(waits) if waits else None
+            return self._wait(address, now)
 
-    def record(self, address: str, now: datetime) -> None:
-        """Count an accepted sign-up; also drops every entry older than a day."""
+    def reserve(self, address: str, now: datetime) -> Optional[int]:
+        """Atomically check and count one sign-up; None when counted, else the seconds to wait.
+
+        Release the reservation with `release` if the sign-up then fails. Each call also drops
+        every entry older than a day, which costs O(addresses seen in the last 24 hours) under
+        the lock.
+        """
         with self._lock:
             for known in list(self._times):
                 self._recent(known, now)
-            self._times.setdefault(address, deque()).append(now)
+            wait = self._wait(address, now)
+            if wait is None:
+                self._times.setdefault(address, deque()).append(now)
+            return wait
+
+    def release(self, address: str, at: datetime) -> None:
+        """Undo one reservation made at `at`; a no-op when it is already gone."""
+        with self._lock:
+            times = self._times.get(address)
+            if times is None or at not in times:
+                return
+            times.remove(at)
+            if not times:
+                del self._times[address]
+
+    def _wait(self, address: str, now: datetime) -> Optional[int]:
+        times = self._recent(address, now)
+        waits = [
+            _seconds_until(times[-limit] + window, now)
+            for window, limit in ((HOUR, MAX_PER_HOUR), (DAY, MAX_PER_DAY))
+            if sum(1 for t in times if t > now - window) >= limit
+        ]
+        return max(waits) if waits else None
 
     def _recent(self, address: str, now: datetime) -> deque[datetime]:
         times = self._times.get(address, deque())

@@ -1,14 +1,17 @@
+import threading
+import time
+
 import pytest
+from fastapi.testclient import TestClient
+
+from image_edit_server.services import auth_service as auth_service_module
 
 from tests.helpers import ADULT_DOB, DEFAULT_PASSWORD
 
 ADDRESS_HEADER = {"X-Forwarded-For": "6.6.6.6, 198.51.100.7"}
 
 
-@pytest.fixture(autouse=True)
-def real_limits(monkeypatch):
-    monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_HOUR", 5)
-    monkeypatch.setattr("image_edit_server.core.signup_limiter.MAX_PER_DAY", 10)
+pytestmark = pytest.mark.real_signup_limits
 
 
 def _register(client, n, headers=None):
@@ -178,3 +181,96 @@ def test_the_forwarded_header_is_ignored_with_no_trusted_hops(anon_client):
     resp = _register(anon_client, 5, {"X-Forwarded-For": "2.2.2.2"})
 
     assert resp.status_code == 429
+
+
+def test_parallel_registrations_cannot_exceed_the_hourly_cap(app, monkeypatch):
+    real_hash = auth_service_module.hash_password
+
+    def slow_hash(password):
+        time.sleep(0.05)  # keeps every request in flight together
+        return real_hash(password)
+
+    monkeypatch.setattr(auth_service_module, "hash_password", slow_hash)
+    client = TestClient(app)
+    barrier = threading.Barrier(12)
+    statuses = []
+
+    def attempt(n):
+        barrier.wait()
+        statuses.append(_register(client, n).status_code)
+
+    threads = [threading.Thread(target=attempt, args=(n,)) for n in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert statuses.count(202) == 5
+    assert statuses.count(429) == 7
+
+
+def test_refused_registrations_free_their_slot(anon_client):
+    for n in range(3):
+        assert _register(anon_client, n).status_code == 202
+    bad_referral = anon_client.post(
+        "/auth/register",
+        json={
+            "email": "ref@example.com",
+            "password": DEFAULT_PASSWORD,
+            "date_of_birth": ADULT_DOB,
+            "referral_code": "NOSUCHCODE",
+        },
+    )
+    repeated_email = _register(anon_client, 1)
+    assert _error(bad_referral) == "invalid_referral_code"
+    assert repeated_email.status_code == 429
+    assert _error(repeated_email) != "too_many_signups"
+
+    assert _register(anon_client, 10).status_code == 202
+    assert _register(anon_client, 11).status_code == 202
+    resp = _register(anon_client, 12)
+    assert resp.status_code == 429 and _error(resp) == "too_many_signups"
+
+
+def test_an_age_required_provider_request_is_refused_at_the_limit_on_the_sign_in_screen(
+    anon_client, google_verifier
+):
+    _fill_hour(anon_client)
+    google_verifier.add("g-new", "g-1", email="gina@example.com")
+
+    resp = anon_client.post("/auth/oauth/google", json={"id_token": "g-new"})
+
+    assert resp.status_code == 429
+    assert _error(resp) == "too_many_signups"
+
+
+def test_provider_requests_that_only_ask_for_an_age_are_not_counted(
+    anon_client, google_verifier
+):
+    for n in range(8):
+        google_verifier.add(f"g-{n}", f"sub-{n}", email=f"g{n}@example.com")
+        resp = anon_client.post("/auth/oauth/google", json={"id_token": f"g-{n}"})
+        assert _error(resp) == "age_required"
+
+    for n in range(5):
+        assert _google(anon_client, f"g-{n}").status_code == 200
+    assert _google(anon_client, "g-5").status_code == 429
+
+
+def test_a_failed_provider_insert_frees_its_slot(
+    anon_client, app, google_verifier, user_store, monkeypatch
+):
+    for n in range(4):
+        assert _register(anon_client, n).status_code == 202
+    google_verifier.add("g-bad", "sub-bad", email="bad@example.com")
+    monkeypatch.setattr(
+        user_store, "_insert_provider_user", lambda *a, **k: (_ for _ in ()).throw(OSError("disk"))
+    )
+    failing = TestClient(app, raise_server_exceptions=False)
+    assert failing.post(
+        "/auth/oauth/google", json={"id_token": "g-bad", "date_of_birth": ADULT_DOB}
+    ).status_code == 500
+    monkeypatch.undo()
+
+    assert _register(anon_client, 20).status_code == 202
+    assert _register(anon_client, 21).status_code == 429

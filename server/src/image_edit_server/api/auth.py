@@ -11,7 +11,8 @@ from image_edit_server.api.deps import (
     TokenDep,
     UserStoreDep,
 )
-from image_edit_server.core.client_address import client_address
+from image_edit_server.configs.settings import Settings
+from image_edit_server.core.client_address import FORWARDED_FOR_HEADER, client_address
 from image_edit_server.core.plans import effective_plan
 from image_edit_server.schemas.user import (
     AgeConfirmRequest,
@@ -33,6 +34,13 @@ from image_edit_server.schemas.user import (
 )
 
 router = APIRouter(tags=["auth"])
+
+def _caller_address(request: Request, settings: Settings) -> str:
+    host = request.client.host if request.client else None
+    return client_address(
+        host, request.headers.get(FORWARDED_FOR_HEADER), settings.TRUSTED_PROXY_HOPS
+    )
+
 
 def _auth_response(token: str, user: User) -> AuthResponse:
     return AuthResponse(token=token, id=user.id, email=user.email)
@@ -64,7 +72,7 @@ def register(
         body.date_of_birth,
         body.referral_code,
         background,
-        client_address(request, settings.TRUSTED_PROXY_HOPS),
+        _caller_address(request, settings),
     )
     return {}
 
@@ -93,7 +101,7 @@ def sign_in_with_google(
         "google",
         body.id_token,
         date_of_birth=body.date_of_birth,
-        client_address=client_address(request, settings.TRUSTED_PROXY_HOPS),
+        client_address=_caller_address(request, settings),
     )
     return _social_response(token, user, created)
 
@@ -108,7 +116,7 @@ def sign_in_with_apple(
         nonce=body.nonce,
         authorization_code=body.authorization_code,
         date_of_birth=body.date_of_birth,
-        client_address=client_address(request, settings.TRUSTED_PROXY_HOPS),
+        client_address=_caller_address(request, settings),
     )
     return _social_response(token, user, created)
 

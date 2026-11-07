@@ -56,12 +56,12 @@ class IdentitiesMixin:
             if existing:
                 self._link_identity(existing[0], identity, email, now)
                 return self._load_user(existing[0]), False
+            if before_create is not None:
+                before_create()
             if adult_confirmed is None:
                 raise AgeRequired(identity.provider)
             if not adult_confirmed:
                 raise UnderAgeSignUp(identity.provider)
-            if before_create is not None:
-                before_create()
             user_id = self._insert_provider_user(identity, email, now)
             return self._load_user(user_id), True
 
