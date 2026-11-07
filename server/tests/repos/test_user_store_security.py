@@ -19,6 +19,7 @@ from image_edit_server.core.user_store import (
     ProviderNotLinked,
 )
 from image_edit_server.repos.user_store import SqliteUserStore
+from tests.helpers import make_token_cipher
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 LIMITS = CodeLimits(
@@ -31,7 +32,7 @@ NEW = "new@example.com"
 
 @pytest.fixture
 def users() -> SqliteUserStore:
-    return SqliteUserStore(":memory:")
+    return SqliteUserStore(":memory:", token_cipher=make_token_cipher())
 
 
 @pytest.fixture

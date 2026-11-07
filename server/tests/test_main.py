@@ -598,3 +598,37 @@ def test_the_real_app_refuses_an_unsigned_link_to_an_existing_image(tmp_path, te
         resp = client.get(unsigned)
         assert resp.status_code == 404
         assert resp.json() == {"detail": "Not Found"}
+
+
+def test_create_app_builds_the_cipher_and_discards_plain_text_tokens(tmp_path, templates_dir):
+    from datetime import datetime, timezone
+
+    from image_edit_server.core.identity_verifier import ProviderIdentity
+    from image_edit_server.repos.user_store import SqliteUserStore
+    from tests.helpers import encoded_test_key, write_apple_key_file
+
+    root = tmp_path / "s"
+    root.mkdir()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    seed = SqliteUserStore(str(root / "app.db"))
+    user = seed.create_user("ana@example.com", "hash")
+    seed.link_identity(user.id, ProviderIdentity("apple", "a-1", "ana@example.com", True, now), now)
+    seed._conn.execute("UPDATE identities SET apple_refresh_token = 'legacy-plain'")
+    seed._conn.commit()
+    seed.close()
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir),
+        STORAGE_ROOT=str(root),
+        APPLE_BUNDLE_ID="com.example.app",
+        APPLE_TEAM_ID="TEAM",
+        APPLE_KEY_ID="KEY",
+        APPLE_PRIVATE_KEY_PATH=str(write_apple_key_file(tmp_path / "AuthKey.p8")),
+        TOKEN_ENCRYPTION_KEY=encoded_test_key(),
+    )
+
+    app = create_app(settings)
+
+    assert app is not None
+    reopened = SqliteUserStore(str(root / "app.db"))
+    assert reopened.list_providers(user.id) == ["apple"]
+    assert reopened._conn.execute("SELECT apple_refresh_token FROM identities").fetchone()[0] is None

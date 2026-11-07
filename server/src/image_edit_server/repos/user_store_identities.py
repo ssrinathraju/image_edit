@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Callable, Optional
 
@@ -13,7 +14,10 @@ from image_edit_server.core.user_store import (
     ProviderEmailUnverified,
     UnderAgeSignUp,
 )
+from image_edit_server.core.token_cipher import VERSION_PREFIX
 from image_edit_server.schemas.user import User
+
+logger = logging.getLogger(__name__)
 
 # An account made through a provider stores this instead of a password hash;
 # verify_password rejects it, so password login fails like a wrong password.
@@ -138,11 +142,17 @@ class IdentitiesMixin:
         return [row[0] for row in rows]
 
     def set_apple_refresh_token(self, user_id: str, token: str) -> None:
+        if self._token_cipher is None:
+            raise RuntimeError(
+                "cannot store an Apple token without TOKEN_ENCRYPTION_KEY; "
+                "set it whenever the Apple key settings are set"
+            )
+        sealed = self._token_cipher.encrypt(token, user_id)
         with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE identities SET apple_refresh_token = ?"
                 " WHERE user_id = ? AND provider = ?",
-                (token, user_id, APPLE_PROVIDER),
+                (sealed, user_id, APPLE_PROVIDER),
             )
 
     def get_apple_refresh_token(self, user_id: str) -> Optional[str]:
@@ -152,4 +162,23 @@ class IdentitiesMixin:
                 " WHERE user_id = ? AND provider = ?",
                 (user_id, APPLE_PROVIDER),
             ).fetchone()
-        return row[0] if row else None
+        return self._open_apple_token(user_id, row[0]) if row else None
+
+    def _open_apple_token(self, user_id: str, stored: Optional[str]) -> Optional[str]:
+        if stored is None:
+            return None
+        token = self._token_cipher.decrypt(stored, user_id) if self._token_cipher else None
+        if token is None:
+            logger.warning("apple_token_unreadable user=%s", user_id)
+        return token
+
+    def _discard_unencrypted_apple_tokens(self) -> None:
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "UPDATE identities SET apple_refresh_token = NULL"
+                " WHERE apple_refresh_token IS NOT NULL"
+                " AND substr(apple_refresh_token, 1, ?) <> ?",
+                (len(VERSION_PREFIX), VERSION_PREFIX),
+            )
+        if cursor.rowcount > 0:
+            logger.info("apple_tokens_discarded count=%d", cursor.rowcount)
