@@ -7,6 +7,7 @@ from typing import Callable, Optional
 from ulid import ULID
 
 from image_edit_server.core.identity_verifier import ProviderIdentity
+from image_edit_server.core.token_cipher import VERSION_PREFIX
 from image_edit_server.core.user_store import (
     AgeRequired,
     ProviderAlreadyLinked,
@@ -14,7 +15,6 @@ from image_edit_server.core.user_store import (
     ProviderEmailUnverified,
     UnderAgeSignUp,
 )
-from image_edit_server.core.token_cipher import VERSION_PREFIX
 from image_edit_server.schemas.user import User
 
 logger = logging.getLogger(__name__)

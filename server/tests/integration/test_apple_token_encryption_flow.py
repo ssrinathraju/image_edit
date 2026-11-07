@@ -105,7 +105,22 @@ def test_a_value_copied_onto_another_account_is_not_revoked_on_deletion(
     assert apple_client.revoked == []
 
 
-def test_a_plain_text_token_from_before_the_change_is_gone_after_startup(
+def test_deleting_an_account_whose_plain_text_token_was_discarded_revokes_nothing(
+    anon_client, apple_verifier, apple_client, user_store, clock, caplog
+):
+    user_id, headers = _sign_in_with_apple(anon_client, apple_verifier)
+    _set_raw_token(user_store, user_id, "legacy-plain-text-token")
+
+    user_store._discard_unencrypted_apple_tokens()
+    with caplog.at_level("WARNING"):
+        resp = _delete_apple_account(anon_client, apple_verifier, clock, headers)
+
+    assert resp.status_code == 204
+    assert apple_client.revoked == []
+    assert "apple_token_unreadable" not in caplog.text
+
+
+def test_a_discarded_plain_text_token_is_replaced_by_the_next_sign_in_with_a_code(
     anon_client, apple_verifier, apple_client, user_store, clock
 ):
     user_id, headers = _sign_in_with_apple(anon_client, apple_verifier)
