@@ -151,3 +151,13 @@ The first launch is India only.
   - Run `set_role.py` to make an admin, then create a template with curl.
   - Create a template with a 5000-digit `popularity`: expect 400, not 500.
   - Make two quick template edits and check the log shows no event-loop error.
+
+## From sign-result-urls
+
+- [ ] **Manual check 5.2 never run** for sign-result-urls. Use a local server in log mode on a temporary storage root, never the real one:
+  - Generate and see the image.
+  - curl a `result_url`: it works at once, and gives 404 after 15 minutes or with `sig` changed.
+  - Leave a result screen open past 15 minutes, force a load failure, and tap Reload: the image comes back.
+  - After retention, Reload shows an error and the way home.
+  - My creations catch-up still saves results.
+  - A quick double Reload works.
