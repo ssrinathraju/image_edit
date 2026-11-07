@@ -26,6 +26,26 @@ class SessionTokenHolder {
 final sessionTokenHolderProvider =
     Provider<SessionTokenHolder>((_) => SessionTokenHolder());
 
+/// The profile that session restore already fetched, handed to the account
+/// notifier once so startup calls `/me` a single time.
+class RestoredProfileHolder {
+  UserProfile? _profile;
+
+  void keep(UserProfile profile) => _profile = profile;
+
+  /// Returns the kept profile if it belongs to [userId], and forgets it.
+  UserProfile? take(String userId) {
+    final profile = _profile;
+    _profile = null;
+    return profile != null && profile.id == userId ? profile : null;
+  }
+
+  void clear() => _profile = null;
+}
+
+final restoredProfileHolderProvider =
+    Provider<RestoredProfileHolder>((_) => RestoredProfileHolder());
+
 /// The signed-in session; `null` data means signed out, loading means the
 /// saved session is being checked, and an error means it could not be checked.
 class SessionNotifier extends AsyncNotifier<Session?> {
@@ -52,6 +72,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     _restoring = true;
     try {
       final me = await ref.read(apiClientProvider).fetchMe();
+      ref.read(restoredProfileHolderProvider).keep(me);
       return Session(token: saved.token, userId: me.id, email: me.email);
     } on DioException catch (error) {
       if (error.response?.statusCode != 401) rethrow;
@@ -199,6 +220,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
   }
 
   Future<void> _start(Session session) async {
+    ref.read(restoredProfileHolderProvider).clear();
     await ref.read(sessionStorageProvider).write(session);
     ref.read(sessionTokenHolderProvider).token = session.token;
     state = AsyncData(session);
@@ -226,6 +248,7 @@ class SessionNotifier extends AsyncNotifier<Session?> {
     ref.invalidate(lastRequestProvider);
     ref.invalidate(homeNotifierProvider);
     _justCreatedViaProvider = false;
+    ref.read(restoredProfileHolderProvider).clear();
     await _discardStoredSession();
     state = const AsyncData(null);
   }

@@ -32,6 +32,40 @@ void main() {
     expect(account!.usage!.usedToday, 1);
   });
 
+  test('startup fetches /me once for session restore and the account together', () async {
+    var calls = 0;
+    final client = FakeApiClient()
+      ..onFetchMe = () async {
+        calls++;
+        return fakeProfile(usedToday: 1);
+      };
+    final container = _container(client, FakeSessionStorage(savedSession));
+    await container.read(sessionProvider.future);
+
+    final account = await container.read(accountProvider.future);
+
+    expect(account!.usage!.usedToday, 1);
+    expect(calls, 1);
+  });
+
+  test('a later rebuild of the account fetches /me again', () async {
+    var calls = 0;
+    final client = FakeApiClient()
+      ..onFetchMe = () async {
+        calls++;
+        return fakeProfile(usedToday: calls);
+      };
+    final container = _container(client, FakeSessionStorage(savedSession));
+    await container.read(sessionProvider.future);
+    await container.read(accountProvider.future);
+
+    container.invalidate(accountProvider);
+    final account = await container.read(accountProvider.future);
+
+    expect(calls, 2);
+    expect(account!.usage!.usedToday, 2);
+  });
+
   test('is null while signed out', () async {
     final container = _container(FakeApiClient(), FakeSessionStorage());
     await container.read(sessionProvider.future);
