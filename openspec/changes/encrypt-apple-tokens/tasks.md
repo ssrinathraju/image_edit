@@ -59,4 +59,4 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
   - `openspec validate encrypt-apple-tokens --strict` passes;
   - the md5 of `app.db` is unchanged.
 - [ ] 5.2 **Manual.** With a local server on a temporary storage root and the Apple consoles configured: sign in with Apple, check with `sqlite3` that the stored value starts with `v1:`, then delete the account and see the revocation in the log. This box stays unticked until someone runs it, because it needs the Apple Developer membership. It is part of the user's combined manual pass.
-- [ ] 5.3 Push `feat/encrypt-apple-tokens`. Verify with `git ls-remote` that the remote branch matches the local HEAD.
+- [x] 5.3 Push `feat/encrypt-apple-tokens`. Verify with `git ls-remote` that the remote branch matches the local HEAD.
