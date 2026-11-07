@@ -4,6 +4,8 @@ FastAPI backend for the image_edit project. Accepts reference face images and a 
 
 ## Setup
 
+The server needs Python 3.11 or later. `uv sync` installs it if the machine does not have it.
+
 ```bash
 uv sync
 ```

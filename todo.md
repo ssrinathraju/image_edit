@@ -66,7 +66,6 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
-- [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
 - [ ] **Remaining manual checks for add-email-verification-and-reset** — the current registration and reset flows passed on the iOS simulator on 2026-10-20. Still open: 11.2's pre-upgrade `app.db` step (its Verify-email steps were superseded by add-social-sign-in's registration rework), and 11.3, a real SMTP send.
 
 ## From add-social-sign-in
