@@ -4,7 +4,7 @@ Work on branch `feat/polish-photo-picking`. Do not push to `main`. All work is i
 
 ## 1. Settings channel
 
-- [ ] 1.1 Add `services/app_settings.dart` (provider, `open()`, channel `image_edit/settings`) and the native handlers in `AppDelegate.swift` and `MainActivity.kt` (Decision 4). Verify that:
+- [x] 1.1 Add `services/app_settings.dart` (provider, `open()`, channel `image_edit/settings`) and the native handlers in `AppDelegate.swift` and `MainActivity.kt` (Decision 4). Verify that:
   - `test/services/app_settings_test.dart` checks the channel call with a mock handler, and that a channel error is logged and reported as failure;
   - `flutter build ios --no-codesign --debug` succeeds;
   - `flutter build apk --debug` succeeds.

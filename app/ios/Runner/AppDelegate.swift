@@ -13,6 +13,30 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerBackupChannel(with: engineBridge.pluginRegistry)
+    registerSettingsChannel(with: engineBridge.pluginRegistry)
+  }
+
+  private func registerSettingsChannel(with registry: FlutterPluginRegistry) {
+    guard let registrar = registry.registrar(forPlugin: "AppSettings") else { return }
+    let channel = FlutterMethodChannel(
+      name: "image_edit/settings",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "open",
+        let url = URL(string: UIApplication.openSettingsURLString)
+      else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      UIApplication.shared.open(url) { opened in
+        if opened {
+          result(nil)
+        } else {
+          result(FlutterError(code: "open_failed", message: "Settings did not open", details: nil))
+        }
+      }
+    }
   }
 
   private func registerBackupChannel(with registry: FlutterPluginRegistry) {
