@@ -19,7 +19,6 @@ Items deferred from PR #1 review. None block the merge.
 
 ## From PR #2 review (auth and profile)
 
-- [ ] **Authenticated or signed image URLs** — `/images/<job_id>.png` is public to anyone holding the URL. Job ids are unguessable but time-ordered. Needed before any public deployment.
 - [ ] **Deep links lost on the login redirect** — the router sends a signed-out user to `/login` and forgets the target. Polish for when the app has real deep links.
 
 ## From enforce-output-retention

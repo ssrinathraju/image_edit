@@ -38,7 +38,7 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
 
 ## 3. App
 
-- [ ] 3.1 Make the status screen's Reload refetch status before reloading the image (Decision 5). Verify in `test/features/generation_status/generation_status_screen_test.dart`, with a fake service:
+- [x] 3.1 Make the status screen's Reload refetch status before reloading the image (Decision 5). Verify in `test/features/generation_status/generation_status_screen_test.dart`, with a fake service:
   - the first image fetch fails;
   - Reload calls status again and loads the bytes from the new URL;
   - when that status call fails, the failure view with Home is shown;
@@ -46,7 +46,7 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
 
 ## 4. Documentation
 
-- [ ] 4.1 In `server/README.md`, document:
+- [x] 4.1 In `server/README.md`, document:
   - signed result links and their 15-minute lifetime;
   - `RESULT_URL_SECRET` (random when empty; required for several instances);
   - that access logs show the `sig` parameter, and how to disable uvicorn's access log in production.
@@ -55,7 +55,7 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
 
 ## 5. Integration and hand-off
 
-- [ ] 5.1 Run `uv run pytest -q` in `server/` on Python 3.11, and `flutter analyze && flutter test` in `app/`. Verify that all tests pass, with counts reported, that `openspec validate sign-result-urls --strict` passes, and that the md5 of `app.db` is unchanged.
+- [x] 5.1 Run `uv run pytest -q` in `server/` on Python 3.11, and `flutter analyze && flutter test` in `app/`. Verify that all tests pass, with counts reported, that `openspec validate sign-result-urls --strict` passes, and that the md5 of `app.db` is unchanged.
 - [ ] 5.2 **Manual.** Use a local server in log mode on a temporary storage root, with the iOS simulator and the Android emulator:
   - generate and see the image;
   - copy the `result_url` from the server log or a status call with curl. It works at once, and gives 404 after 15 minutes or with `sig` changed;
@@ -63,4 +63,4 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
   - My creations catch-up still saves results.
 
   This box stays unticked until someone runs it. It is part of the user's combined manual pass.
-- [ ] 5.3 Push `feat/sign-result-urls`. Verify with `git ls-remote` that it matches the local HEAD.
+- [x] 5.3 Push `feat/sign-result-urls`. Verify with `git ls-remote` that it matches the local HEAD.
