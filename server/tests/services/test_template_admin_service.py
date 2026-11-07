@@ -6,7 +6,6 @@ import pytest
 from fastapi import HTTPException
 from PIL import Image
 
-from image_edit_server.services import template_admin_service as admin_service
 from image_edit_server.services.template_admin_service import (
     RawTemplateFields,
     TemplateAdminService,
@@ -373,15 +372,7 @@ async def test_log_lines_carry_action_id_and_admin_only(service, caplog):
     assert "fields=title,prompt" in lines[1]
 
 
-async def test_a_very_long_popularity_is_refused_without_converting_it(service, monkeypatch):
-    # Python 3.11+ makes int() raise ValueError on a string of over 4300 digits.
-    def limited_int(value):
-        if isinstance(value, str) and len(value) > 4300:
-            raise ValueError("Exceeds the limit for integer string conversion")
-        return int(value)
-
-    monkeypatch.setattr(admin_service, "int", limited_int, raising=False)
-
+async def test_a_very_long_popularity_is_refused_without_converting_it(service):
     body = await _refused(service.create(ADMIN, _fields(popularity="9" * 5000), image_bytes()))
 
     assert (body["status"], body["field"]) == (400, "popularity")

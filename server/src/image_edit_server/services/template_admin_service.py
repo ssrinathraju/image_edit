@@ -153,14 +153,7 @@ class TemplateAdminService:
         self._safety = safety
         self._previews_dir = previews_dir
         self._clock = clock
-        self._lock: Optional[asyncio.Lock] = None
-
-    def _write_lock(self) -> asyncio.Lock:
-        # Created on first use: before Python 3.10 a Lock binds to the loop current at
-        # construction, and the app is built before the server's loop exists.
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-        return self._lock
+        self._lock = asyncio.Lock()
 
     def list_all(self) -> list[StoredTemplate]:
         """Every template, retired ones last, each group in the public order."""
@@ -216,7 +209,7 @@ class TemplateAdminService:
         if preview is None:
             raise _refusal(400, "invalid_preview", "a preview image is required", "preview")
         webp = await self._normalise(preview)
-        async with self._write_lock():
+        async with self._lock:
             if self._store.get_template(template_id) is not None:
                 raise _refusal(409, "template_exists", f"template '{template_id}' already exists")
             name = hashed_preview_name(template_id, webp, PREVIEW_SUFFIX)
@@ -241,7 +234,7 @@ class TemplateAdminService:
             )
         self._screen(fields)
         webp = await self._normalise(preview) if preview is not None else None
-        async with self._write_lock():
+        async with self._lock:
             current = self._store.get_template(template_id)
             if current is None:
                 raise _not_found(template_id)
@@ -264,7 +257,7 @@ class TemplateAdminService:
         return updated
 
     async def _set_retired(self, admin_id: str, template_id: str, retired: bool) -> StoredTemplate:
-        async with self._write_lock():
+        async with self._lock:
             current = self._store.get_template(template_id)
             if current is None:
                 raise _not_found(template_id)
