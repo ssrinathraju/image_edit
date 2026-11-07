@@ -5,13 +5,15 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_errors.dart';
 import '../../core/reauth.dart';
 import '../../services/generation_providers.dart';
+import '../common/signup_messages.dart';
 import '../plans/account_notifier.dart';
 import 'email_change_draft.dart';
 import 'reauth.dart';
 
 final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-const String emailTakenMessage = 'That email is already used by another account';
+const String emailTakenMessage =
+    'That email is already used by another account';
 
 /// Asks for the new address and confirms the user is them, then sends the code
 /// and opens the code step. A failure keeps what was typed.
@@ -60,6 +62,7 @@ class _ChangeEmailScreenState extends ConsumerState<ChangeEmailScreen> {
   }
 
   String _messageFor(Object error, Reauth? reauth) {
+    if (isDisposableEmail(error)) return disposableEmailMessage;
     if (isEmailTaken(error)) return emailTakenMessage;
     if (isTooManyRequests(error)) return tooManyCodesMessage(error);
     return describeSecurityError(error, reauth);
@@ -98,7 +101,9 @@ class _ChangeEmailScreenState extends ConsumerState<ChangeEmailScreen> {
                   Text(
                     _failure!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 20),

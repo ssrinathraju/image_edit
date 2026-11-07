@@ -34,7 +34,15 @@ bool isCodeExpired(Object error) => errorCodeOf(error) == codeExpiredCode;
 bool isEmailTaken(Object error) => errorCodeOf(error) == emailTakenCode;
 bool isRegistrationChanged(Object error) =>
     errorCodeOf(error) == registrationChangedCode;
-bool isTooManyRequests(Object error) => errorCodeOf(error) == tooManyRequestsCode;
+bool isTooManyRequests(Object error) =>
+    errorCodeOf(error) == tooManyRequestsCode;
+
+const String disposableEmailCode = 'disposable_email';
+const String tooManySignupsCode = 'too_many_signups';
+
+bool isDisposableEmail(Object error) =>
+    errorCodeOf(error) == disposableEmailCode;
+bool isTooManySignups(Object error) => errorCodeOf(error) == tooManySignupsCode;
 
 const String reauthFailedCode = 'reauth_failed';
 const String tooManyAttemptsCode = 'too_many_attempts';
@@ -42,7 +50,8 @@ const String providerInUseCode = 'provider_in_use';
 const String lastSignInMethodCode = 'last_sign_in_method';
 
 bool isReauthFailed(Object error) => errorCodeOf(error) == reauthFailedCode;
-bool isTooManyAttempts(Object error) => errorCodeOf(error) == tooManyAttemptsCode;
+bool isTooManyAttempts(Object error) =>
+    errorCodeOf(error) == tooManyAttemptsCode;
 bool isProviderInUse(Object error) => errorCodeOf(error) == providerInUseCode;
 bool isLastSignInMethod(Object error) =>
     errorCodeOf(error) == lastSignInMethodCode;

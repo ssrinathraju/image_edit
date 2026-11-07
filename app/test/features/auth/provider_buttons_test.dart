@@ -45,6 +45,28 @@ void main() {
     expect(storage.saved!.token, 'token-g');
   });
 
+  testWidgets('Google refused with too_many_signups shows the wait and stays signed out', (
+    tester,
+  ) async {
+    client.onSignInWithGoogle = (_) async => throw apiError(
+          429,
+          'too_many_signups',
+          'x',
+          retryAfterSeconds: 1800,
+        );
+    await pumpApp(tester, client: client, storage: storage, google: FakeProviderSignIn.google());
+
+    await tester.tap(_googleButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Too many new accounts from this network. Try again in 30 minutes.'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(storage.saved, isNull);
+  });
+
   testWidgets('Apple sends the token, raw nonce and code', (tester) async {
     client.onSignInWithApple = (_, _, _) async => _existing;
     await pumpApp(

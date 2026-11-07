@@ -110,6 +110,47 @@ void main() {
     expect(find.text('Confirm registration'), findsNothing);
   });
 
+  testWidgets('a disposable address shows the message and keeps every entry', (tester) async {
+    client.onRegister = (_, _) async =>
+        throw apiError(400, 'disposable_email', 'Use a permanent email address.');
+    await _openRegister(tester);
+
+    await _fill(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Use a permanent email address.'), findsOneWidget);
+    String textOf(String label) =>
+        tester.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
+    expect(textOf('Email'), 'new@example.com');
+    expect(textOf('Password'), 'password-1');
+    expect(find.text('1990-01-31'), findsOneWidget);
+    expect(find.text('Confirm registration'), findsNothing);
+  });
+
+  testWidgets('too many sign-ups shows the wait in minutes and keeps the entries', (tester) async {
+    client.onRegister = (_, _) async => throw apiError(
+          429,
+          'too_many_signups',
+          'x',
+          retryAfterSeconds: 1800,
+        );
+    await _openRegister(tester);
+
+    await _fill(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Too many new accounts from this network. Try again in 30 minutes.'),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<TextField>(find.widgetWithText(TextField, 'Email')).controller!.text,
+      'new@example.com',
+    );
+  });
+
   testWidgets('submit stays disabled until a date of birth is chosen', (tester) async {
     await _openRegister(tester);
 
