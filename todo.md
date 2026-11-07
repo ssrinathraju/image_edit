@@ -55,6 +55,15 @@ Items deferred from PR #1 review. None block the merge.
 ## Deployment checklist
 
 - [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total. The same holds for `POST` and `PATCH` on `/admin/templates`: the framework streams the multipart body to temporary disk before it checks the session, so an unauthenticated client can send an oversized `preview`. The proxy should refuse bodies above about 2 MB plus the form fields on those paths.
+- [ ] **Database for a single instance: SQLite plus S3 backups** — for the first deployment, keep `app.db` on the instance's own disk (EBS) and back it up to S3 daily. Use a consistent copy (`sqlite3 app.db ".backup <file>"` or the backup API), never a plain file copy while the server is writing. Test a restore once before launch.
+- [ ] **Move to RDS PostgreSQL before running more than one instance** — one SQLite file can't be shared by several servers. Add a Postgres `UserStore` backend behind the existing interface (`core/user_store.py`) and migrate the data. Before scaling out, also share the per-process state: the in-memory job store, `RESULT_URL_SECRET` (set it explicitly), and the sign-up limiter.
+
+## Before enabling countries other than India
+
+The first launch is India only.
+
+- [ ] **GDPR data export** — required before EU or UK users: a "Download my data" action on the profile and a `GET /me/export` endpoint returning the account's data as JSON (account, linked providers without tokens, age-confirmation date, consent records, usage, credits and referrals, safety strikes and reports). Images aren't included: results live on the device and the server deletes its copies within 24 hours. In India, DPDP Act requests for a summary of personal data can be answered by hand from `app.db` until then.
+- [ ] **Re-check store and payment rules for the new region** — Razorpay and Google Play's user choice billing are India-specific. Check that region's App Store and Play billing rules before selling there.
 
 ## Decided, no change
 
