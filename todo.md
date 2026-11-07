@@ -56,6 +56,7 @@ Items deferred from PR #1 review. None block the merge.
 
 - [ ] **Cap the request body size at the proxy** — the multipart body of `POST /generations` is received by the framework before the handler runs. The quota pre-check saves the read and decode, not the transfer, so the proxy should refuse bodies above the 40 MB total. The same holds for `POST` and `PATCH` on `/admin/templates`: the framework streams the multipart body to temporary disk before it checks the session, so an unauthenticated client can send an oversized `preview`. The proxy should refuse bodies above about 2 MB plus the form fields on those paths.
 - [ ] **Database for a single instance: SQLite plus S3 backups** — for the first deployment, keep `app.db` on the instance's own disk (EBS) and back it up to S3 daily. Use a consistent copy (`sqlite3 app.db ".backup <file>"` or the backup API), never a plain file copy while the server is writing. Test a restore once before launch.
+- [ ] **NVIDIA driver for torch 2.14.1** — its Linux wheels use CUDA 13, so the GPU host needs a recent NVIDIA driver. Check this when the GPU pipeline change lands.
 - [ ] **Move to RDS PostgreSQL before running more than one instance** — one SQLite file can't be shared by several servers. Add a Postgres `UserStore` backend behind the existing interface (`core/user_store.py`) and migrate the data. Before scaling out, also share the per-process state: the in-memory job store, `RESULT_URL_SECRET` (set it explicitly), and the sign-up limiter.
 
 ## Before enabling countries other than India
@@ -75,7 +76,6 @@ The first launch is India only.
 
 - [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
 - [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
-- [ ] **Server venv is Python 3.9.6** while CLAUDE.md says 3.11+ (pre-existing).
 - [ ] **Remaining manual checks for add-email-verification-and-reset** — the current registration and reset flows passed on the iOS simulator on 2026-10-20. Still open: 11.2's pre-upgrade `app.db` step (its Verify-email steps were superseded by add-social-sign-in's registration rework), and 11.3, a real SMTP send.
 
 ## From add-social-sign-in
