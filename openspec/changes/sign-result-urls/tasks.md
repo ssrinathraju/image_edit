@@ -4,7 +4,7 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
 
 ## 1. Signing
 
-- [ ] 1.1 Add `core/url_signing.py` with `sign`, `verify` and `RESULT_URL_TTL` (Decisions 1 and 4). Verify in `tests/core/test_url_signing.py`:
+- [x] 1.1 Add `core/url_signing.py` with `sign`, `verify` and `RESULT_URL_TTL` (Decisions 1 and 4). Verify in `tests/core/test_url_signing.py`:
   - a round trip;
   - an expired `exp`;
   - a changed `exp`;
@@ -12,7 +12,7 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
   - a wrong secret;
   - a malformed signature (not base64, the wrong length);
   - comparison uses `hmac.compare_digest`. Check this with a monkeypatch spy, or by code inspection noted in the test.
-- [ ] 1.2 Add the `RESULT_URL_SECRET` setting with startup handling (Decision 3): random when empty; startup fails when set but shorter than 32 characters. Document it in `.env.example`. Verify in `tests/test_main.py`:
+- [x] 1.2 Add the `RESULT_URL_SECRET` setting with startup handling (Decision 3): random when empty; startup fails when set but shorter than 32 characters. Document it in `.env.example`. Verify in `tests/test_main.py`:
   - empty gives a working app whose links verify;
   - a short secret fails startup with a clear message;
   - a configured secret makes links from two app instances interchangeable;
@@ -20,11 +20,11 @@ Work on branch `feat/sign-result-urls`. Do not push to `main`. This builds on `u
 
 ## 2. Serving and status
 
-- [ ] 2.1 Sign `result_url` in `generation_service` for each succeeded status response. The worker must not store a signed URL (Decision 1). Verify in `tests/services/test_generation_service.py` or the API tests:
+- [x] 2.1 Sign `result_url` in `generation_service` for each succeeded status response. The worker must not store a signed URL (Decision 1). Verify in `tests/services/test_generation_service.py` or the API tests:
   - the URL has `exp` and `sig`;
   - two calls 20 minutes apart (with a fake clock) give different, later expiries;
   - queued, running and failed jobs have no `result_url`.
-- [ ] 2.2 Replace the `/images` `StaticFiles` mount with `api/images.py` (Decision 2). Verify in `tests/api/test_images.py` that a valid link gives 200 with `image/png` and `Cache-Control: private, no-store`. Each of these gives the same 404 body:
+- [x] 2.2 Replace the `/images` `StaticFiles` mount with `api/images.py` (Decision 2). Verify in `tests/api/test_images.py` that a valid link gives 200 with `image/png` and `Cache-Control: private, no-store`. Each of these gives the same 404 body:
   - no parameters;
   - an expired link (fake clock past 15 minutes);
   - a tampered `exp`;

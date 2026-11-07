@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ from image_edit_server.api.deps import (
     get_account_security_service,
     get_auth_service,
     get_quota_service,
+    get_result_url_secret,
     get_referral_service,
     get_safety_service,
     get_settings,
@@ -24,6 +26,7 @@ from image_edit_server.api.deps import (
     get_user_store,
 )
 from image_edit_server.api.errors import install_validation_error_handler
+from image_edit_server.api.images import router as images_router
 from image_edit_server.api.me_security import router as me_security_router
 from image_edit_server.api.generations import get_store, router as generations_router
 from image_edit_server.api.reports import get_report_service, router as reports_router
@@ -131,6 +134,16 @@ def _make_apple_client(cfg: Settings) -> Optional[AppleRevocationClient]:
     return None
 
 
+def _result_url_secret(cfg: Settings) -> bytes:
+    if cfg.RESULT_URL_SECRET:
+        return cfg.RESULT_URL_SECRET.encode()
+    logger.info(
+        "IMAGE_EDIT_RESULT_URL_SECRET is not set: using a random secret; "
+        "set it before running several instances"
+    )
+    return secrets.token_bytes(32)
+
+
 def _open_user_store(cfg: Settings) -> SqliteUserStore:
     db_path = Path(auth_db_path(cfg))
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +159,7 @@ def create_app(
     """Build the app; `verifiers` and `apple_client` replace the real provider clients in tests."""
     _configure_logging()
     cfg = settings or Settings()
+    result_url_secret = _result_url_secret(cfg)
     email_sender = sender or _make_email_sender(cfg)
     store = InMemoryJobStore()
     previews_dir = Path(cfg.STORAGE_ROOT) / PREVIEWS_STORAGE_DIRNAME
@@ -245,6 +259,7 @@ def create_app(
     )
     app.dependency_overrides[get_settings] = lambda: cfg
     app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_result_url_secret] = lambda: result_url_secret
     app.dependency_overrides[get_catalog] = lambda: catalog_holder.current
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service
@@ -257,13 +272,13 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(me_security_router)
     app.include_router(generations_router)
+    app.include_router(images_router)
     app.include_router(templates_router)
     app.include_router(reports_router)
     app.include_router(admin_templates_router)
 
     outputs_dir = Path(cfg.STORAGE_ROOT) / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/images", StaticFiles(directory=str(outputs_dir)), name="images")
     app.mount(
         PREVIEW_URL_PREFIX,
         StaticFiles(directory=str(previews_dir)),

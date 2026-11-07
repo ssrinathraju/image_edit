@@ -34,7 +34,7 @@ def test_succeeded_job_returns_result_url(client, store, user_id):
     body = resp.json()
     assert resp.status_code == 200
     assert body["status"] == "succeeded"
-    assert body["result_url"] == f"/images/{job_id}.png"
+    assert body["result_url"].startswith(f"/images/{job_id}.png?exp=")
 
 
 def test_failed_job_returns_error(client, store, user_id):
@@ -98,3 +98,66 @@ def test_unfinished_or_failed_job_has_null_expires_at(client, store, user_id, st
     body = client.get(f"/generations/{job_id}").json()
 
     assert body["expires_at"] is None
+
+
+def _succeeded_job(client, store, user_id, settings):
+    from PIL import Image
+
+    from image_edit_server.repos import file_storage
+
+    job_id = store.create(Job(id="", prompt="test", user_id=user_id))
+    path = file_storage.output_path(job_id, settings.STORAGE_ROOT)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (2, 2)).save(path, format="PNG")
+    store.update(job_id, status=JobStatus.succeeded, result_url=f"/images/{job_id}.png")
+    return job_id
+
+
+def _expiry(url):
+    from urllib.parse import parse_qs, urlparse
+
+    return int(parse_qs(urlparse(url).query)["exp"][0])
+
+
+def test_result_url_carries_an_expiry_and_a_signature(client, store, user_id, clock, settings):
+    job_id = _succeeded_job(client, store, user_id, settings)
+
+    url = client.get(f"/generations/{job_id}").json()["result_url"]
+
+    from urllib.parse import parse_qs, urlparse
+
+    parsed = urlparse(url)
+    assert parsed.path == f"/images/{job_id}.png"
+    query = parse_qs(parsed.query)
+    assert int(query["exp"][0]) == int(clock().timestamp()) + 15 * 60
+    assert len(query["sig"][0]) == 43
+
+
+def test_each_status_call_issues_a_later_expiry_that_works(
+    client, store, user_id, clock, settings
+):
+    job_id = _succeeded_job(client, store, user_id, settings)
+    first = client.get(f"/generations/{job_id}").json()["result_url"]
+
+    clock.advance(minutes=20)
+    second = client.get(f"/generations/{job_id}").json()["result_url"]
+
+    assert _expiry(second) > _expiry(first)
+    assert client.get(first).status_code == 404
+    assert client.get(second).status_code == 200
+
+
+def test_the_store_never_holds_a_signed_url(client, store, user_id, settings):
+    job_id = _succeeded_job(client, store, user_id, settings)
+
+    client.get(f"/generations/{job_id}")
+
+    assert store.get(job_id).result_url == f"/images/{job_id}.png"
+
+
+@pytest.mark.parametrize("status", [JobStatus.queued, JobStatus.running, JobStatus.failed])
+def test_unfinished_or_failed_job_has_no_result_url(client, store, user_id, status):
+    job_id = store.create(Job(id="", prompt="test", user_id=user_id))
+    store.update(job_id, status=status)
+
+    assert client.get(f"/generations/{job_id}").json()["result_url"] is None

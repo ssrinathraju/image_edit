@@ -9,7 +9,9 @@ from image_edit_server.api.auth import router as auth_router
 from image_edit_server.api.deps import (
     get_account_security_service,
     get_auth_service,
+    get_clock,
     get_quota_service,
+    get_result_url_secret,
     get_referral_service,
     get_safety_service,
     get_settings,
@@ -17,6 +19,7 @@ from image_edit_server.api.deps import (
 )
 from image_edit_server.api.errors import install_validation_error_handler
 from image_edit_server.api.generations import get_store, router
+from image_edit_server.api.images import router as images_router
 from image_edit_server.api.me_security import router as me_security_router
 from image_edit_server.api.reports import get_report_service, router as reports_router
 from image_edit_server.api.templates import get_catalog, router as templates_router
@@ -96,6 +99,11 @@ def verifiers(google_verifier, apple_verifier) -> dict:
 
 
 @pytest.fixture
+def result_url_secret() -> bytes:
+    return b"test-result-url-secret-0123456789abcdef"
+
+
+@pytest.fixture
 def user_store() -> SqliteUserStore:
     return SqliteUserStore(":memory:")
 
@@ -131,7 +139,8 @@ def safety_service(settings, user_store, upload_classifier, output_classifier) -
 
 @pytest.fixture
 def app(
-    store, catalog, user_store, settings, sender, clock, verifiers, apple_client, safety_service
+    store, catalog, user_store, settings, sender, clock, verifiers, apple_client, safety_service,
+    result_url_secret,
 ) -> FastAPI:
     throttle = LoginThrottle(
         settings.LOGIN_MAX_FAILURES, timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
@@ -151,12 +160,15 @@ def app(
     install_validation_error_handler(app)
     quota_service = QuotaService(user_store, settings)
     app.include_router(router)
+    app.include_router(images_router)
     app.include_router(templates_router)
     app.include_router(reports_router)
     app.include_router(auth_router)
     app.include_router(me_security_router)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_result_url_secret] = lambda: result_url_secret
+    app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[get_user_store] = lambda: user_store
     app.dependency_overrides[get_auth_service] = lambda: auth_service

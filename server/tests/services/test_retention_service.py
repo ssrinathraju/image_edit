@@ -13,6 +13,7 @@ from image_edit_server.services.retention_service import run_retention, sweep
 
 NOW = datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)
 HOUR = 3600
+SECRET = b"retention-test-secret-0123456789abcdef"
 
 
 @pytest.fixture
@@ -186,7 +187,7 @@ def _finished(store, status, hours_ago: float) -> str:
 
 
 def _status(store, job_id):
-    return generation_service.get_status(job_id, "ana", store)
+    return generation_service.get_status(job_id, "ana", store, SECRET, NOW)
 
 
 async def test_an_old_failed_job_is_removed_and_its_status_is_gone(settings, store):
