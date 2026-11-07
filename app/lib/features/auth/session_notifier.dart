@@ -33,11 +33,12 @@ class RestoredProfileHolder {
 
   void keep(UserProfile profile) => _profile = profile;
 
-  /// Returns the kept profile if it belongs to [userId], and forgets it.
-  UserProfile? take(String userId) {
+  /// Returns the kept profile, if any, and forgets it. Restore keeps the
+  /// profile of the session it builds, and sign-in and sign-out clear it.
+  UserProfile? take() {
     final profile = _profile;
     _profile = null;
-    return profile != null && profile.id == userId ? profile : null;
+    return profile;
   }
 
   void clear() => _profile = null;

@@ -203,10 +203,11 @@ generation gate no longer exist.
 
 **Sending email.** Set `IMAGE_EDIT_SMTP_HOST` and `IMAGE_EDIT_SMTP_FROM` (plus username and
 password if the server needs them) to send plain-text email over SMTP. `IMAGE_EDIT_SMTP_SECURITY` is
-`starttls` (port 587, the default), `ssl` (port 465) or `none`. **Warning:** `none` together with a
-username sends the SMTP password in clear text; use it only for a local test server. The server refuses to start with a
-host but no `FROM` address or no `IMAGE_EDIT_SUPPORT_EMAIL` (the contact named in the "email
-changed" notice; it may stay empty in log mode, where the notice says "contact support"). A delivery failure is logged (without the code) and never changes the
+`starttls` (port 587, the default), `ssl` (port 465) or `none`. **Warning:** `none` together with
+a username sends the SMTP password in clear text; use it only for a local test server. The server
+refuses to start with a host but no `FROM` address or no `IMAGE_EDIT_SUPPORT_EMAIL` (the contact
+named in the "email changed" notice; it may stay empty in log mode, where the notice says "contact
+support"). A delivery failure is logged (without the code) and never changes the
 response of the request that asked for the email; the user taps Resend.
 
 **Log mode.** With no `IMAGE_EDIT_SMTP_HOST` the server delivers nothing: it logs a startup warning

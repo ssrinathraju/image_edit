@@ -13,7 +13,7 @@ class AccountNotifier extends AsyncNotifier<UserProfile?> {
   Future<UserProfile?> build() async {
     final session = ref.watch(sessionProvider).valueOrNull;
     if (session == null) return null;
-    final restored = ref.read(restoredProfileHolderProvider).take(session.userId);
+    final restored = ref.read(restoredProfileHolderProvider).take();
     return restored ?? ref.read(apiClientProvider).fetchMe();
   }
 
