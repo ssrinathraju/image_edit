@@ -12,8 +12,7 @@ import 'reauth.dart';
 
 final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-const String emailTakenMessage =
-    'That email is already used by another account';
+const String emailTakenMessage = 'That email is already used by another account';
 
 /// Asks for the new address and confirms the user is them, then sends the code
 /// and opens the code step. A failure keeps what was typed.
@@ -101,9 +100,7 @@ class _ChangeEmailScreenState extends ConsumerState<ChangeEmailScreen> {
                   Text(
                     _failure!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ],
                 const SizedBox(height: 20),

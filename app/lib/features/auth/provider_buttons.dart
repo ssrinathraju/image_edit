@@ -122,10 +122,7 @@ class _ProviderButtonsState extends ConsumerState<ProviderButtons> {
         const Row(
           children: [
             Expanded(child: Divider()),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('or'),
-            ),
+            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('or')),
             Expanded(child: Divider()),
           ],
         ),

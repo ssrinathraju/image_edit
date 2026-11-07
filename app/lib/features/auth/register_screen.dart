@@ -50,9 +50,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     String password,
     String referralCode,
   ) async {
-    await ref
-        .read(sessionProvider.notifier)
-        .startRegistration(
+    await ref.read(sessionProvider.notifier).startRegistration(
           email: email,
           password: password,
           dateOfBirth: _dateOfBirth!,
@@ -79,8 +77,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   enabled: !_providerBusy,
                   passwordError: (password) =>
                       password.length < AppConfig.minPasswordChars
-                      ? 'At least ${AppConfig.minPasswordChars} characters'
-                      : null,
+                          ? 'At least ${AppConfig.minPasswordChars} characters'
+                          : null,
                   withReferralCode: true,
                   extraField: DateOfBirthField(
                     value: _dateOfBirth,
