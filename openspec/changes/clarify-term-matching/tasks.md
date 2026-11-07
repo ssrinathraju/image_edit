@@ -19,4 +19,4 @@ Work on branch `feat/clarify-term-matching`. Do not push to `main`. No productio
 ## 3. Integration and hand-off
 
 - [x] 3.1 Run `uv run pytest -q` in `server/`. Verify all tests pass, that `openspec validate clarify-term-matching --strict` passes, and that the md5 of `app.db` is unchanged.
-- [ ] 3.2 Push `feat/clarify-term-matching`. Verify with `git ls-remote` that the remote branch matches the local HEAD.
+- [x] 3.2 Push `feat/clarify-term-matching`. Verify with `git ls-remote` that the remote branch matches the local HEAD.
