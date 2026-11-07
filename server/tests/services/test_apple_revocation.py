@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from image_edit_server.configs.settings import Settings
+from tests.helpers import encoded_test_key
 from image_edit_server.services.apple_revocation import (
     APPLE_REVOKE_URL,
     APPLE_TOKEN_URL,
@@ -36,6 +37,7 @@ def settings(tmp_path, ec_key) -> Settings:
         APPLE_TEAM_ID="TEAM123",
         APPLE_KEY_ID="KEY456",
         APPLE_PRIVATE_KEY_PATH=str(key_file),
+        TOKEN_ENCRYPTION_KEY=encoded_test_key(),
     )
 
 

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "cryptography>=50.0.2",
     "fastapi>=0.128.8",
     "pillow>=11.3.0",
     "pydantic-settings>=2.11.0",

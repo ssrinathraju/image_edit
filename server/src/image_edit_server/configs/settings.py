@@ -8,11 +8,14 @@ from cryptography.hazmat.primitives import serialization
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from image_edit_server.core.token_cipher import TokenCipher
+
 MIN_RESULT_URL_SECRET_CHARS = 32
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="IMAGE_EDIT_")
+    # Input is hidden so a validation error never echoes TOKEN_ENCRYPTION_KEY.
+    model_config = SettingsConfigDict(env_prefix="IMAGE_EDIT_", hide_input_in_errors=True)
 
     STORAGE_ROOT: str = "./storage"
     MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
@@ -58,6 +61,7 @@ class Settings(BaseSettings):
     APPLE_TEAM_ID: str = ""
     APPLE_KEY_ID: str = ""
     APPLE_PRIVATE_KEY_PATH: str = ""
+    TOKEN_ENCRYPTION_KEY: str = ""  # base64 of 32 bytes; required with the Apple key settings
 
     DISPOSABLE_DOMAINS_FILE: str = "./seed/abuse/disposable_domains.txt"
     TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0, le=5)
@@ -134,6 +138,20 @@ class Settings(BaseSettings):
         if not self.APPLE_BUNDLE_ID:
             raise ValueError("APPLE_BUNDLE_ID must be set when the Apple key settings are set")
         self._check_apple_key_file()
+        return self
+
+    @model_validator(mode="after")
+    def _check_token_encryption_key(self) -> "Settings":
+        if self.TOKEN_ENCRYPTION_KEY:
+            try:
+                TokenCipher.from_encoded_key(self.TOKEN_ENCRYPTION_KEY)
+            except ValueError as error:
+                raise ValueError(f"TOKEN_ENCRYPTION_KEY {error}") from None
+        elif self.is_apple_revocation_configured():
+            raise ValueError(
+                "TOKEN_ENCRYPTION_KEY must be set when the Apple key settings are set; "
+                "generate one as described in server/README.md"
+            )
         return self
 
     def _check_apple_key_file(self) -> None:

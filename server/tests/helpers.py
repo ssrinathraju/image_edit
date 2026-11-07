@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import time
@@ -12,10 +13,21 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from PIL import Image
 
 from image_edit_server.core.disposable_domains import DisposableDomains
+from image_edit_server.core.token_cipher import TokenCipher
 from image_edit_server.core.identity_verifier import (
     InvalidProviderToken,
     ProviderIdentity,
 )
+
+def make_token_cipher(fill: int = 7) -> TokenCipher:
+    """A cipher over a throwaway test key; different `fill` values give different keys."""
+    return TokenCipher(bytes([fill]) * 32)
+
+
+def encoded_test_key(fill: int = 7, urlsafe: bool = False) -> str:
+    raw = bytes([fill]) * 32
+    return (base64.urlsafe_b64encode(raw) if urlsafe else base64.b64encode(raw)).decode()
+
 
 TEST_DISPOSABLE_DOMAINS = DisposableDomains(frozenset({"mailinator.com"}))
 
