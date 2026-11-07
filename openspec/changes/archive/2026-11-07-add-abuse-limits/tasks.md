@@ -30,7 +30,7 @@ Work on branch `feat/add-abuse-limits`. Do not push to `main`. This builds on `u
   - refused requests aren't counted;
   - other addresses are independent;
   - entries older than 24 hours are dropped;
-  - concurrent `record` calls from threads keep an exact count.
+  - concurrent `reserve` calls from threads keep an exact count.
 - [x] 2.3 Apply the limiter to accepted registrations and to provider sign-ins that create an account (Decision 6), answering 429 `too_many_signups` with `Retry-After`. Verify in `tests/api/test_signup_limits.py`:
   - every scenario in the user-auth delta;
   - a refused request creates nothing and sends nothing;

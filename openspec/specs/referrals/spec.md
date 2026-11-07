@@ -87,7 +87,7 @@ When an account is created from a registration that carried a valid referral cod
 
 ### Requirement: Redeem a referral code after a provider sign-up
 
-The system SHALL expose `POST /me/referral`, for authenticated requests, taking a `code`. It SHALL accept it only from an account that was created through a sign-in provider less than 24 hours earlier and is not yet linked to a referrer; any other account SHALL get HTTP 409 with error `referral_not_allowed`. Code matching SHALL ignore letter case and surrounding spaces. A code that matches no account, or the account's own code, SHALL get HTTP 400 with error `invalid_referral_code`. On success the system SHALL link the accounts, apply the same rewards and referrer cap as "Reward both accounts when the account is created" immediately, and respond with HTTP 200.
+The system SHALL expose `POST /me/referral`, for authenticated requests, taking a `code`. It SHALL accept it only from an account that was created through a sign-in provider less than 24 hours earlier and is not yet linked to a referrer; any other account SHALL get HTTP 409 with error `referral_not_allowed`. Code matching SHALL ignore letter case and surrounding spaces. A code that matches no account, or the account's own code, SHALL get HTTP 400 with error `invalid_referral_code`. A code whose owner was itself referred by the redeeming account SHALL get HTTP 409 with error `referral_not_allowed`, and nothing SHALL change. On success the system SHALL link the accounts, apply the same rewards and referrer cap as "Reward both accounts when the account is created" immediately, and respond with HTTP 200.
 
 #### Scenario: New provider account redeems a code
 
@@ -120,3 +120,9 @@ The system SHALL expose `POST /me/referral`, for authenticated requests, taking 
 
 - **WHEN** the referring account has already been rewarded for 10 referrals
 - **THEN** the redeeming account receives 5 bonus credits and the referring account's credits are unchanged
+
+#### Scenario: Mutual redemption is refused
+
+- **WHEN** new provider account A redeems the code of new provider account B, and B then posts A's code
+- **THEN** B's request gets HTTP 409 with error `referral_not_allowed`
+- **AND** neither account's credits change from B's request
