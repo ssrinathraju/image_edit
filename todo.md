@@ -163,3 +163,10 @@ The first launch is India only.
 
 ## From add-abuse-limits
 - [ ] **IPv6 sign-ups are counted per full address.** A host with an IPv6 /64 (a VPS, many mobile carriers) can rotate addresses and avoid the per-address limit. The spec counts per "client network address" and says nothing about grouping, so behaviour was left as is. Decide in a later change whether to group IPv6 by /64 in `SignupLimiter`.
+- [ ] **Manual run of add-abuse-limits task 6.2 (part of the combined manual pass).** Use a local server in log mode on a temporary storage root. Do each step on both the iOS simulator and the Android emulator:
+  - register with a mailinator address (shows "Use a permanent email address.");
+  - a sixth registration in an hour shows the network message;
+  - change email to a disposable address is refused;
+  - at the limit, a Google sign-up shows the message on the sign-in screen with no date-of-birth step;
+  - at the limit, signing in to an existing account succeeds;
+  - mutual referral redemption is refused, if the consoles are available.
