@@ -375,7 +375,7 @@ async def test_log_lines_carry_action_id_and_admin_only(service, caplog):
 async def test_a_very_long_popularity_is_refused_without_converting_it(service):
     body = await _refused(service.create(ADMIN, _fields(popularity="9" * 5000), image_bytes()))
 
-    assert (body["status"], body["field"]) == (400, "popularity")
+    assert (body["status"], body["error"], body["field"]) == (400, "invalid_template_field", "popularity")
 
 
 async def test_a_failed_catalog_swap_still_returns_the_saved_template(
