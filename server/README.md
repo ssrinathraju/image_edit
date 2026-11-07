@@ -290,7 +290,27 @@ key.
 **Apple revocation warning.** App Store rules require revoking Apple's authorization when an account
 is deleted. Without the three key settings the server logs a startup warning, sign-in still works,
 and deletion cannot revoke anything. Revocation runs after the response and a failure is only
-logged. The Apple refresh token is stored in plain text in `app.db` (encrypting it is in `todo.md`).
+logged.
+
+**Encrypting the Apple refresh token.** The token is stored in `app.db` only as AES-256-GCM
+ciphertext (`v1:` prefix), bound to the account id, using `IMAGE_EDIT_TOKEN_ENCRYPTION_KEY`: base64
+(standard or URL-safe) of exactly 32 bytes. Generate one with:
+
+```bash
+python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"
+```
+
+- The key is required when `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY_PATH` are set; the
+  server refuses to start without it, or with a key that is not 32 bytes of base64. With Apple off
+  it is not needed. The key is never logged.
+- On AWS keep the key in Secrets Manager or SSM Parameter Store (SecureString) and pass it to the
+  process as an environment variable; never put it in the repository or an image.
+- At startup every stored Apple token that is not encrypted (from before this feature) is deleted;
+  the identity stays linked and the count is logged. The next Apple sign-in that carries an
+  authorization code stores a fresh encrypted token.
+- Losing or changing the key makes stored tokens unreadable. Account deletion and Apple unlink still
+  complete, but send no revocation and log `apple_token_unreadable user=<id>`; the next Apple sign-in
+  with an authorization code stores a new token under the current key.
 
 Provider tokens, authorization codes and refresh tokens are never logged or returned, and a `422`
 validation error describes which field failed without echoing the values that were sent.

@@ -74,7 +74,6 @@ The first launch is India only.
 
 ## From add-social-sign-in
 
-- [ ] **Encrypt the stored Apple refresh token** — `identities.apple_refresh_token` is plain text in `app.db`. Someone holding the database can use it only to get Apple tokens that identify the user to this app, but encrypting it needs a key-management design.
 - [ ] **Sign in with Apple entitlement blocks signed device builds until the Apple Developer membership exists** — `app/ios/Runner.xcodeproj/project.pbxproj` sets `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements` for Debug, Release and Profile, and a free Personal Team cannot sign `com.apple.developer.applesignin`. The simulator and `--no-codesign` builds are unaffected. Documented in `server/README.md` (device note after the console checklist). Confirm on a device during the manual pass (14.3, never recorded, see the item below), and move the entitlement to a Release-only configuration if development devices must keep working before the membership.
 - [ ] **Remaining manual checks for add-social-sign-in** — 14.2's registration flows passed on the iOS simulator on 2026-10-20. Still open: 14.2's pre-upgrade `app.db` step (an unverified account still signs in and can generate), and 14.3 (real Google/Apple sign-in; needs the consoles, App ID and key, and also covers the device-signing check in the entitlement item above).
 

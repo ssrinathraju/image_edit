@@ -4,12 +4,12 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
 
 ## 1. Cipher and setting
 
-- [ ] 1.1 Add `cryptography` as a direct dependency in `pyproject.toml`. Lock it with `uv lock`, keeping the locked 50.0.2. Add `core/token_cipher.py` (Decision 1). Verify in `tests/core/test_token_cipher.py`:
+- [x] 1.1 Add `cryptography` as a direct dependency in `pyproject.toml`. Lock it with `uv lock`, keeping the locked 50.0.2. Add `core/token_cipher.py` (Decision 1). Verify in `tests/core/test_token_cipher.py`:
   - a value round-trips;
   - the output starts with `v1:` and doesn't contain the token;
   - two encryptions of the same token differ;
   - each of these returns `None`: the wrong account id, the wrong key, one changed byte, a missing prefix, bad base64, a too-short value.
-- [ ] 1.2 Add `TOKEN_ENCRYPTION_KEY` with the validator from Decision 3. Document it in `server/.env.example`. Verify in `tests/configs/test_settings.py`:
+- [x] 1.2 Add `TOKEN_ENCRYPTION_KEY` with the validator from Decision 3. Document it in `server/.env.example`. Verify in `tests/configs/test_settings.py`:
   - Apple configured without the key fails, naming `TOKEN_ENCRYPTION_KEY`;
   - a key decoding to 31 or 33 bytes fails;
   - a non-base64 key fails;
@@ -19,14 +19,14 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
 
 ## 2. Store
 
-- [ ] 2.1 Pass the cipher into `SqliteUserStore` from `create_app`. Encrypt in `set_apple_refresh_token`. Decrypt in `get_apple_refresh_token` and `unlink_identity`, logging `apple_token_unreadable user=<id>` when that fails (Decision 2). Verify in the repo tests:
+- [x] 2.1 Pass the cipher into `SqliteUserStore` from `create_app`. Encrypt in `set_apple_refresh_token`. Decrypt in `get_apple_refresh_token` and `unlink_identity`, logging `apple_token_unreadable user=<id>` when that fails (Decision 2). Verify in the repo tests:
   - the raw column value starts with `v1:` and doesn't contain the token;
   - get returns the original token;
   - a value copied onto another account's row returns `None`, with the warning logged;
   - reading under a different key returns `None`;
   - `unlink_identity` returns the decrypted token, or `None` for a damaged value;
   - without a cipher, `set_apple_refresh_token` refuses.
-- [ ] 2.2 Add the startup discard (Decision 4). Verify:
+- [x] 2.2 Add the startup discard (Decision 4). Verify:
   - a store opened over a database holding plain-text tokens clears them and keeps those identities linked;
   - `v1:` values are kept;
   - the count is logged, and no value is logged (`caplog`);
@@ -34,7 +34,7 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
 
 ## 3. Flows
 
-- [ ] 3.1 Verify the end-to-end behaviour with API tests using the fake Apple client:
+- [x] 3.1 Verify the end-to-end behaviour with API tests using the fake Apple client:
   - an Apple sign-in stores an encrypted token, and account deletion sends revocation with the original token;
   - after the server restarts with a different key, deletion completes with 204, sends no revocation and logs the warning;
   - unlinking Apple with a damaged value completes and sends no revocation;
@@ -44,7 +44,7 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
 
 ## 4. Documentation
 
-- [ ] 4.1 In `server/README.md`, document:
+- [x] 4.1 In `server/README.md`, document:
   - `TOKEN_ENCRYPTION_KEY`, with how to generate it (`python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"`);
   - that it is required when Apple is configured;
   - storing it in AWS Secrets Manager or SSM Parameter Store and passing it as an environment variable;
@@ -54,7 +54,7 @@ Work on branch `feat/encrypt-apple-tokens`. Do not push to `main`. The work is i
 
 ## 5. Integration and hand-off
 
-- [ ] 5.1 Run `uv run pytest -q` in `server/`. Verify that:
+- [x] 5.1 Run `uv run pytest -q` in `server/`. Verify that:
   - all tests pass, with the counts reported;
   - `openspec validate encrypt-apple-tokens --strict` passes;
   - the md5 of `app.db` is unchanged.
