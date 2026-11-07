@@ -142,3 +142,13 @@ The first launch is India only.
   - Simulator/emulator checks: new, retired and restored templates show correctly on refresh; Make another on a retired template; a generation from a template retired while the grid was open.
   - Check the log lines carry no template text.
 - [ ] `tests/api/test_output_safety.py` uses a `time.time()` deadline and flaked under clock jumps; switch it to `time.monotonic()`.
+
+## From upgrade-server-python
+
+- [ ] **Manual check 4.2 never run** for upgrade-server-python. On a temporary storage root, never the real one:
+  - Start the server with the README command on Python 3.11.
+  - Register and confirm an account in log mode.
+  - Run a stub generation.
+  - Run `set_role.py` to make an admin, then create a template with curl.
+  - Create a template with a 5000-digit `popularity`: expect 400, not 500.
+  - Make two quick template edits and check the log shows no event-loop error.
