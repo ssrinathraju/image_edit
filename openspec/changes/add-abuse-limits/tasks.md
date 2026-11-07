@@ -77,4 +77,4 @@ Work on branch `feat/add-abuse-limits`. Do not push to `main`. This builds on `u
   - with two provider test accounts, mutual redemption is refused, if the consoles are available.
 
   This box stays unticked until someone runs it. It is part of the user's combined manual pass.
-- [ ] 6.3 Push `feat/add-abuse-limits`. Verify with `git ls-remote` that it matches the local HEAD.
+- [x] 6.3 Push `feat/add-abuse-limits`. Verify with `git ls-remote` that it matches the local HEAD.
