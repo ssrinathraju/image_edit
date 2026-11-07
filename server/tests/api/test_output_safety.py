@@ -5,11 +5,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core import url_signing
 from image_edit_server.main import create_app
 from tests.api.test_generations_quota import PNG
 from tests.helpers import FakeClassifier, RecordingSender, register_headers
 
 DEADLINE_SECONDS = 10
+SECRET = "output-safety-test-secret-0123456789"
+
+
+def _signed_link(job_id):
+    """A validly signed link, so a 404 can only come from the missing image."""
+    exp = int(time.time()) + 600
+    return f"/images/{job_id}.png?exp={exp}&sig={url_signing.sign(job_id, exp, SECRET.encode())}"
 
 
 def _app(tmp_path, templates_dir, monkeypatch, output_classifier):
@@ -17,7 +25,11 @@ def _app(tmp_path, templates_dir, monkeypatch, output_classifier):
         "image_edit_server.main._make_classifiers",
         lambda cfg: (FakeClassifier(), output_classifier),
     )
-    settings = Settings(TEMPLATES_DIR=str(templates_dir), STORAGE_ROOT=str(tmp_path / "s"))
+    settings = Settings(
+        TEMPLATES_DIR=str(templates_dir),
+        STORAGE_ROOT=str(tmp_path / "s"),
+        RESULT_URL_SECRET=SECRET,
+    )
     return create_app(settings, sender=RecordingSender())
 
 
@@ -58,9 +70,9 @@ def test_a_flagged_image_is_never_fetchable_even_while_it_is_being_checked(
             client,
             headers,
             job_id,
-            during=lambda _body: fetched.append(client.get(f"/images/{job_id}.png").status_code),
+            during=lambda _body: fetched.append(client.get(_signed_link(job_id)).status_code),
         )
-        final_fetch = client.get(f"/images/{job_id}.png")
+        final_fetch = client.get(_signed_link(job_id))
         usage = client.get("/me", headers=headers).json()["usage"]
 
     assert body["status"] == "failed" and body["error"] == "content_blocked"
@@ -77,7 +89,7 @@ def test_a_safe_image_is_served_once_the_job_succeeds(tmp_path, templates_dir, m
         job_id = _submit(client, headers)
 
         body = _wait_for_terminal(client, headers, job_id)
-        image = client.get(f"/images/{job_id}.png")
+        image = client.get(body["result_url"])
 
     assert body["status"] == "succeeded"
     assert image.status_code == 200

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException, UploadFile
 
 from image_edit_server.configs.settings import Settings
+from image_edit_server.core import url_signing
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.core.user_store import QuotaExceeded, UserNotFound
 from image_edit_server.repos import file_storage
@@ -70,21 +71,31 @@ async def submit(
     return job_id
 
 
-def get_status(job_id: str, user_id: str, store: JobStore) -> Optional[JobStatusResponse]:
-    """Return the status, or None when the job is unknown or owned by someone else."""
+def get_status(
+    job_id: str, user_id: str, store: JobStore, secret: bytes, now: datetime
+) -> Optional[JobStatusResponse]:
+    """Return the status with a freshly signed result link, or None when the job is unknown or owned by someone else."""
     job = store.get(job_id)
     if job is None or job.user_id != user_id:
         return None
     return JobStatusResponse(
         job_id=job.id,
         status=job.status,
-        result_url=job.result_url,
+        result_url=_signed_result_url(job, secret, now),
         error=job.error,
         expires_at=job.expires_at,
     )
 
 
 # ── private helpers ──────────────────────────────────────────────────────────
+
+def _signed_result_url(job: Job, secret: bytes, now: datetime) -> Optional[str]:
+    if job.status is not JobStatus.succeeded or job.result_url is None:
+        return None
+    expires_at = int((now + url_signing.RESULT_URL_TTL).timestamp())
+    signature = url_signing.sign(job.id, expires_at, secret)
+    return f"{job.result_url}?exp={expires_at}&sig={signature}"
+
 
 def _require_age_and_consent(user: User, settings: Settings) -> None:
     if not user.age_confirmed:

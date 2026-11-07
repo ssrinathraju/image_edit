@@ -8,6 +8,8 @@ from cryptography.hazmat.primitives import serialization
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+MIN_RESULT_URL_SECRET_CHARS = 32
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="IMAGE_EDIT_")
@@ -57,6 +59,8 @@ class Settings(BaseSettings):
     APPLE_KEY_ID: str = ""
     APPLE_PRIVATE_KEY_PATH: str = ""
 
+    RESULT_URL_SECRET: str = ""  # empty means a random secret per process start
+
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 
     MODEL_BACKEND: str = "stub"
@@ -83,6 +87,15 @@ class Settings(BaseSettings):
             raise ValueError("SMTP_FROM must be set when SMTP_HOST is set")
         if self.SMTP_HOST and not self.SUPPORT_EMAIL:
             raise ValueError("SUPPORT_EMAIL must be set when SMTP_HOST is set")
+        return self
+
+    @model_validator(mode="after")
+    def _require_a_long_result_url_secret(self) -> "Settings":
+        if self.RESULT_URL_SECRET and len(self.RESULT_URL_SECRET) < MIN_RESULT_URL_SECRET_CHARS:
+            raise ValueError(
+                f"RESULT_URL_SECRET must be at least {MIN_RESULT_URL_SECRET_CHARS} characters "
+                "when set; leave it empty for a random secret"
+            )
         return self
 
     @model_validator(mode="after")

@@ -4,7 +4,14 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 
-from image_edit_server.api.deps import AuthDep, QuotaDep, SafetyDep, SettingsDep
+from image_edit_server.api.deps import (
+    AuthDep,
+    ClockDep,
+    QuotaDep,
+    ResultUrlSecretDep,
+    SafetyDep,
+    SettingsDep,
+)
 from image_edit_server.api.templates import CatalogDep
 from image_edit_server.core.job_store import JobStore
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
@@ -44,9 +51,9 @@ async def submit_generation(
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def get_generation_status(
-    job_id: str, user: AuthDep, store: StoreDep
+    job_id: str, user: AuthDep, store: StoreDep, secret: ResultUrlSecretDep, clock: ClockDep
 ) -> JobStatusResponse:
-    result = generation_service.get_status(job_id, user.id, store)
+    result = generation_service.get_status(job_id, user.id, store, secret, clock())
     if result is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "detail": f"job '{job_id}' not found"})
     return result
