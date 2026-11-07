@@ -13,11 +13,12 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from PIL import Image
 
 from image_edit_server.core.disposable_domains import DisposableDomains
-from image_edit_server.core.token_cipher import TokenCipher
 from image_edit_server.core.identity_verifier import (
     InvalidProviderToken,
     ProviderIdentity,
 )
+from image_edit_server.core.token_cipher import TokenCipher
+
 
 def make_token_cipher(fill: int = 7) -> TokenCipher:
     """A cipher over a throwaway test key; different `fill` values give different keys."""

@@ -41,7 +41,7 @@ With no cipher (Apple not configured), `set_apple_refresh_token` refuses with a 
 **Rejected:** requiring the key always. Every local run and test would need a key, for no protection when Apple is off. The user chose the conditional rule.
 
 ### Decision 4: Delete plain-text tokens at startup (the user's choice)
-When the store opens, after migration, it runs a single `UPDATE identities SET apple_refresh_token = NULL WHERE apple_refresh_token IS NOT NULL AND apple_refresh_token NOT LIKE 'v1:%'` in a transaction. It logs `apple_tokens_discarded count=<n>` when n > 0. This runs whether or not a key is set, so plain text never survives an upgrade.
+When the store opens, after migration, it runs a single `UPDATE identities SET apple_refresh_token = NULL WHERE apple_refresh_token IS NOT NULL AND substr(apple_refresh_token, 1, 3) <> 'v1:'` in a transaction. It logs `apple_tokens_discarded count=<n>` when n > 0. This runs whether or not a key is set, so plain text never survives an upgrade.
 
 **Rejected:** encrypting the existing tokens. The user chose to delete them. Before launch only development accounts hold any.
 

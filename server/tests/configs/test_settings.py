@@ -328,3 +328,36 @@ def test_no_apple_and_no_key_is_accepted():
 
 def test_apple_bundle_id_alone_needs_no_encryption_key():
     assert Settings(APPLE_BUNDLE_ID="com.example.app").is_apple_configured()
+
+
+@pytest.mark.parametrize(
+    "decorate",
+    [
+        lambda k: k + "!!",
+        lambda k: "**" + k,
+        lambda k: k[:10] + " \n " + k[10:],
+    ],
+    ids=["trailing-junk", "leading-junk", "inner-whitespace"],
+)
+def test_a_key_with_characters_outside_the_alphabet_is_rejected(decorate):
+    key = decorate(encoded_test_key())
+
+    with pytest.raises(ValidationError, match="TOKEN_ENCRYPTION_KEY") as caught:
+        Settings(TOKEN_ENCRYPTION_KEY=key)
+
+    assert key not in str(caught.value)
+
+
+def test_a_key_with_surrounding_whitespace_is_accepted():
+    key = encoded_test_key() + "\n"
+
+    assert Settings(TOKEN_ENCRYPTION_KEY=key).TOKEN_ENCRYPTION_KEY == key
+
+
+def test_secrets_are_not_in_the_settings_repr():
+    key = encoded_test_key()
+    secret = "result-url-secret-" + "x" * 32
+
+    shown = repr(Settings(TOKEN_ENCRYPTION_KEY=key, RESULT_URL_SECRET=secret))
+
+    assert key not in shown and secret not in shown

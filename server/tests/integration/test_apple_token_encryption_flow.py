@@ -112,11 +112,15 @@ def test_a_plain_text_token_from_before_the_change_is_gone_after_startup(
     _set_raw_token(user_store, user_id, "legacy-plain-text-token")
 
     user_store._discard_unencrypted_apple_tokens()
-    resp = _delete_apple_account(anon_client, apple_verifier, clock, headers)
 
     assert _raw_token_gone(user_store, user_id)
+    assert user_store.list_providers(user_id) == ["apple"]
+    again_id, headers = _sign_in_with_apple(anon_client, apple_verifier, code="after-upgrade")
+    assert again_id == user_id
+    assert _raw_token(user_store, user_id).startswith("v1:")
+    resp = _delete_apple_account(anon_client, apple_verifier, clock, headers)
     assert resp.status_code == 204
-    assert apple_client.revoked == []
+    assert apple_client.revoked == [SECRET]
 
 
 def _raw_token_gone(user_store, user_id) -> bool:

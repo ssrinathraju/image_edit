@@ -61,12 +61,12 @@ class Settings(BaseSettings):
     APPLE_TEAM_ID: str = ""
     APPLE_KEY_ID: str = ""
     APPLE_PRIVATE_KEY_PATH: str = ""
-    TOKEN_ENCRYPTION_KEY: str = ""  # base64 of 32 bytes; required with the Apple key settings
+    TOKEN_ENCRYPTION_KEY: str = Field(default="", repr=False)  # base64 of 32 bytes; required with the Apple key settings
 
     DISPOSABLE_DOMAINS_FILE: str = "./seed/abuse/disposable_domains.txt"
     TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0, le=5)
 
-    RESULT_URL_SECRET: str = ""  # empty means a random secret per process start
+    RESULT_URL_SECRET: str = Field(default="", repr=False)  # empty means a random secret per process start
 
     CORS_ORIGINS: list[str] = ["http://localhost:8081"]
 

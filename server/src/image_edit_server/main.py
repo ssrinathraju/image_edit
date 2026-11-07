@@ -39,9 +39,9 @@ from image_edit_server.core.pipeline import GenerationPipeline
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.core.safety import ImageClassifier, TermMatcher, load_terms
+from image_edit_server.core.token_cipher import TokenCipher
 from image_edit_server.repos import file_storage
 from image_edit_server.repos.in_memory_job_store import InMemoryJobStore
-from image_edit_server.core.token_cipher import TokenCipher
 from image_edit_server.repos.user_store import SqliteUserStore, auth_db_path
 from image_edit_server.services.account_cleanup import purge_user_jobs
 from image_edit_server.services.apple_revocation import AppleRevocationClient
@@ -148,11 +148,16 @@ def _result_url_secret(cfg: Settings) -> bytes:
     return secrets.token_bytes(RESULT_URL_SECRET_BYTES)
 
 
+def _token_cipher(cfg: Settings) -> TokenCipher | None:
+    if not cfg.TOKEN_ENCRYPTION_KEY:
+        return None
+    return TokenCipher.from_encoded_key(cfg.TOKEN_ENCRYPTION_KEY)
+
+
 def _open_user_store(cfg: Settings) -> SqliteUserStore:
     db_path = Path(auth_db_path(cfg))
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    cipher = TokenCipher.from_encoded_key(cfg.TOKEN_ENCRYPTION_KEY) if cfg.TOKEN_ENCRYPTION_KEY else None
-    return SqliteUserStore(str(db_path), token_cipher=cipher)
+    return SqliteUserStore(str(db_path), token_cipher=_token_cipher(cfg))
 
 
 def create_app(

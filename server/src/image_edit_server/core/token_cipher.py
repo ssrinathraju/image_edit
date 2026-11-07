@@ -25,8 +25,9 @@ class TokenCipher:
     @classmethod
     def from_encoded_key(cls, encoded: str) -> "TokenCipher":
         """Build from a standard or URL-safe base64 key; the error never echoes the key."""
+        text = encoded.strip().replace("-", "+").replace("_", "/")
         try:
-            key = base64.b64decode(encoded + "=" * (-len(encoded) % 4), altchars=b"-_")
+            key = base64.b64decode(text + "=" * (-len(text) % 4), validate=True)
         except (binascii.Error, ValueError):
             raise ValueError("is not valid base64") from None
         if len(key) != KEY_BYTES:
