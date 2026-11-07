@@ -22,13 +22,13 @@ Work on branch `feat/polish-photo-picking`. Do not push to `main`. All work is i
 
 ## 3. Restore after Android closes the app
 
-- [ ] 3.1 Add `PendingPickStore` (Decision 1). Write the note before an Android pick, delete it after any return and in `_clearLocalSession`, and add the file to the backup exclusion. Verify in `test/features/common/pending_pick_store_test.dart`:
+- [x] 3.1 Add `PendingPickStore` (Decision 1). Write the note before an Android pick, delete it after any return and in `_clearLocalSession`, and add the file to the backup exclusion. Verify in `test/features/common/pending_pick_store_test.dart`:
   - write and read round trips, and the write is atomic;
   - a corrupt file reads as absent;
   - an old note is reported expired at 61 minutes;
   - the picker test shows the note is written on Android and not on iOS, and deleted after pick, cancel and failure;
   - the session test shows sign-out deletes it.
-- [ ] 3.2 Add `restoreLostPick()` on home's first show. Let the template screen accept `initialPhoto` through `extra`. Show the SnackBar on the restored form (Decision 2). Verify with `test/features/common/lost_pick_restore_test.dart` (fake picker returning `LostDataResponse`, fake clock, fake platform). It covers every restore scenario in the delta:
+- [x] 3.2 Add `restoreLostPick()` on home's first show. Let the template screen accept `initialPhoto` through `extra`. Show the SnackBar on the restored form (Decision 2). Verify with `test/features/common/lost_pick_restore_test.dart` (fake picker returning `LostDataResponse`, fake clock, fake platform). It covers every restore scenario in the delta:
   - template restored;
   - custom form restored with its prompt;
   - another account;

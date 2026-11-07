@@ -2,8 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/template_detail/template_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../support/fake_api_client.dart';
+import '../../support/fake_image_picker.dart';
 import '../../support/screen_harness.dart';
 
 void main() {
@@ -19,6 +21,23 @@ void main() {
     expect(find.text('Golden Beach'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(isGenerateEnabled(tester), isFalse);
+  });
+
+  testWidgets('an initial photo is selected without picking', (tester) async {
+    final client = FakeApiClient();
+    await pumpScreen(
+      tester,
+      client: client,
+      screen: TemplateScreen(
+        templateId: 'beach',
+        template: template,
+        initialPhoto: XFile.fromData(tinyPng, name: 'kept.png'),
+      ),
+    );
+
+    expect(find.text('Change photo'), findsOneWidget);
+    expect(isGenerateEnabled(tester), isTrue);
+    expect(client.submitted, isEmpty);
   });
 
   testWidgets('submits the template id and opens the status screen', (tester) async {

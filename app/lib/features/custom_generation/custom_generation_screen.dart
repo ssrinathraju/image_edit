@@ -104,7 +104,7 @@ class _CustomGenerationFormState extends ConsumerState<_CustomGenerationForm> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
-          const PhotoPickerField(),
+          PhotoPickerField(origin: PickOrigin.custom(() => _controller.text)),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: canSubmit

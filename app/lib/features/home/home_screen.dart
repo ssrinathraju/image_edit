@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../schemas/template.dart';
+import '../common/lost_pick_restore.dart';
 import '../history/history_sync.dart';
 import '../plans/account_notifier.dart';
 import 'home_notifier.dart';
@@ -23,6 +27,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     startHistoryCatchUp(ref);
+    unawaited(
+      restoreLostPick(ref, isMounted: () => mounted, open: _openRestoredForm),
+    );
+  }
+
+  void _openRestoredForm(String location, XFile photo) {
+    final messenger = ScaffoldMessenger.of(context);
+    unawaited(context.push<void>(location, extra: photo));
+    messenger.showSnackBar(
+      const SnackBar(content: Text('We kept the photo you picked.')),
+    );
   }
 
   @override

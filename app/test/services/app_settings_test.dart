@@ -13,23 +13,29 @@ void main() {
         .setMockMethodCallHandler(_channel, null);
   });
 
-  test('open invokes "open" on the settings channel and reports success', () async {
-    final calls = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_channel, (call) async {
-      calls.add(call.method);
-      return null;
-    });
+  test(
+    'open invokes "open" on the settings channel and reports success',
+    () async {
+      final calls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+            calls.add(call.method);
+            return null;
+          });
 
-    expect(await const PlatformAppSettings().open(), isTrue);
-    expect(calls, ['open']);
-  });
+      expect(await const PlatformAppSettings().open(), isTrue);
+      expect(calls, ['open']);
+    },
+  );
 
   test('a channel error is logged by type and reported as failure', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, (call) async {
-      throw PlatformException(code: 'open_failed', message: 'secret detail');
-    });
+          throw PlatformException(
+            code: 'open_failed',
+            message: 'secret detail',
+          );
+        });
     final records = <LogRecord>[];
     final sub = Logger('AppSettings').onRecord.listen(records.add);
     addTearDown(sub.cancel);

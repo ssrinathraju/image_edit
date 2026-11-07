@@ -3,32 +3,52 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
+import 'package:image_edit/core/provider_sign_in.dart';
+import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/common/clock.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/services/app_settings.dart';
+import 'package:image_edit/services/generation_providers.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../support/fake_api_client.dart';
 import '../../support/fake_app_settings.dart';
 import '../../support/fake_image_picker.dart';
+import '../../support/fake_pending_pick_store.dart';
+import '../../support/fake_session_storage.dart';
+
+final _now = DateTime.utc(2026, 1, 1, 12);
 
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeImagePicker picker, {
   FakeAppSettings? settings,
+  PickOrigin origin = const PickOrigin.template('golden-hour-beach'),
+  TargetPlatform platform = TargetPlatform.iOS,
+  PendingPickStore? pendingPicks,
 }) async {
   final container = ProviderContainer(
     overrides: [
       imagePickerProvider.overrideWithValue(picker),
       appSettingsProvider.overrideWithValue(settings ?? FakeAppSettings()),
+      targetPlatformProvider.overrideWithValue(platform),
+      clockProvider.overrideWithValue(() => _now),
+      apiClientProvider.overrideWithValue(FakeApiClient()),
+      sessionStorageProvider.overrideWithValue(FakeSessionStorage(savedSession)),
+      if (pendingPicks != null)
+        pendingPickStoreProvider.overrideWithValue(pendingPicks),
     ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: Scaffold(body: Center(child: PhotoPickerField())),
+      child: MaterialApp(
+        home: Scaffold(body: Center(child: PhotoPickerField(origin: origin))),
       ),
     ),
   );
+  await container.read(sessionProvider.future);
   return container;
 }
 
@@ -209,6 +229,136 @@ void main() {
 
       expect(find.text('Could not open the photo library.'), findsOneWidget);
       expect(find.text('Open Settings'), findsNothing);
+    });
+  });
+
+  group('pending note', () {
+    late FakePendingPickStore store;
+
+    setUp(() => store = FakePendingPickStore());
+
+    Future<void> chooseLibrary(WidgetTester tester) async {
+      await tester.tap(find.byType(PhotoPickerField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Android writes the template note while the picker is open', (tester) async {
+      PendingPick? during;
+      final picker = FakeImagePicker(
+        result: XFile.fromData(tinyPng, name: 'me.png'),
+        duringPick: () async => during = store.note,
+      );
+      await _pump(
+        tester,
+        picker,
+        platform: TargetPlatform.android,
+        pendingPicks: store,
+      );
+
+      await chooseLibrary(tester);
+
+      expect(during!.userId, 'user-1');
+      expect(during!.kind, PendingPickKind.template);
+      expect(during!.templateId, 'golden-hour-beach');
+      expect(during!.startedAt, _now);
+      expect(store.note, isNull);
+    });
+
+    testWidgets('Android writes the custom prompt as typed so far', (tester) async {
+      PendingPick? during;
+      final picker = FakeImagePicker(
+        duringPick: () async => during = store.note,
+      );
+      await _pump(
+        tester,
+        picker,
+        origin: PickOrigin.custom(() => 'astronaut on a beach'),
+        platform: TargetPlatform.android,
+        pendingPicks: store,
+      );
+
+      await chooseLibrary(tester);
+
+      expect(during!.kind, PendingPickKind.custom);
+      expect(during!.prompt, 'astronaut on a beach');
+    });
+
+    testWidgets('iOS never writes a note', (tester) async {
+      var existedDuringPick = false;
+      final picker = FakeImagePicker(
+        duringPick: () async => existedDuringPick = store.note != null,
+      );
+      await _pump(tester, picker, pendingPicks: store);
+
+      await chooseLibrary(tester);
+
+      expect(existedDuringPick, isFalse);
+      expect(store.note, isNull);
+    });
+
+    testWidgets('the note is gone after a pick', (tester) async {
+      final picker = FakeImagePicker(
+        result: XFile.fromData(tinyPng, name: 'me.png'),
+      );
+      await _pump(tester, picker, platform: TargetPlatform.android, pendingPicks: store);
+
+      await chooseLibrary(tester);
+
+      expect(store.note, isNull);
+    });
+
+    testWidgets('the note is gone after the user cancels', (tester) async {
+      final picker = FakeImagePicker();
+      await _pump(tester, picker, platform: TargetPlatform.android, pendingPicks: store);
+
+      await chooseLibrary(tester);
+
+      expect(picker.sources, [ImageSource.gallery]);
+      expect(store.note, isNull);
+    });
+
+    testWidgets('the note is gone after a failure', (tester) async {
+      final picker = FakeImagePicker(error: Exception('boom'));
+      await _pump(tester, picker, platform: TargetPlatform.android, pendingPicks: store);
+
+      await chooseLibrary(tester);
+
+      expect(find.text('Could not open the photo library.'), findsOneWidget);
+      expect(store.note, isNull);
+    });
+
+    testWidgets('the note is gone after a denial', (tester) async {
+      final picker = FakeImagePicker(
+        error: PlatformException(code: 'photo_access_denied'),
+      );
+      await _pump(tester, picker, platform: TargetPlatform.android, pendingPicks: store);
+
+      await chooseLibrary(tester);
+
+      expect(find.textContaining('Photo access is off'), findsOneWidget);
+      expect(store.note, isNull);
+    });
+
+    testWidgets('a signed-out picker writes nothing and still picks', (tester) async {
+      var existedDuringPick = false;
+      final picker = FakeImagePicker(
+        result: XFile.fromData(tinyPng, name: 'me.png'),
+        duringPick: () async => existedDuringPick = store.note != null,
+      );
+      final container = await _pump(
+        tester,
+        picker,
+        platform: TargetPlatform.android,
+        pendingPicks: store,
+      );
+      await container.read(sessionProvider.notifier).signOut();
+
+      await chooseLibrary(tester);
+
+      expect(existedDuringPick, isFalse);
+      expect(container.read(selectedPhotoProvider), isNotNull);
     });
   });
 }

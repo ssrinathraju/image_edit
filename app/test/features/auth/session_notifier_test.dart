@@ -5,6 +5,7 @@ import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/registration_draft.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/generation_request.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/features/plans/account_notifier.dart';
 import 'package:image_edit/features/common/submit_controller.dart';
 import 'package:image_edit/features/history/creation_store.dart';
@@ -14,6 +15,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../support/fake_api_client.dart';
 import '../../support/fake_image_picker.dart';
+import '../../support/fake_pending_pick_store.dart';
 import '../../support/fake_session_storage.dart';
 import '../../support/in_memory_creation_store.dart';
 
@@ -29,12 +31,16 @@ ProviderContainer _container(
   FakeApiClient client,
   FakeSessionStorage storage, {
   InMemoryCreationStore? store,
+  PendingPickStore? pendingPicks,
 }) {
   final container = ProviderContainer(
     overrides: [
       apiClientProvider.overrideWithValue(client),
       sessionStorageProvider.overrideWithValue(storage),
       creationStoreProvider.overrideWithValue(store ?? InMemoryCreationStore()),
+      pendingPickStoreProvider.overrideWithValue(
+        pendingPicks ?? FakePendingPickStore(),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -457,5 +463,36 @@ void main() {
     expect(await store.list('user-1'), hasLength(1));
     expect(await store.pending('user-1'), hasLength(1));
     expect(container.read(sessionProvider).value, isNull);
+  });
+
+  group('the pending photo pick note', () {
+    final note = PendingPick(
+      userId: 'user-1',
+      kind: PendingPickKind.custom,
+      prompt: 'astronaut on a beach',
+      startedAt: DateTime.utc(2026, 1, 1, 12),
+    );
+
+    test('signOut deletes it', () async {
+      storage.saved = savedSession;
+      final pendingPicks = FakePendingPickStore(note: note);
+      final container = _container(client, storage, pendingPicks: pendingPicks);
+      await container.read(sessionProvider.future);
+
+      await container.read(sessionProvider.notifier).signOut();
+
+      expect(pendingPicks.note, isNull);
+    });
+
+    test('an expired session deletes it', () async {
+      storage.saved = savedSession;
+      final pendingPicks = FakePendingPickStore(note: note);
+      final container = _container(client, storage, pendingPicks: pendingPicks);
+      await container.read(sessionProvider.future);
+
+      await container.read(sessionProvider.notifier).expire();
+
+      expect(pendingPicks.note, isNull);
+    });
   });
 }

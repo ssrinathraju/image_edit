@@ -3,8 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/provider_sign_in.dart' show targetPlatformProvider;
 import '../../services/app_settings.dart';
+import '../auth/session_notifier.dart';
+import 'clock.dart';
 import 'open_settings.dart';
+import 'pending_pick_store.dart';
 
 const double _maxPhotoWidth = 2048;
 const int _photoQuality = 90;
@@ -34,8 +38,26 @@ class PhotoScope extends StatelessWidget {
   }
 }
 
+/// The form a pick is started from; remembered on Android so a photo picked
+/// while the system closes the app can go back to it.
+class PickOrigin {
+  const PickOrigin.template(String this.templateId)
+      : kind = PendingPickKind.template,
+        readPrompt = null;
+
+  const PickOrigin.custom(String Function() this.readPrompt)
+      : kind = PendingPickKind.custom,
+        templateId = null;
+
+  final PendingPickKind kind;
+  final String? templateId;
+  final String Function()? readPrompt;
+}
+
 class PhotoPickerField extends ConsumerWidget {
-  const PhotoPickerField({super.key});
+  const PhotoPickerField({required this.origin, super.key});
+
+  final PickOrigin origin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,6 +108,9 @@ class PhotoPickerField extends ConsumerWidget {
     WidgetRef ref,
     ImageSource source,
   ) async {
+    final isAndroid = ref.read(targetPlatformProvider) == TargetPlatform.android;
+    final pendingPicks = ref.read(pendingPickStoreProvider);
+    if (isAndroid) await _rememberPick(ref);
     try {
       final file = await ref
           .read(imagePickerProvider)
@@ -102,7 +127,23 @@ class PhotoPickerField extends ConsumerWidget {
     } catch (_) {
       if (!context.mounted) return;
       _showFailure(context, source);
+    } finally {
+      if (isAndroid) await pendingPicks.delete();
     }
+  }
+
+  Future<void> _rememberPick(WidgetRef ref) async {
+    final userId = ref.read(sessionProvider).valueOrNull?.userId;
+    if (userId == null) return;
+    await ref.read(pendingPickStoreProvider).write(
+          PendingPick(
+            userId: userId,
+            kind: origin.kind,
+            templateId: origin.templateId,
+            prompt: origin.readPrompt?.call(),
+            startedAt: ref.read(clockProvider)(),
+          ),
+        );
   }
 
   bool _isDenied(PlatformException error, ImageSource source) {

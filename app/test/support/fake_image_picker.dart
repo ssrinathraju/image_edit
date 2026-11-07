@@ -13,7 +13,14 @@ final Uint8List tinyPng = Uint8List.fromList([
 ]);
 
 class FakeImagePicker extends Fake implements ImagePicker {
-  FakeImagePicker({this.result, this.error, this.errorSource});
+  FakeImagePicker({
+    this.result,
+    this.error,
+    this.errorSource,
+    this.duringPick,
+    this.lost,
+    this.lostError,
+  });
 
   final XFile? result;
   final Object? error;
@@ -21,6 +28,14 @@ class FakeImagePicker extends Fake implements ImagePicker {
   /// When set, [error] is thrown only for this source.
   final ImageSource? errorSource;
   final sources = <ImageSource>[];
+
+  /// What [retrieveLostData] returns; empty when null.
+  final LostDataResponse? lost;
+  final Object? lostError;
+  int retrieveCalls = 0;
+
+  /// Runs while a pick is open, to observe what the app did before it.
+  final Future<void> Function()? duringPick;
 
   @override
   Future<XFile?> pickImage({
@@ -32,9 +47,17 @@ class FakeImagePicker extends Fake implements ImagePicker {
     bool requestFullMetadata = true,
   }) async {
     sources.add(source);
+    await duringPick?.call();
     if (error != null && (errorSource == null || errorSource == source)) {
       throw error!;
     }
     return result;
+  }
+
+  @override
+  Future<LostDataResponse> retrieveLostData() async {
+    retrieveCalls++;
+    if (lostError != null) throw lostError!;
+    return lost ?? LostDataResponse.empty();
   }
 }
