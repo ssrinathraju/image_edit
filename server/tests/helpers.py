@@ -11,10 +11,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from PIL import Image
 
+from image_edit_server.core.disposable_domains import DisposableDomains
 from image_edit_server.core.identity_verifier import (
     InvalidProviderToken,
     ProviderIdentity,
 )
+
+TEST_DISPOSABLE_DOMAINS = DisposableDomains(frozenset({"mailinator.com"}))
 
 TEST_TEMPLATES = [
     {"id": "sunset-beach", "title": "Sunset Beach", "tags": ["beach", "summer"],

@@ -24,6 +24,12 @@ class ReferralsMixin:
             raise InvalidReferralCode(code)
         return row[0]
 
+    def _is_referred_by(self, user_id: str, referrer_id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM users WHERE id = ? AND referred_by = ?", (user_id, referrer_id)
+        ).fetchone()
+        return row is not None
+
     def _reward_referrer(self, referrer_id: str, bonus: int, max_rewards: int) -> None:
         self._conn.execute(
             "UPDATE users SET bonus_credits = bonus_credits + ?,"
@@ -62,6 +68,8 @@ class ReferralsMixin:
             referrer = self._find_referrer(wanted)
             if referrer is None or wanted == own_code:
                 raise InvalidReferralCode(wanted)
+            if self._is_referred_by(referrer, user_id):
+                raise ReferralNotAllowed(user_id)
             self._conn.execute(
                 "UPDATE users SET referred_by = ?, referral_redeemed = 1,"
                 " bonus_credits = bonus_credits + ? WHERE id = ?",

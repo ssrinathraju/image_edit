@@ -5,10 +5,11 @@ from fastapi import HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.repos.user_store import SqliteUserStore
 from image_edit_server.schemas.user import Reauth
 from image_edit_server.services.auth_service import AuthService
-from tests.helpers import DEFAULT_PASSWORD, RecordingSender
+from tests.helpers import DEFAULT_PASSWORD, TEST_DISPOSABLE_DOMAINS, RecordingSender
 
 
 @pytest.fixture
@@ -28,6 +29,8 @@ def auth(users, clock, google_verifier, apple_verifier) -> AuthService:
         settings,
         lambda user_id: None,
         RecordingSender(),
+        TEST_DISPOSABLE_DOMAINS,
+        SignupLimiter(),
         clock,
         verifiers={"google": google_verifier, "apple": apple_verifier},
     )

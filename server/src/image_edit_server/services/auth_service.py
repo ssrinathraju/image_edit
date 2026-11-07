@@ -10,9 +10,11 @@ from fastapi import BackgroundTasks, HTTPException
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.age import InvalidDateOfBirth, UnderAge, check_date_of_birth
 from image_edit_server.core.email_codes import CodePurpose, ConsumeResult
+from image_edit_server.core.disposable_domains import DisposableDomains
 from image_edit_server.core.email_sender import EmailSender
 from image_edit_server.core.login_throttle import LoginThrottle
 from image_edit_server.core.passwords import hash_password, verify_password
+from image_edit_server.core.signup_limiter import SignupLimiter
 from image_edit_server.core.identity_verifier import (
     IdentityVerifier,
     InvalidProviderToken,
@@ -67,6 +69,21 @@ def too_many_codes(retry_after_seconds: int) -> HTTPException:
     )
 
 
+def too_many_signups(retry_after_seconds: int) -> HTTPException:
+    return HTTPException(
+        429,
+        ErrorBody(
+            error="too_many_signups",
+            detail=f"too many new accounts from this network; retry in {retry_after_seconds} seconds",
+        ).model_dump(),
+        headers={"Retry-After": str(retry_after_seconds)},
+    )
+
+
+def _disposable_email() -> HTTPException:
+    return api_error(400, "disposable_email", "Use a permanent email address.")
+
+
 def _invalid_reset_code() -> HTTPException:
     return api_error(400, "invalid_code", "code is incorrect or has expired")
 
@@ -91,6 +108,8 @@ class AuthService:
         settings: Settings,
         purge_user_jobs: Callable[[str], None],
         sender: EmailSender,
+        disposable_domains: DisposableDomains,
+        signup_limiter: SignupLimiter,
         clock: Callable[[], datetime] = _utc_now,
         verifiers: Optional[dict[str, IdentityVerifier]] = None,
         apple_client: Optional[AppleRevocationClient] = None,
@@ -100,6 +119,8 @@ class AuthService:
         self._settings = settings
         self._purge_user_jobs = purge_user_jobs
         self._sender = sender
+        self._disposable_domains = disposable_domains
+        self._signup_limiter = signup_limiter
         self._clock = clock
         self._verifiers = verifiers if verifiers is not None else {}
         self._apple_client = apple_client
@@ -111,11 +132,14 @@ class AuthService:
         date_of_birth: object,
         referral_code: Optional[str],
         background: BackgroundTasks,
+        client_address: str,
     ) -> None:
         """Hold an adult's registration as pending and email its code; no account exists until it is confirmed."""
         self._require_adult_date_of_birth(date_of_birth)
         normalized = normalize_email(email)
         self._validate_credentials_format(normalized, password)
+        self.refuse_disposable_email(normalized)
+        self._refuse_if_signup_limited(client_address)
         password_hash = hash_password(password)
         code, code_hash = email_code_service.new_code(normalized, CodePurpose.REGISTRATION)
         try:
@@ -135,6 +159,7 @@ class AuthService:
             )
         if not result.issued:
             raise too_many_codes(result.retry_after_seconds)
+        self._signup_limiter.record(client_address, self._clock())
         self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, background)
 
     def confirm_registration(self, email: str, code: str, password: str) -> tuple[str, User]:
@@ -238,13 +263,17 @@ class AuthService:
         nonce: Optional[str] = None,
         authorization_code: Optional[str] = None,
         date_of_birth: object = None,
+        client_address: str,
     ) -> tuple[str, User, bool]:
         """Sign in to the account for a provider token, linking or creating it; returns (session, user, created)."""
         adult_confirmed = self._adult_confirmed(date_of_birth)
         identity = self.verify_provider_token(provider, token, nonce, 401)
         try:
             user, created = self._users.sign_in_with_identity(
-                identity, self._clock(), adult_confirmed
+                identity,
+                self._clock(),
+                adult_confirmed,
+                lambda: self._refuse_if_signup_limited(client_address),
             )
         except AgeRequired:
             raise api_error(
@@ -271,6 +300,8 @@ class AuthService:
                 "provider_already_linked",
                 f"this account is already linked to another {provider} account",
             )
+        if created:
+            self._signup_limiter.record(client_address, self._clock())
         if provider == APPLE:
             self.store_apple_refresh_token(user, authorization_code)
         logger.info("Provider sign-in: user %s via %s created=%s", user.id, provider, created)
@@ -410,6 +441,19 @@ class AuthService:
                 "provider_unavailable",
                 f"{provider} could not be reached; try again shortly",
             )
+
+    def refuse_disposable_email(self, normalized_email: str) -> None:
+        """Raise 400 `disposable_email` when the address is at a listed disposable domain."""
+        listed = self._disposable_domains.listed_domain(normalized_email)
+        if listed is not None:
+            logger.info("disposable_email_refused: domain %s", listed)
+            raise _disposable_email()
+
+    def _refuse_if_signup_limited(self, client_address: str) -> None:
+        retry_after = self._signup_limiter.check(client_address, self._clock())
+        if retry_after is not None:
+            logger.info("signup_limited: retry in %d seconds", retry_after)
+            raise too_many_signups(retry_after)
 
     def _today(self) -> date:
         return self._clock().astimezone(timezone.utc).date()

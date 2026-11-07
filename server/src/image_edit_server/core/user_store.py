@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 from image_edit_server.core.email_codes import (
     CodeLimits,
@@ -280,8 +280,12 @@ class UserStore(Protocol):
         identity: ProviderIdentity,
         now: datetime,
         adult_confirmed: Optional[bool] = None,
+        before_create: Optional[Callable[[], None]] = None,
     ) -> tuple[User, bool]:
         """Find the linked account, link by email, or create one; returns (user, created).
+
+        `before_create` runs just before a new account would be inserted; if it raises,
+        nothing is written.
 
         `adult_confirmed` matters only when an account would be created: None raises
         AgeRequired, False raises UnderAgeSignUp, True creates it with its age confirmed.

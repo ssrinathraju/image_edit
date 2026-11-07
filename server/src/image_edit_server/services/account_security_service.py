@@ -76,6 +76,7 @@ class AccountSecurityService:
         """Email a code to the new address and remember the pending change."""
         normalized = normalize_email(new_email)
         self._auth.validate_email_format(normalized)
+        self._auth.refuse_disposable_email(normalized)
         if normalized == user.email:
             raise api_error(
                 400, "invalid_credentials_format", "this is already your email address"
