@@ -168,3 +168,12 @@ The first launch is India only.
   - With a generated key, sign in with Apple and check with `sqlite3` that the stored value starts with `v1:`.
   - Delete the account and see the Apple revocation in the log.
   - Optional: after changing the key, deletion completes with 204, no revocation is sent, and the `apple_token_unreadable` warning is logged.
+
+## From polish-photo-picking
+
+- [ ] **Manual check 4.2 never run** for polish-photo-picking (part of the combined manual pass). Use a local server on a temporary storage root, never the real one:
+  - Android with Developer options "Don't keep activities" on: take a photo for a template, for the custom form with a prompt, and while signed in as another account. The first two reopen with the photo (and prompt) and "We kept the photo you picked."; the other account restores nothing.
+  - On both platforms, deny camera access then tap Take photo, and deny photo access then tap Choose from library: each dialog appears, Open Settings opens the app's page, and Choose from library works from the camera dialog.
+  - Download with photo access denied shows the Settings action on the status screen and in My creations, and it opens the app's page.
+  - Leaving the screen mid-save still shows the Download confirmation.
+  - iOS never restores a photo.
