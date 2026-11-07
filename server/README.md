@@ -203,7 +203,8 @@ generation gate no longer exist.
 
 **Sending email.** Set `IMAGE_EDIT_SMTP_HOST` and `IMAGE_EDIT_SMTP_FROM` (plus username and
 password if the server needs them) to send plain-text email over SMTP. `IMAGE_EDIT_SMTP_SECURITY` is
-`starttls` (port 587, the default), `ssl` (port 465) or `none`. The server refuses to start with a
+`starttls` (port 587, the default), `ssl` (port 465) or `none`. **Warning:** `none` together with a
+username sends the SMTP password in clear text; use it only for a local test server. The server refuses to start with a
 host but no `FROM` address or no `IMAGE_EDIT_SUPPORT_EMAIL` (the contact named in the "email
 changed" notice; it may stay empty in log mode, where the notice says "contact support"). A delivery failure is logged (without the code) and never changes the
 response of the request that asked for the email; the user taps Resend.
@@ -486,7 +487,9 @@ Nothing unsafe is served, and every check runs on this server: no photo or gener
 - **Prompts.** A custom prompt is checked against `IMAGE_EDIT_SAFETY_TERMS_FILE` (default
   `./seed/safety/blocked_terms.txt`: one word or phrase per line, `#` comments; the file must hold at least one
   term or the server will not start). Case, accents, letter swaps (`0`, `1`, `3`, `4`, `5`, `7`, `@`, `$`),
-  separators and spelled-out letters (`N-U-D-3`) are normalised, and terms match whole words only.
+  separators and spelled-out letters (`N-U-D-3`) are normalised. A term matches as a whole word or phrase; in addition, a single-word
+  term matches anywhere inside a run of spelled-out single letters, so `a N-U-D-3 woman` is caught and
+  `g r a p e` is blocked for containing a term.
   Template prompts are trusted. A match is `400 prompt_blocked`; nothing is created or counted.
   The starter list is short: curate it before launch.
 - **Uploads.** Each photo is scored by the local classifier before the job is queued. A flagged photo is

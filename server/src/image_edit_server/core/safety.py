@@ -32,7 +32,7 @@ def _joined_letter_runs(normalized: str) -> list[str]:
 
 
 class TermMatcher:
-    """Whole-word and whole-phrase matching of blocked terms against free text."""
+    """Matches blocked terms as whole words or phrases, and inside spelled-out letter runs."""
 
     def __init__(self, terms: Iterable[str]) -> None:
         normalized = {normalize_text(term) for term in terms}
@@ -41,7 +41,7 @@ class TermMatcher:
         self._single_word_terms = frozenset(term for term in normalized if " " not in term)
 
     def matches(self, prompt: str) -> bool:
-        """True when the prompt contains any blocked term as a whole word or phrase."""
+        """True on a whole-word or phrase match, or a single-word term in a run of single letters."""
         normalized = normalize_text(prompt)
         padded = f" {normalized} "
         if any(term in padded for term in self._terms):
