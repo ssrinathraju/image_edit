@@ -163,3 +163,11 @@ The first launch is India only.
   - at the limit, a Google sign-up shows the message on the sign-in screen with no date-of-birth step;
   - at the limit, signing in to an existing account succeeds;
   - mutual referral redemption is refused, if the consoles are available.
+
+## From encrypt-apple-tokens
+
+- [ ] **Manual check 5.2 never run** for encrypt-apple-tokens. It needs the Apple Developer membership. Use a local server on a temporary storage root, never the real one:
+  - With Apple configured and no `TOKEN_ENCRYPTION_KEY`, startup fails with an error naming `TOKEN_ENCRYPTION_KEY`.
+  - With a generated key, sign in with Apple and check with `sqlite3` that the stored value starts with `v1:`.
+  - Delete the account and see the Apple revocation in the log.
+  - Optional: after changing the key, deletion completes with 204, no revocation is sent, and the `apple_token_unreadable` warning is logged.
