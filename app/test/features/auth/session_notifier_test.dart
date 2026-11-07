@@ -5,6 +5,7 @@ import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/registration_draft.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
 import 'package:image_edit/features/common/generation_request.dart';
+import 'package:image_edit/features/plans/account_notifier.dart';
 import 'package:image_edit/features/common/submit_controller.dart';
 import 'package:image_edit/features/history/creation_store.dart';
 import 'package:image_edit/schemas/session.dart';
@@ -247,6 +248,54 @@ void main() {
 
     expect(container.read(registrationDraftProvider)!.email, 'new@example.com');
     expect(container.read(sessionProvider).value, isNull);
+  });
+
+  group('a restored profile never reaches the next user', () {
+    const first = UserProfile(id: 'user-1', email: 'first@example.com');
+    const second = UserProfile(id: 'user-2', email: 'second@example.com');
+
+    Future<ProviderContainer> restoredAsFirst() async {
+      storage.saved = savedSession;
+      client.onFetchMe = () async => first;
+      client.onLogin = (email, _) async =>
+          Session(token: 'token-2', userId: second.id, email: email);
+      final container = _container(client, storage);
+      await container.read(sessionProvider.future);
+      client.onFetchMe = () async => second;
+      return container;
+    }
+
+    test('signIn alone: the account shows the new user', () async {
+      final container = await restoredAsFirst();
+
+      await container
+          .read(sessionProvider.notifier)
+          .signIn(email: second.email, password: 'password-1');
+
+      final account = await container.read(accountProvider.future);
+      expect(account?.id, second.id);
+      expect(account?.email, second.email);
+    });
+
+    test('signOut then signIn: the account shows the new user', () async {
+      final container = await restoredAsFirst();
+      final notifier = container.read(sessionProvider.notifier);
+
+      await notifier.signOut();
+      await notifier.signIn(email: second.email, password: 'password-1');
+
+      final account = await container.read(accountProvider.future);
+      expect(account?.id, second.id);
+      expect(account?.email, second.email);
+    });
+
+    test('signOut itself drops the held profile', () async {
+      final container = await restoredAsFirst();
+
+      await container.read(sessionProvider.notifier).signOut();
+
+      expect(container.read(restoredProfileHolderProvider).take(), isNull);
+    });
   });
 
   test('signOut works offline and still clears the local session', () async {

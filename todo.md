@@ -15,6 +15,7 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **`resolveUrl` with absolute URLs** — only matters once results are served from a CDN. Revisit then.
 - [ ] **Search text as prompt** — search text isn't capped when reused as the prompt. Cosmetic: the custom screen already shows the 500-character error.
 - [ ] **`assert` stripped in release builds** — low value, the server already returns a clean 400. Replace with an explicit check if we touch that code.
+- [ ] **Move `account_security_service` to `Schedule`** — `auth_service` now takes a schedule callable, but `account_security_service.py` still takes FastAPI `BackgroundTasks`, so the services layer still imports the framework. Reuse `Schedule` there.
 
 ## From PR #2 review (auth and profile)
 
@@ -46,8 +47,6 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **Decide how term matching works: spec and code disagree (a decision for the user)** — `openspec/specs/content-safety/spec.md` requires that a term match only as a whole word. The code (`core/safety.py`) also matches single-word terms inside a run of spelled-out single letters, so `g r a p e` is blocked for containing a term. Settle this in an OpenSpec change, either by narrowing the code to whole words or by amending the requirement to describe the letter-run behaviour.
 - [ ] **Device report images are always saved as `<id>.png`** even when the upload was JPEG (harmless; `show --out` writes the bytes under the operator's name).
 - [ ] **Reported images in the privacy review** — reports keep a face-derived image for 30 days, longer than the 24-hour result retention. Add this to the privacy policy review.
-
-- [ ] **Move `account_security_service` to `Schedule`** — `auth_service` now takes a schedule callable, but `account_security_service.py` still takes FastAPI `BackgroundTasks`, so the services layer still imports the framework. Reuse `Schedule` there.
 
 ## Deployment checklist
 
