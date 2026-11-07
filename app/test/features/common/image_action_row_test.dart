@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +67,45 @@ void main() {
 
     expect(settings.openCount, 1);
     expect(find.text('Could not open Settings.'), findsOneWidget);
+  });
+
+  testWidgets('leaving the screen mid-save still shows the confirmation', (
+    tester,
+  ) async {
+    final actions = FakeImageActions()..saveGate = Completer<void>();
+    var showRow = true;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageActionsProvider.overrideWithValue(actions),
+          showImageActionsProvider.overrideWithValue(true),
+          appSettingsProvider.overrideWithValue(FakeAppSettings()),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return showRow
+                    ? ImageActionRow(bytes: tinyPng, name: 'j', jobId: 'j')
+                    : const SizedBox();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Download'));
+    await tester.pump();
+    rebuild(() => showRow = false);
+    await tester.pump();
+    actions.saveGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Saved to your photo library.'), findsOneWidget);
   });
 
   testWidgets('a saved or failed download has no Settings action', (

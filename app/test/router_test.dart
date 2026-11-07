@@ -8,7 +8,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_edit/core/provider_sign_in.dart';
 import 'package:image_edit/features/auth/session_notifier.dart';
+import 'package:image_edit/features/common/pending_pick_store.dart';
 import 'package:image_edit/features/common/photo_picker_field.dart';
+import 'package:image_edit/features/template_detail/template_screen.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:image_edit/features/onboarding/onboarding_store.dart';
 import 'package:image_edit/router.dart';
 import 'package:image_edit/schemas/creation.dart';
@@ -18,6 +21,7 @@ import 'package:image_edit/schemas/session.dart';
 import 'support/app_harness.dart';
 import 'support/fake_api_client.dart';
 import 'support/fake_image_picker.dart';
+import 'support/fake_pending_pick_store.dart';
 import 'support/fake_provider_sign_in.dart';
 import 'support/fake_session_storage.dart';
 import 'support/in_memory_creation_store.dart';
@@ -713,6 +717,61 @@ void main() {
 
       expect(find.text('Make another'), findsNothing);
       expect(find.text('Download'), findsOneWidget);
+    });
+  });
+
+  group('restoring a photo lost to Android', () {
+    FakeImagePicker lostPhotoPicker() => FakeImagePicker(
+      lost: LostDataResponse(
+        file: XFile.fromData(tinyPng, name: 'lost.png'),
+        type: RetrieveType.image,
+      ),
+    );
+
+    PendingPick note({String userId = 'user-1'}) => PendingPick(
+      userId: userId,
+      kind: PendingPickKind.template,
+      templateId: 'golden-hour-beach',
+      startedAt: DateTime.now().subtract(const Duration(minutes: 5)),
+    );
+
+    setUp(() {
+      client.onListTemplates = (_) async => [
+        fakeTemplate('golden-hour-beach', title: 'Golden Hour Beach'),
+      ];
+    });
+
+    testWidgets('the real route hands the photo to the template form', (
+      tester,
+    ) async {
+      final pending = FakePendingPickStore(note: note());
+      await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(savedSession),
+        picker: lostPhotoPicker(),
+        pendingPicks: pending,
+      );
+
+      expect(find.byType(TemplateScreen), findsOneWidget);
+      expect(find.text('Change photo'), findsOneWidget);
+      expect(pending.note, isNull);
+      expect(client.submitted, isEmpty);
+    });
+
+    testWidgets('another account\'s note opens nothing', (tester) async {
+      final pending = FakePendingPickStore(note: note(userId: 'someone-else'));
+      await pumpApp(
+        tester,
+        client: client,
+        storage: FakeSessionStorage(savedSession),
+        picker: lostPhotoPicker(),
+        pendingPicks: pending,
+      );
+
+      expect(find.byType(TemplateScreen), findsNothing);
+      expect(find.text('Trending'), findsOneWidget);
+      expect(pending.note, isNull);
     });
   });
 }

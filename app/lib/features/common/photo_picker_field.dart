@@ -165,6 +165,7 @@ class PhotoPickerField extends ConsumerWidget {
     ImageSource source,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final settings = ref.read(appSettingsProvider);
     final isCamera = source == ImageSource.camera;
     final choice = await showDialog<_DeniedChoice>(
       context: context,
@@ -196,7 +197,7 @@ class PhotoPickerField extends ConsumerWidget {
     );
     switch (choice) {
       case _DeniedChoice.openSettings:
-        await openSettingsOrExplain(messenger, ref.read(appSettingsProvider));
+        await openSettingsOrExplain(messenger, settings);
       case _DeniedChoice.chooseFromLibrary:
         if (context.mounted) await _pick(context, ref, ImageSource.gallery);
       case null:

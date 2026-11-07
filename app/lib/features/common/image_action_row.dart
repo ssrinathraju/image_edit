@@ -66,6 +66,7 @@ class ImageActionRow extends ConsumerWidget {
 
   Future<void> _download(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final settings = ref.read(appSettingsProvider);
     String message;
     var canOpenSettings = false;
     try {
@@ -81,7 +82,6 @@ class ImageActionRow extends ConsumerWidget {
     } catch (_) {
       message = 'Could not save the image.';
     }
-    final settings = ref.read(appSettingsProvider);
     messenger.showSnackBar(
       SnackBar(
         content: Text(message),

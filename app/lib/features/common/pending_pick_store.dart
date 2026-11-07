@@ -47,8 +47,11 @@ class PendingPick {
   final String? prompt;
   final DateTime startedAt;
 
-  bool isExpiredAt(DateTime now) =>
-      now.difference(startedAt) > pendingPickLifetime;
+  /// A start time in the future (the clock moved back) counts as expired.
+  bool isExpiredAt(DateTime now) {
+    final age = now.difference(startedAt);
+    return age.isNegative || age > pendingPickLifetime;
+  }
 
   Map<String, dynamic> toJson() => {
     'userId': userId,

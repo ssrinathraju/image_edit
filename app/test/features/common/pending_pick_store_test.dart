@@ -122,5 +122,9 @@ void main() {
       isFalse,
     );
     expect(note.isExpiredAt(_started.add(const Duration(minutes: 61))), isTrue);
+    expect(
+      note.isExpiredAt(_started.subtract(const Duration(minutes: 1))),
+      isTrue,
+    );
   });
 }
