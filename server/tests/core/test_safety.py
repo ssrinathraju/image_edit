@@ -49,6 +49,18 @@ def test_an_english_one_letter_word_beside_a_spelled_term_is_caught(prompt):
     assert TermMatcher(["nude", "sex"]).matches(prompt)
 
 
+def test_a_spelled_out_harmless_word_containing_a_term_is_blocked():
+    assert TermMatcher(["rape"]).matches("a picture of g r a p e")
+
+
+def test_an_ordinary_harmless_word_containing_a_term_is_allowed():
+    assert not TermMatcher(["rape"]).matches("a bowl of grapes")
+
+
+def test_a_phrase_only_list_does_not_match_inside_a_spelled_out_run():
+    assert not TermMatcher(["child porn"]).matches("c h i l d p o r n")
+
+
 def test_a_spelled_run_that_has_no_term_passes():
     assert not TermMatcher(["nude", "sex"]).matches("a b c classic")
 

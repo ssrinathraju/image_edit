@@ -4,7 +4,7 @@ Work on branch `feat/clarify-term-matching`. Do not push to `main`. No productio
 
 ## 1. Tests for the clarified rule
 
-- [ ] 1.1 Check `server/tests/core/test_safety.py` against the content-safety delta's scenarios:
+- [x] 1.1 Check `server/tests/core/test_safety.py` against the content-safety delta's scenarios:
   - spelled-out term next to a one-letter word;
   - spelled-out harmless word containing a term (`g r a p e` with `rape` on a test list);
   - ordinary `a bowl of grapes` still allowed;
@@ -14,9 +14,9 @@ Work on branch `feat/clarify-term-matching`. Do not push to `main`. No productio
 
 ## 2. Tracking
 
-- [ ] 2.1 Remove the `todo.md` item that asks the user to decide on term matching (under "From add-content-safety"). Keep the other content-safety items. Verify with `git diff todo.md`.
+- [x] 2.1 Remove the `todo.md` item that asks the user to decide on term matching (under "From add-content-safety"). Keep the other content-safety items. Verify with `git diff todo.md`.
 
 ## 3. Integration and hand-off
 
-- [ ] 3.1 Run `uv run pytest -q` in `server/`. Verify all tests pass, that `openspec validate clarify-term-matching --strict` passes, and that the md5 of `app.db` is unchanged.
+- [x] 3.1 Run `uv run pytest -q` in `server/`. Verify all tests pass, that `openspec validate clarify-term-matching --strict` passes, and that the md5 of `app.db` is unchanged.
 - [ ] 3.2 Push `feat/clarify-term-matching`. Verify with `git ls-remote` that the remote branch matches the local HEAD.
