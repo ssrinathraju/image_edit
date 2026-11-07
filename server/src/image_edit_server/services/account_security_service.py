@@ -179,7 +179,7 @@ class AccountSecurityService:
                 f"{provider} is the only way to sign in; set a password or link another"
                 " provider first",
             )
-        self._auth.schedule_apple_revocation(apple_token, background)
+        self._auth.schedule_apple_revocation(apple_token, background.add_task)
         logger.info("provider_unlinked: user %s from %s", user.id, provider)
 
     def _notify(

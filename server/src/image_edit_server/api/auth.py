@@ -71,7 +71,7 @@ def register(
         body.password,
         body.date_of_birth,
         body.referral_code,
-        background,
+        background.add_task,
         _caller_address(request, settings),
     )
     return {}
@@ -125,7 +125,7 @@ def sign_in_with_apple(
 def request_password_reset(
     body: ResetRequest, auth: AuthServiceDep, background: BackgroundTasks
 ) -> dict:
-    auth.request_password_reset(body.email, background)
+    auth.request_password_reset(body.email, background.add_task)
     return {}
 
 
@@ -206,6 +206,6 @@ def delete_me(
         provider=body.provider,
         token=body.token,
         nonce=body.nonce,
-        background=background,
+        schedule=background.add_task,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

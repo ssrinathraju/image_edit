@@ -45,8 +45,8 @@ def _submit(client, headers):
 
 
 def _wait_for_terminal(client, headers, job_id, during=None):
-    deadline = time.time() + DEADLINE_SECONDS
-    while time.time() < deadline:
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    while time.monotonic() < deadline:
         body = client.get(f"/generations/{job_id}", headers=headers).json()
         if during is not None:
             during(body)

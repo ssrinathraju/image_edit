@@ -15,7 +15,7 @@ Items deferred from PR #1 review. None block the merge.
 - [ ] **`resolveUrl` with absolute URLs** — only matters once results are served from a CDN. Revisit then.
 - [ ] **Search text as prompt** — search text isn't capped when reused as the prompt. Cosmetic: the custom screen already shows the 500-character error.
 - [ ] **`assert` stripped in release builds** — low value, the server already returns a clean 400. Replace with an explicit check if we touch that code.
-- [ ] **Image format sniffing helper** (`app/lib/services/image_actions.dart`) — builds a list and `asMap()` per check. Simplify with a plain byte comparison.
+- [ ] **Move `account_security_service` to `Schedule`** — `auth_service` now takes a schedule callable, but `account_security_service.py` still takes FastAPI `BackgroundTasks`, so the services layer still imports the framework. Reuse `Schedule` there.
 
 ## From PR #2 review (auth and profile)
 
@@ -37,17 +37,15 @@ Items deferred from PR #1 review. None block the merge.
 ## From PR #4 review (plans and referrals)
 
 - [ ] **Hide the Upgrade entry in release builds** until billing exists (the screen is a "payments not available" placeholder).
-- [ ] **Duplicate `/me` fetch at startup** — session restore and `AccountNotifier` each call it.
 - [ ] **Failed settle gives a free generation** — if settling fails after a success, the reservation is refunded at the next restart. Rare and logged; accepted.
 
 ## From add-content-safety
 
 - [ ] **Tune the threshold and the term list before launch** — `SAFETY_NSFW_THRESHOLD` (0.7) and `seed/safety/blocked_terms.txt` are a starting point. Run real generations (swimwear and beach templates especially) and adjust, then have the starter list reviewed.
 - [ ] **Starter-list false positives and normalisation gaps** — the list blocks "nude-colored dress", "gore-tex jacket", "topless convertible car" and "loli pop". Zero-width characters (`n\u200bude` becomes "n ude") and Cyrillic look-alike letters slip past `normalize_text`. Handle both when tuning.
-- [ ] **Fix the term-matching wording outside openspec/** — `server/README.md` (line ~376) says "terms match whole words only" and the `TermMatcher.matches` docstring says "as a whole word or phrase"; the code also matches single-word terms as substrings of runs of spelled-out single letters (so `a N-U-D-3 woman` is caught, and `g r a p e` is blocked for containing a term). Update both in a normal change.
 - [ ] **add-content-safety manual checks not run** — tasks 7.2 (iOS simulator pass) and 7.3 (real classifier with the `ml` group) were not run. Include the reviewer's extra checks: barrier tap, back button and drag while a report is sending; a long emoji note; Report from My creations; `a N-U-D-3 woman` typed in the app; Report visibility on web.
+- [ ] **Decide how term matching works: spec and code disagree (a decision for the user)** — `openspec/specs/content-safety/spec.md` requires that a term match only as a whole word. The code (`core/safety.py`) also matches single-word terms inside a run of spelled-out single letters, so `g r a p e` is blocked for containing a term. Settle this in an OpenSpec change, either by narrowing the code to whole words or by amending the requirement to describe the letter-run behaviour.
 - [ ] **Device report images are always saved as `<id>.png`** even when the upload was JPEG (harmless; `show --out` writes the bytes under the operator's name).
-- [ ] **Paused-dialog test does not exercise the local-time conversion** — it computes the expected time with `toLocal()` in the test's own timezone; set a non-UTC zone to prove it.
 - [ ] **Reported images in the privacy review** — reports keep a face-derived image for 30 days, longer than the 24-hour result retention. Add this to the privacy policy review.
 
 ## Deployment checklist
@@ -73,8 +71,6 @@ The first launch is India only.
 
 ## From PR review of add-email-verification-and-reset (round 2)
 
-- [ ] **FastAPI `BackgroundTasks` in `auth_service`** — pass a plain `schedule: Callable` to keep the services layer framework-free. Follows the existing `HTTPException` pattern, so deferred.
-- [ ] **README warning for `SMTP_SECURITY=none` with a username** — the SMTP password is sent in clear text.
 - [ ] **Remaining manual checks for add-email-verification-and-reset** — the current registration and reset flows passed on the iOS simulator on 2026-10-20. Still open: 11.2's pre-upgrade `app.db` step (its Verify-email steps were superseded by add-social-sign-in's registration rework), and 11.3, a real SMTP send.
 
 ## From add-social-sign-in
@@ -139,7 +135,6 @@ The first launch is India only.
   - Upload a portrait phone JPEG stored upright and check the preview is upright.
   - Simulator/emulator checks: new, retired and restored templates show correctly on refresh; Make another on a retired template; a generation from a template retired while the grid was open.
   - Check the log lines carry no template text.
-- [ ] `tests/api/test_output_safety.py` uses a `time.time()` deadline and flaked under clock jumps; switch it to `time.monotonic()`.
 
 ## From upgrade-server-python
 

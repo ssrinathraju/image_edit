@@ -144,19 +144,19 @@ void main() {
     final stall = Completer<UserProfile>();
     client.onFetchMe = () {
       calls++;
-      // Calls 1 and 2 are the session restore and the account load; later
-      // reloads hang.
-      return calls <= 2 ? Future.value(fakeProfile()) : stall.future;
+      // Call 1 is the startup load shared by session restore and the account;
+      // later reloads hang.
+      return calls <= 1 ? Future.value(fakeProfile()) : stall.future;
     };
     client.onSubmit = (_) async => 'job-1';
     await _pumpCustom(tester);
     await _primeAccount(tester);
-    expect(calls, 2);
+    expect(calls, 1);
 
     await _generate(tester);
 
     expect(find.text('status:job-1'), findsOneWidget);
-    expect(calls, 3, reason: 'the reload was started, and is still stalled');
+    expect(calls, 2, reason: 'the reload was started, and is still stalled');
   });
 
   testWidgets('shows the limit dialog without waiting for the reload', (tester) async {
@@ -164,7 +164,7 @@ void main() {
     final stall = Completer<UserProfile>();
     client.onFetchMe = () {
       calls++;
-      return calls <= 2 ? Future.value(fakeProfile(usedToday: 3)) : stall.future;
+      return calls <= 1 ? Future.value(fakeProfile(usedToday: 3)) : stall.future;
     };
     await _pumpCustom(tester);
     await _primeAccount(tester);
@@ -172,7 +172,7 @@ void main() {
     await _generate(tester);
 
     expect(find.text('Daily limit reached'), findsOneWidget);
-    expect(calls, 3);
+    expect(calls, 2);
   });
 
   testWidgets('a refused submit with an unknown error shows the server message', (tester) async {

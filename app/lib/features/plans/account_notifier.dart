@@ -13,7 +13,8 @@ class AccountNotifier extends AsyncNotifier<UserProfile?> {
   Future<UserProfile?> build() async {
     final session = ref.watch(sessionProvider).valueOrNull;
     if (session == null) return null;
-    return ref.read(apiClientProvider).fetchMe();
+    final restored = ref.read(restoredProfileHolderProvider).take();
+    return restored ?? ref.read(apiClientProvider).fetchMe();
   }
 
   /// Reloads the account. A failed reload keeps what is already shown.

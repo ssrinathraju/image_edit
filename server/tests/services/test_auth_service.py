@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.login_throttle import LoginThrottle
@@ -23,10 +23,17 @@ class Clock:
 
 def _start(auth, email, password, referral_code=None):
     """Start a registration and run its email task, as the response's background would."""
-    tasks = BackgroundTasks()
-    auth.register(email, password, "1990-01-01", referral_code, tasks, "203.0.113.9")
-    for task in tasks.tasks:
-        task.func(*task.args, **task.kwargs)
+    tasks = []
+    auth.register(
+        email,
+        password,
+        "1990-01-01",
+        referral_code,
+        lambda func, *args, **kwargs: tasks.append((func, args, kwargs)),
+        "203.0.113.9",
+    )
+    for func, args, kwargs in tasks:
+        func(*args, **kwargs)
 
 
 def _register(auth, email, password, referral_code=None):

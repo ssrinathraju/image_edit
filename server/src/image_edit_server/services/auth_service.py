@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 
 from image_edit_server.configs.settings import Settings
 from image_edit_server.core.age import InvalidDateOfBirth, UnderAge, check_date_of_birth
@@ -39,6 +39,9 @@ from image_edit_server.services.account_cleanup import purge_report_images
 from image_edit_server.services.apple_revocation import AppleRevocationClient
 
 logger = logging.getLogger(__name__)
+
+# Queues work to run after the response; the API layer passes BackgroundTasks.add_task.
+Schedule = Callable[..., None]
 
 MAX_EMAIL_CHARS = 254
 PROVIDER_TOKEN_MAX_AGE = timedelta(minutes=5)
@@ -131,7 +134,7 @@ class AuthService:
         password: str,
         date_of_birth: object,
         referral_code: Optional[str],
-        background: BackgroundTasks,
+        schedule: Schedule,
         client_address: str,
     ) -> None:
         """Hold an adult's registration as pending and email its code; no account exists until it is confirmed."""
@@ -163,7 +166,7 @@ class AuthService:
         except BaseException:
             self._signup_limiter.release(client_address, reserved_at)
             raise
-        self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, background)
+        self._schedule_code_email(normalized, CodePurpose.REGISTRATION, code, schedule)
 
     def confirm_registration(self, email: str, code: str, password: str) -> tuple[str, User]:
         """Create the account for a pending registration whose emailed code and password are right."""
@@ -202,7 +205,7 @@ class AuthService:
             )
         return self._start_session(user), user
 
-    def request_password_reset(self, email: str, background: BackgroundTasks) -> None:
+    def request_password_reset(self, email: str, schedule: Schedule) -> None:
         """Always succeeds for a well-formed email, so it never reveals whether an account exists."""
         normalized = normalize_email(email)
         self.validate_email_format(normalized)
@@ -217,7 +220,7 @@ class AuthService:
         )
         if outcome.code is not None:
             self._schedule_code_email(
-                normalized, CodePurpose.PASSWORD_RESET, outcome.code, background
+                normalized, CodePurpose.PASSWORD_RESET, outcome.code, schedule
             )
 
     def confirm_password_reset(
@@ -343,7 +346,7 @@ class AuthService:
         provider: Optional[str] = None,
         token: Optional[str] = None,
         nonce: Optional[str] = None,
-        background: Optional[BackgroundTasks] = None,
+        schedule: Optional[Schedule] = None,
     ) -> None:
         if provider is not None and token is not None:
             reauth = Reauth(provider=provider, token=token, nonce=nonce)
@@ -359,7 +362,7 @@ class AuthService:
         self._users.delete_user(user.id)
         self._purge_user_jobs(user.id)
         purge_report_images(report_images, self._settings.STORAGE_ROOT)
-        self.schedule_apple_revocation(apple_token, background)
+        self.schedule_apple_revocation(apple_token, schedule)
         logger.info("Deleted account %s", user.id)
 
     def reauthenticate(
@@ -517,14 +520,14 @@ class AuthService:
             self._users.set_apple_refresh_token(user.id, refresh_token)
 
     def schedule_apple_revocation(
-        self, apple_token: Optional[str], background: Optional[BackgroundTasks]
+        self, apple_token: Optional[str], schedule: Optional[Schedule]
     ) -> None:
         if not apple_token or self._apple_client is None:
             return
-        if background is None:
+        if schedule is None:
             self._revoke_apple_token(apple_token)
         else:
-            background.add_task(self._revoke_apple_token, apple_token)
+            schedule(self._revoke_apple_token, apple_token)
 
     def _revoke_apple_token(self, apple_token: str) -> None:
         # Runs after the response; nothing may depend on it, so it never raises.
@@ -547,9 +550,9 @@ class AuthService:
         email: str,
         purpose: CodePurpose,
         code: str,
-        background: BackgroundTasks,
+        schedule: Schedule,
     ) -> None:
-        background.add_task(
+        schedule(
             email_code_service.deliver,
             self._sender,
             email,
